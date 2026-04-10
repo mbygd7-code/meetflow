@@ -32,10 +32,9 @@ export default function Sidebar() {
   // CSS 변수 --sidebar-* 를 사용하여 테마에 따라 미세 조정
   return (
     <aside
-      className="w-60 flex flex-col p-3 shrink-0"
+      className="w-48 flex flex-col p-3 shrink-0"
       style={{
         background: 'var(--sidebar-bg)',
-        borderRight: '1px solid var(--sidebar-border)',
       }}
     >
       {/* 로고 */}

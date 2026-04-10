@@ -10,7 +10,7 @@ function SummaryList() {
   const completed = meetings.filter((m) => m.status === 'completed');
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] m-4 lg:m-6">
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
       <div>
         <p className="text-sm text-txt-secondary">
           종료된 회의의 AI 요약을 확인하세요

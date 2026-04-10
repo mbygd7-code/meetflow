@@ -74,7 +74,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] m-4 lg:m-6">
+    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
       {/* ═══ 인사말 (배경 위에 바로) ═══ */}
       <div>
         <h1 className="text-[26px] font-semibold text-txt-primary">

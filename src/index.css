@@ -191,7 +191,7 @@ html[data-theme="light"] .content-gradient-bg::before {
   content: '';
   position: fixed;
   top: 0;
-  left: 240px;
+  left: 192px;
   right: 0;
   bottom: 0;
   z-index: 0;

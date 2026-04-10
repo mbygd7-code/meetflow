@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
 
   return (
-    <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] m-4 lg:m-6">
+    <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
       {/* 헤더 */}
       <div>
         <p className="text-sm text-txt-secondary">외부 서비스 연동 및 알림 설정</p>
