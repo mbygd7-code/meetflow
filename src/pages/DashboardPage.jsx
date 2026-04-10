@@ -95,7 +95,7 @@ export default function DashboardPage() {
 
         {/* 차트 + Milo 2컬럼 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2 !bg-bg-tertiary">
+          <Card className="lg:col-span-2 !bg-bg-tertiary subsection-olive">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-semibold text-txt-primary">주간 회의 횟수</h3>
@@ -106,7 +106,7 @@ export default function DashboardPage() {
             <WeeklyChart data={weeklyData} />
           </Card>
 
-          <Card className="!bg-bg-tertiary border-brand-purple/20">
+          <Card className="!bg-bg-tertiary subsection-gold border-brand-purple/20">
             <div className="flex items-center gap-3 mb-3">
               <Avatar variant="ai" size="md" label="M" />
               <div>
@@ -156,7 +156,7 @@ export default function DashboardPage() {
       <SectionPanel tint="teal">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 작은 섹션 A: 마감 임박 태스크 */}
-          <div className="bg-bg-tertiary rounded-[14px] p-5">
+          <div className="bg-bg-tertiary subsection-peach rounded-[14px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">마감 임박 태스크</h3>
               <Link to="/tasks" className="text-[11px] text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -175,7 +175,7 @@ export default function DashboardPage() {
           </div>
 
           {/* 작은 섹션 B: 최근 회의록 */}
-          <div className="bg-bg-tertiary rounded-[14px] p-5">
+          <div className="bg-bg-tertiary subsection-teal rounded-[14px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">최근 회의록</h3>
               <Link to="/summaries" className="text-[11px] text-txt-secondary hover:text-txt-primary flex items-center gap-1">

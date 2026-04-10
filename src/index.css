@@ -242,3 +242,31 @@ html.theme-transitioning *::after {
   to { opacity: 1; transform: translateY(0); }
 }
 .fade-in { animation: fade-in 0.2s ease-out; }
+
+/* ════════════════════════════════════════
+   라이트 모드 서브 섹션 형광 포인트 스타일
+   ════════════════════════════════════════ */
+
+/* 서브 섹션: 올리브 형광 틴트 */
+html[data-theme="light"] .subsection-olive {
+  background: linear-gradient(135deg, rgba(181,204,24,0.08) 0%, rgba(212,225,87,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
+  border: 1px solid rgba(181,204,24,0.12) !important;
+}
+
+/* 서브 섹션: 틸 형광 틴트 */
+html[data-theme="light"] .subsection-teal {
+  background: linear-gradient(135deg, rgba(77,182,172,0.08) 0%, rgba(128,203,196,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
+  border: 1px solid rgba(77,182,172,0.12) !important;
+}
+
+/* 서브 섹션: 골드 형광 틴트 */
+html[data-theme="light"] .subsection-gold {
+  background: linear-gradient(135deg, rgba(232,212,77,0.10) 0%, rgba(255,213,79,0.06) 50%, rgba(255,255,255,0.9) 100%) !important;
+  border: 1px solid rgba(232,212,77,0.15) !important;
+}
+
+/* 서브 섹션: 피치 형광 틴트 */
+html[data-theme="light"] .subsection-peach {
+  background: linear-gradient(135deg, rgba(255,171,145,0.08) 0%, rgba(255,213,79,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
+  border: 1px solid rgba(255,171,145,0.12) !important;
+}
