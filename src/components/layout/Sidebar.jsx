@@ -61,13 +61,13 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
                 isActive
-                  ? 'bg-brand-purple/[0.15] font-medium'
+                  ? 'font-medium'
                   : ''
               }`
             }
             style={({ isActive }) => ({
               color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
-              ...(isActive ? {} : {}),
+              background: isActive ? 'var(--sidebar-active-bg)' : undefined,
             })}
             onMouseEnter={(e) => {
               if (!e.currentTarget.classList.contains('active')) {

@@ -16,11 +16,11 @@
   --text-secondary: #A0A0A0;
   --text-muted: #6B6B6B;
 
-  /* ── 브랜드 (테마 불변) ── */
-  --brand-purple: #723CEB;
-  --brand-purple-deep: #4C11CE;
-  --brand-orange: #FF902F;
-  --brand-yellow: #FFEF63;
+  /* ── 브랜드 (RGB 채널 — opacity modifier 호환) ── */
+  --brand-purple-rgb: 114 60 235;
+  --brand-purple-deep-rgb: 76 17 206;
+  --brand-orange-rgb: 255 144 47;
+  --brand-yellow-rgb: 255 239 99;
 
   /* ── 그라디언트 ── */
   --gradient-brand: linear-gradient(135deg, #FF902F 0%, #723CEB 50%, #4C11CE 100%);
@@ -37,11 +37,11 @@
   --border-divider: rgba(255, 255, 255, 0.06);
   --border-divider-faint: rgba(255, 255, 255, 0.04);
 
-  /* ── 상태 컬러 (테마 불변) ── */
-  --status-success: #34D399;
-  --status-warning: #FFEF63;
-  --status-error: #EF4444;
-  --status-info: #723CEB;
+  /* ── 상태 컬러 (RGB 채널) ── */
+  --status-success-rgb: 52 211 153;
+  --status-warning-rgb: 255 239 99;
+  --status-error-rgb: 239 68 68;
+  --status-info-rgb: 114 60 235;
 
   /* ── 서페이스 ── */
   --surface-overlay: rgba(0, 0, 0, 0.60);
@@ -59,7 +59,7 @@
   /* ── 셀렉션 ── */
   --selection-bg: rgba(114, 60, 235, 0.4);
 
-  /* ── 사이드바 (다크에선 메인 배경과 동일) ── */
+  /* ── 사이드바 ── */
   --sidebar-bg: #131313;
   --sidebar-text: #FFFFFF;
   --sidebar-text-muted: #A0A0A0;
@@ -67,6 +67,7 @@
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-divider: rgba(255, 255, 255, 0.06);
   --sidebar-hover: #252525;
+  --sidebar-active-bg: rgba(114, 60, 235, 0.15);
 
   /* ── 트랜지션 ── */
   --transition-fast: 0.15s ease;
@@ -75,55 +76,72 @@
 }
 
 /* ════════════════════════════════════════
-   LIGHT MODE — Warm CRM Style
-   참조: Dynamic 365 / CentralFlow CRM
-   웜 크림/아이보리 배경 + 다크 사이드바 유지
+   LIGHT MODE — Dynamic 365 CRM 컬러키
+   올리브/라임 그린 액센트 + 웜 크림 배경
    ════════════════════════════════════════ */
 html[data-theme="light"] {
-  /* ── 배경: 따뜻한 크림/아이보리 ── */
-  --bg-primary: #F0EBE3;
+  /* ── 배경: Dynamic 365 웜 크림 ── */
+  --bg-primary: #EDE8E0;
   --bg-secondary: #FFFFFF;
-  --bg-tertiary: #E8E3DA;
+  --bg-tertiary: #E5E0D7;
 
   /* ── 텍스트 ── */
   --text-primary: #2D2A33;
   --text-secondary: #6B6B6B;
   --text-muted: #9CA3AF;
 
-  /* ── 보더: 따뜻한 톤 ── */
-  --border-subtle: rgba(45, 42, 51, 0.08);
-  --border-default: rgba(45, 42, 51, 0.12);
-  --border-focus: rgba(114, 60, 235, 0.5);
-  --border-hover: rgba(45, 42, 51, 0.12);
-  --border-hover-strong: rgba(45, 42, 51, 0.18);
-  --border-hover-max: rgba(45, 42, 51, 0.24);
+  /* ── 브랜드 → 올리브/라임 그린 (Dynamic 365) ── */
+  --brand-purple-rgb: 181 204 24;        /* #B5CC18 올리브 그린 */
+  --brand-purple-deep-rgb: 143 168 20;   /* #8FA814 딥 올리브 */
+  --brand-orange-rgb: 232 212 77;        /* #E8D44D 웜 골드 */
+  --brand-yellow-rgb: 212 225 87;        /* #D4E157 라임 옐로우 */
+
+  /* ── 그라디언트 → 올리브/골드 계열 ── */
+  --gradient-brand: linear-gradient(135deg, #E8D44D 0%, #B5CC18 50%, #8FA814 100%);
+  --gradient-warm: linear-gradient(180deg, #B5CC18 0%, #E8D44D 100%);
+  --gradient-card: linear-gradient(135deg, #B5CC18 0%, #8FA814 100%);
+
+  /* ── 보더: 웜 톤 ── */
+  --border-subtle: rgba(45, 42, 51, 0.07);
+  --border-default: rgba(45, 42, 51, 0.10);
+  --border-focus: rgba(181, 204, 24, 0.5);
+  --border-hover: rgba(45, 42, 51, 0.10);
+  --border-hover-strong: rgba(45, 42, 51, 0.16);
+  --border-hover-max: rgba(45, 42, 51, 0.22);
   --border-divider: rgba(45, 42, 51, 0.06);
   --border-divider-faint: rgba(45, 42, 51, 0.03);
 
-  /* ── 서페이스 ── */
-  --surface-overlay: rgba(45, 42, 51, 0.40);
+  /* ── 상태 컬러 → CRM 틸/웜 ── */
+  --status-success-rgb: 77 182 172;      /* #4DB6AC 틸 그린 */
+  --status-warning-rgb: 232 212 77;      /* #E8D44D 웜 골드 */
+  --status-error-rgb: 239 68 68;         /* 동일 */
+  --status-info-rgb: 181 204 24;         /* #B5CC18 올리브 */
 
-  /* ── 그림자: 따뜻한 워밍 쉐도우 ── */
+  /* ── 서페이스 ── */
+  --surface-overlay: rgba(30, 27, 46, 0.40);
+
+  /* ── 그림자: 웜 섀도우 ── */
   --shadow-sm: 0 1px 3px rgba(45, 42, 51, 0.06);
   --shadow-md: 0 4px 16px rgba(45, 42, 51, 0.08);
   --shadow-lg: 0 8px 32px rgba(45, 42, 51, 0.12);
-  --shadow-glow: 0 0 24px rgba(114, 60, 235, 0.12);
+  --shadow-glow: 0 0 24px rgba(181, 204, 24, 0.20);
 
   /* ── 스크롤바 ── */
   --scrollbar-thumb: rgba(45, 42, 51, 0.10);
   --scrollbar-thumb-hover: rgba(45, 42, 51, 0.20);
 
   /* ── 셀렉션 ── */
-  --selection-bg: rgba(114, 60, 235, 0.15);
+  --selection-bg: rgba(181, 204, 24, 0.25);
 
-  /* ── 사이드바: 라이트 모드에서도 다크 유지 (CRM 스타일) ── */
-  --sidebar-bg: #2D2A33;
+  /* ── 사이드바: 딥 퍼플-블랙 (Dynamic 365) ── */
+  --sidebar-bg: #1E1B2E;
   --sidebar-text: #FFFFFF;
   --sidebar-text-muted: #B0ADB8;
   --sidebar-text-dim: #7A7880;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.05);
   --sidebar-divider: rgba(255, 255, 255, 0.04);
-  --sidebar-hover: #3D3A45;
+  --sidebar-hover: #2E2B40;
+  --sidebar-active-bg: rgba(181, 204, 24, 0.18);
 }
 
 /* ════════════════════════════════════════
@@ -154,26 +172,16 @@ body {
 
 /* ════════════════════════════════════════
    라이트 모드 — 움직이는 그라디언트 배경
+   올리브/골드/틸 블롭
    ════════════════════════════════════════ */
 @keyframes gradient-drift {
-  0% {
-    background-position: 0% 50%;
-  }
-  25% {
-    background-position: 50% 0%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  75% {
-    background-position: 50% 100%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0%   { background-position: 0% 50%; }
+  25%  { background-position: 50% 0%; }
+  50%  { background-position: 100% 50%; }
+  75%  { background-position: 50% 100%; }
+  100% { background-position: 0% 50%; }
 }
 
-/* 메인 콘텐츠 영역에만 적용 */
 html[data-theme="light"] .content-gradient-bg {
   position: relative;
 }
@@ -181,17 +189,17 @@ html[data-theme="light"] .content-gradient-bg::before {
   content: '';
   position: fixed;
   top: 0;
-  left: 240px; /* 사이드바 너비 */
+  left: 240px;
   right: 0;
   bottom: 0;
   z-index: 0;
-  opacity: 0.35;
+  opacity: 0.30;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 600px 600px at 20% 20%, rgba(114, 60, 235, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 500px 500px at 80% 30%, rgba(255, 143, 47, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 400px 400px at 40% 80%, rgba(184, 204, 60, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 500px 500px at 70% 70%, rgba(114, 60, 235, 0.08) 0%, transparent 70%);
+    radial-gradient(ellipse 600px 600px at 15% 15%, rgba(181, 204, 24, 0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 500px at 80% 25%, rgba(232, 212, 77, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 450px 450px at 35% 80%, rgba(77, 182, 172, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 500px at 75% 75%, rgba(181, 204, 24, 0.10) 0%, transparent 70%);
   background-size: 200% 200%;
   animation: gradient-drift 20s ease-in-out infinite;
 }
@@ -201,20 +209,10 @@ html[data-theme="light"] .content-gradient-bg > * {
 }
 
 /* 스크롤바 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* Selection */
 ::selection {
@@ -222,7 +220,7 @@ html[data-theme="light"] .content-gradient-bg > * {
   color: var(--text-primary);
 }
 
-/* 테마 전환 시 부드러운 트랜지션 */
+/* 테마 전환 트랜지션 */
 html.theme-transitioning,
 html.theme-transitioning *,
 html.theme-transitioning *::before,
@@ -230,21 +228,15 @@ html.theme-transitioning *::after {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
-/* ════════════════════════════════════════
-   애니메이션 유틸리티
-   ════════════════════════════════════════ */
+/* 애니메이션 유틸리티 */
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-.pulse-dot {
-  animation: pulse-dot 1.5s ease-in-out infinite;
-}
+.pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.fade-in {
-  animation: fade-in 0.2s ease-out;
-}
+.fade-in { animation: fade-in 0.2s ease-out; }

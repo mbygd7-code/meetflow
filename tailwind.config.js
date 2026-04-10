@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        /* ── 배경 (CSS 변수 → 테마 전환 시 자동 변경) ── */
+        /* ── 배경 (CSS 변수 → 자동 전환) ── */
         bg: {
           primary: 'var(--bg-primary)',
           secondary: 'var(--bg-secondary)',
@@ -16,21 +16,21 @@ export default {
           secondary: 'var(--text-secondary)',
           muted: 'var(--text-muted)',
         },
-        /* ── 브랜드 (hex 고정 — opacity modifier 정상 동작) ── */
+        /* ── 브랜드 (RGB 채널 → opacity modifier 호환 + 테마 전환) ── */
         brand: {
-          purple: '#723CEB',
-          'purple-deep': '#4C11CE',
-          orange: '#FF902F',
-          yellow: '#FFEF63',
+          purple: 'rgb(var(--brand-purple-rgb) / <alpha-value>)',
+          'purple-deep': 'rgb(var(--brand-purple-deep-rgb) / <alpha-value>)',
+          orange: 'rgb(var(--brand-orange-rgb) / <alpha-value>)',
+          yellow: 'rgb(var(--brand-yellow-rgb) / <alpha-value>)',
         },
-        /* ── 상태 (hex 고정) ── */
+        /* ── 상태 (RGB 채널 → opacity modifier 호환 + 테마 전환) ── */
         status: {
-          success: '#34D399',
-          warning: '#FFEF63',
-          error: '#EF4444',
-          info: '#723CEB',
+          success: 'rgb(var(--status-success-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--status-warning-rgb) / <alpha-value>)',
+          error: 'rgb(var(--status-error-rgb) / <alpha-value>)',
+          info: 'rgb(var(--status-info-rgb) / <alpha-value>)',
         },
-        /* ── 시맨틱 보더 (CSS 변수) ── */
+        /* ── 시맨틱 보더 ── */
         border: {
           subtle: 'var(--border-subtle)',
           DEFAULT: 'var(--border-default)',
@@ -41,7 +41,7 @@ export default {
           divider: 'var(--border-divider)',
           'divider-faint': 'var(--border-divider-faint)',
         },
-        /* ── 서페이스 (CSS 변수) ── */
+        /* ── 서페이스 ── */
         surface: {
           overlay: 'var(--surface-overlay)',
         },
@@ -64,9 +64,9 @@ export default {
         glow: 'var(--shadow-glow)',
       },
       backgroundImage: {
-        'gradient-brand': 'linear-gradient(135deg, #FF902F 0%, #723CEB 50%, #4C11CE 100%)',
-        'gradient-warm': 'linear-gradient(180deg, #723CEB 0%, #FF902F 100%)',
-        'gradient-card': 'linear-gradient(135deg, #723CEB 0%, #4C11CE 100%)',
+        'gradient-brand': 'var(--gradient-brand)',
+        'gradient-warm': 'var(--gradient-warm)',
+        'gradient-card': 'var(--gradient-card)',
       },
       transitionDuration: {
         fast: '150ms',
