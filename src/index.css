@@ -10,6 +10,7 @@
   --bg-primary: #131313;
   --bg-secondary: #1A1A1A;
   --bg-tertiary: #252525;
+  --bg-content: #1A1A1A;
 
   /* ── 텍스트 ── */
   --text-primary: #FFFFFF;
@@ -84,6 +85,7 @@ html[data-theme="light"] {
   --bg-primary: #EDE8E0;
   --bg-secondary: #FFFFFF;
   --bg-tertiary: #E5E0D7;
+  --bg-content: #F5F2EC;
 
   /* ── 텍스트 ── */
   --text-primary: #2D2A33;
