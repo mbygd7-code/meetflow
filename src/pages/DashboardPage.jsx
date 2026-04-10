@@ -127,6 +127,7 @@ export default function DashboardPage() {
 
       {/* ═══ 패널 2: 오늘의 회의 (큰 섹션) ═══ */}
       <SectionPanel
+        tint="gold"
         title="오늘의 회의"
         action={
           <Link to="/meetings" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -152,7 +153,7 @@ export default function DashboardPage() {
       </SectionPanel>
 
       {/* ═══ 패널 3: 태스크 + 회의록 (큰 섹션 안에 2개 작은 섹션) ═══ */}
-      <SectionPanel>
+      <SectionPanel tint="teal">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 작은 섹션 A: 마감 임박 태스크 */}
           <div className="bg-bg-tertiary rounded-[14px] p-5">
