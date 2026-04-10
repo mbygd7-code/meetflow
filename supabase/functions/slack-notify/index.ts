@@ -1,0 +1,147 @@
+// Supabase Edge Function — DB 변경 → Slack 통지
+// 호출: 다른 함수/DB 트리거에서 HTTP POST
+// Body: { event: 'meeting_start'|'meeting_end'|'task_assigned'|'message'|..., payload }
+
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SLACK_BOT_TOKEN = Deno.env.get('SLACK_BOT_TOKEN')!;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+};
+
+async function postSlack(channel: string, payload: any) {
+  return fetch('https://slack.com/api/chat.postMessage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+    },
+    body: JSON.stringify({ channel, ...payload }),
+  });
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    const { event, payload } = await req.json();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+    switch (event) {
+      case 'meeting_start': {
+        const { data: team } = await supabase
+          .from('teams')
+          .select('slack_channel_id')
+          .eq('id', payload.team_id)
+          .single();
+        if (!team?.slack_channel_id) break;
+
+        const agendaList = (payload.agendas || [])
+          .map((a: any, i: number) => `${i + 1}. ${a.title} (${a.duration_minutes}분)`)
+          .join('\n');
+
+        await postSlack(team.slack_channel_id, {
+          text: `🚀 *${payload.title}* 회의가 시작되었어요\n\n*어젠다*\n${agendaList}`,
+        });
+        break;
+      }
+
+      case 'meeting_end': {
+        const { data: meeting } = await supabase
+          .from('meetings')
+          .select('team_id,title')
+          .eq('id', payload.meeting_id)
+          .single();
+        const { data: team } = await supabase
+          .from('teams')
+          .select('slack_channel_id')
+          .eq('id', meeting?.team_id)
+          .single();
+        if (!team?.slack_channel_id) break;
+
+        const { data: summary } = await supabase
+          .from('meeting_summaries')
+          .select('decisions,action_items,milo_insights')
+          .eq('meeting_id', payload.meeting_id)
+          .single();
+
+        const decisions = (summary?.decisions || [])
+          .map((d: any) => `• ${d.title}`)
+          .join('\n');
+        const tasks = (summary?.action_items || [])
+          .map((a: any) => `✓ ${a.title}`)
+          .join('\n');
+
+        await postSlack(team.slack_channel_id, {
+          text: `✅ *${meeting?.title}* 회의가 종료되었어요`,
+          blocks: [
+            {
+              type: 'header',
+              text: { type: 'plain_text', text: `✅ ${meeting?.title}` },
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*결정 사항*\n${decisions || '_없음_'}` },
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*후속 태스크*\n${tasks || '_없음_'}` },
+            },
+            {
+              type: 'context',
+              elements: [
+                { type: 'mrkdwn', text: `🤖 Milo: ${summary?.milo_insights || ''}` },
+              ],
+            },
+          ],
+        });
+        break;
+      }
+
+      case 'message': {
+        // web → slack 동기화
+        if (payload.source !== 'web') break;
+        const { data: meeting } = await supabase
+          .from('meetings')
+          .select('team_id')
+          .eq('id', payload.meeting_id)
+          .single();
+        const { data: team } = await supabase
+          .from('teams')
+          .select('slack_channel_id')
+          .eq('id', meeting?.team_id)
+          .single();
+        if (!team?.slack_channel_id) break;
+
+        const senderName = payload.user?.name || 'MeetFlow 사용자';
+        await postSlack(team.slack_channel_id, {
+          text: `*${senderName}*: ${payload.content}`,
+        });
+        break;
+      }
+
+      case 'task_assigned': {
+        if (!payload.assignee_slack_id) break;
+        await postSlack(payload.assignee_slack_id, {
+          text: `📌 새 태스크가 배정되었어요: *${payload.title}*\n마감: ${payload.due_date || '미정'}\n우선순위: ${payload.priority}`,
+        });
+        break;
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[slack-notify]', err);
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

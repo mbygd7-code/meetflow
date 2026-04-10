@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ── 배경 ── */
+  --bg-primary: #131313;
+  --bg-secondary: #1A1A1A;
+  --bg-tertiary: #252525;
+
+  /* ── 텍스트 ── */
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-muted: #6B6B6B;
+
+  /* ── 브랜드 ── */
+  --brand-purple: #723CEB;
+  --brand-purple-deep: #4C11CE;
+  --brand-orange: #FF902F;
+  --brand-yellow: #FFEF63;
+
+  /* ── 그라디언트 ── */
+  --gradient-brand: linear-gradient(135deg, #FF902F 0%, #723CEB 50%, #4C11CE 100%);
+  --gradient-warm: linear-gradient(180deg, #723CEB 0%, #FF902F 100%);
+  --gradient-card: linear-gradient(135deg, #723CEB 0%, #4C11CE 100%);
+
+  /* ── 보더 ── */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-focus: rgba(114, 60, 235, 0.5);
+
+  /* ── 상태 컬러 ── */
+  --status-success: #34D399;
+  --status-warning: #FFEF63;
+  --status-error: #EF4444;
+  --status-info: #723CEB;
+
+  /* ── 그림자 ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(114, 60, 235, 0.3);
+
+  /* ── 트랜지션 ── */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* Selection */
+::selection {
+  background: rgba(114, 60, 235, 0.4);
+  color: #FFFFFF;
+}
+
+/* 애니메이션 유틸리티 */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fade-in 0.2s ease-out;
+}

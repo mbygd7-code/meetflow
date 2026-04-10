@@ -1,0 +1,98 @@
+// Supabase Edge Function — Milo AI 분석
+// Deploy: supabase functions deploy milo-analyze
+//
+// POST body: { messages, agenda, preset, context }
+// Returns: { should_respond, response_text, ai_type, suggested_tasks? }
+
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.30.0';
+
+const MILO_SYSTEM_PROMPT = `당신은 MeetFlow의 AI 팀원 "Milo"입니다.
+
+역할: 회의에 참여하는 조용하지만 날카로운 동료
+원칙:
+1. 최소 개입 — 필요한 순간에만 한마디
+2. 의견이 아닌 정보 — "~라는 데이터가 있어요"
+3. 겸손한 톤 — "참고로~", "검토해볼 만합니다"
+4. 투명한 출처 — 데이터 인용 시 반드시 출처 명시
+5. 침묵도 선택지
+
+개입 시점: 데이터 근거 / 사각지대 / 시간 초과 / 결정 확인 / 용어 설명 / 과거 연결
+금지: 특정인 비판, 성과 언급, 결정 강요, 감정적 표현
+응답: 한국어, 최대 3-4문장 (@호출 시 5-8문장)
+
+반드시 다음 JSON 스키마로만 응답:
+{
+  "should_respond": boolean,
+  "response_text": string,
+  "ai_type": "data" | "insight" | "question" | "summary" | "nudge",
+  "suggested_tasks": [{ "title": string, "priority": "low"|"medium"|"high"|"urgent" }]
+}`;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const { messages, agenda, preset, context } = await req.json();
+
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const anthropic = new Anthropic({ apiKey });
+
+    const transcript = (messages || [])
+      .slice(-15)
+      .map((m: any) => `[${m.user?.name || (m.is_ai ? 'Milo' : '참가자')}] ${m.content}`)
+      .join('\n');
+
+    const userPrompt = `## 현재 어젠다
+${agenda?.title || '미지정'} (${agenda?.duration_minutes || 10}분)
+
+## 최근 대화
+${transcript}
+
+## 프리셋
+${preset || 'default'}
+
+## 과제
+위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (3~4문장).
+@Milo 직접 호출이 있다면 반드시 응답 (5~8문장).
+응답이 필요 없다면 should_respond=false.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 600,
+      system: MILO_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    const textBlock = response.content.find((b: any) => b.type === 'text');
+    const raw = textBlock?.text || '{}';
+
+    // JSON 추출
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const result = jsonMatch ? JSON.parse(jsonMatch[0]) : { should_respond: false };
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[milo-analyze]', err);
+    return new Response(
+      JSON.stringify({ error: String(err), should_respond: false }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

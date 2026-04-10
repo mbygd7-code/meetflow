@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeetFlow — AI 팀원 Milo와 함께하는 스마트 회의</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Claude Code 내장 미리보기가 file:// 로 이 파일을 직접 열면
+      // Vite 스크립트가 로드되지 않아 빈 화면이 됨 → 자동으로 dev 서버로 이동
+      (function () {
+        if (location.protocol === 'file:') {
+          var candidates = ['http://localhost:5180/', 'http://localhost:52401/'];
+          // 첫 번째 후보로 즉시 이동 (Vite가 대부분 기본 포트를 사용)
+          location.replace(candidates[0]);
+        }
+      })();
+    </script>
+  </head>
+  <body style="margin:0;background:#131313;color:#fff;font-family:Inter,sans-serif;">
+    <div id="root"></div>
+    <noscript>
+      <div style="padding:40px;text-align:center">
+        JavaScript가 필요합니다. 또는 직접 <a href="http://localhost:5180/" style="color:#723CEB">http://localhost:5180/</a> 를 여세요.
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
