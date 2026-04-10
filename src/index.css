@@ -67,11 +67,11 @@
    LIGHT MODE — 조화로운 올리브/크림 톤
    ════════════════════════════════════════ */
 html[data-theme="light"] {
-  /* ── 배경: 웜 크림 톤 패밀리 ── */
-  --bg-primary: #EBE6DE;
+  /* ── 배경: 뚜렷한 레이어 계층 ── */
+  --bg-primary: #D8D2C8;
   --bg-secondary: #FFFFFF;
-  --bg-tertiary: #F5F3EF;
-  --bg-content: #F2EFEA;
+  --bg-tertiary: #EAE6DE;
+  --bg-content: #E4DFD5;
 
   /* ── 텍스트 ── */
   --text-primary: #2D2A33;
@@ -118,14 +118,14 @@ html[data-theme="light"] {
   --selection-bg: rgba(158, 180, 36, 0.20);
 
   /* ── 사이드바: 메인 배경 동일 ── */
-  --sidebar-bg: #EBE6DE;
+  --sidebar-bg: #D8D2C8;
   --sidebar-text: #2D2A33;
   --sidebar-text-muted: #6B6B6B;
   --sidebar-text-dim: #A3A09A;
-  --sidebar-border: rgba(45, 42, 51, 0.06);
-  --sidebar-divider: rgba(45, 42, 51, 0.05);
-  --sidebar-hover: #E3DED5;
-  --sidebar-active-bg: rgba(158, 180, 36, 0.12);
+  --sidebar-border: rgba(45, 42, 51, 0.08);
+  --sidebar-divider: rgba(45, 42, 51, 0.06);
+  --sidebar-hover: #CEC8BE;
+  --sidebar-active-bg: rgba(158, 180, 36, 0.14);
 }
 
 /* ════════════════════════════════════════ */
@@ -211,18 +211,18 @@ html.theme-transitioning *::after {
    라이트 모드 서브 섹션 (통일된 톤)
    ════════════════════════════════════════ */
 html[data-theme="light"] .subsection-olive {
-  background: linear-gradient(145deg, rgba(158,180,36,0.05) 0%, rgba(255,255,255,0.95) 60%) !important;
-  border-color: rgba(158,180,36,0.10) !important;
+  background: linear-gradient(145deg, rgba(158,180,36,0.10) 0%, rgba(245,243,235,0.95) 70%) !important;
+  border-color: rgba(158,180,36,0.14) !important;
 }
 html[data-theme="light"] .subsection-teal {
-  background: linear-gradient(145deg, rgba(72,166,152,0.05) 0%, rgba(255,255,255,0.95) 60%) !important;
-  border-color: rgba(72,166,152,0.10) !important;
+  background: linear-gradient(145deg, rgba(72,166,152,0.10) 0%, rgba(245,243,235,0.95) 70%) !important;
+  border-color: rgba(72,166,152,0.14) !important;
 }
 html[data-theme="light"] .subsection-gold {
-  background: linear-gradient(145deg, rgba(206,190,68,0.06) 0%, rgba(255,255,255,0.95) 60%) !important;
-  border-color: rgba(206,190,68,0.10) !important;
+  background: linear-gradient(145deg, rgba(206,190,68,0.12) 0%, rgba(245,243,235,0.95) 70%) !important;
+  border-color: rgba(206,190,68,0.14) !important;
 }
 html[data-theme="light"] .subsection-peach {
-  background: linear-gradient(145deg, rgba(220,120,90,0.04) 0%, rgba(255,255,255,0.95) 60%) !important;
-  border-color: rgba(220,120,90,0.08) !important;
+  background: linear-gradient(145deg, rgba(220,120,90,0.08) 0%, rgba(245,243,235,0.95) 70%) !important;
+  border-color: rgba(220,120,90,0.12) !important;
 }
