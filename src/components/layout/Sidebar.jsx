@@ -28,14 +28,25 @@ export default function Sidebar() {
     navigate('/login');
   };
 
+  // 사이드바는 라이트/다크 모드 모두 다크 스타일 유지 (CRM 패턴)
+  // CSS 변수 --sidebar-* 를 사용하여 테마에 따라 미세 조정
   return (
-    <aside className="w-60 bg-bg-primary border-r border-border-subtle flex flex-col p-3 shrink-0">
+    <aside
+      className="w-60 flex flex-col p-3 shrink-0"
+      style={{
+        background: 'var(--sidebar-bg)',
+        borderRight: '1px solid var(--sidebar-border)',
+      }}
+    >
       {/* 로고 */}
       <div className="flex items-center gap-2.5 px-3 py-4 mb-2">
         <div className="w-8 h-8 rounded-lg bg-gradient-brand shadow-glow flex items-center justify-center">
           <Sparkles size={16} className="text-white" strokeWidth={2.5} />
         </div>
-        <span className="text-base font-bold tracking-tight text-txt-primary">
+        <span
+          className="text-base font-bold tracking-tight"
+          style={{ color: 'var(--sidebar-text)' }}
+        >
           MeetFlow
         </span>
       </div>
@@ -50,10 +61,27 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
                 isActive
-                  ? 'bg-brand-purple/[0.12] text-txt-primary font-medium'
-                  : 'text-txt-secondary hover:bg-bg-tertiary hover:text-txt-primary'
+                  ? 'bg-brand-purple/[0.15] font-medium'
+                  : ''
               }`
             }
+            style={({ isActive }) => ({
+              color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
+              ...(isActive ? {} : {}),
+            })}
+            onMouseEnter={(e) => {
+              if (!e.currentTarget.classList.contains('active')) {
+                e.currentTarget.style.background = 'var(--sidebar-hover)';
+                e.currentTarget.style.color = 'var(--sidebar-text)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!e.currentTarget.classList.contains('active')) {
+                e.currentTarget.style.background = '';
+                const isActive = e.currentTarget.getAttribute('aria-current') === 'page';
+                if (!isActive) e.currentTarget.style.color = 'var(--sidebar-text-muted)';
+              }
+            }}
           >
             <Icon size={18} strokeWidth={2} />
             <span>{label}</span>
@@ -62,20 +90,38 @@ export default function Sidebar() {
       </nav>
 
       {/* 하단 유저 */}
-      <div className="border-t border-border-divider pt-3 mt-3">
+      <div
+        className="pt-3 mt-3"
+        style={{ borderTop: '1px solid var(--sidebar-divider)' }}
+      >
         <div className="flex items-center gap-3 px-2 py-2 rounded-md">
           <Avatar name={user?.name || 'U'} size="sm" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-txt-primary truncate">
+            <p
+              className="text-sm font-medium truncate"
+              style={{ color: 'var(--sidebar-text)' }}
+            >
               {user?.name || '사용자'}
             </p>
-            <p className="text-[11px] text-txt-muted truncate">
+            <p
+              className="text-[11px] truncate"
+              style={{ color: 'var(--sidebar-text-dim)' }}
+            >
               {user?.email}
             </p>
           </div>
           <button
             onClick={handleLogout}
-            className="text-txt-muted hover:text-txt-primary transition-colors p-1.5 rounded hover:bg-bg-tertiary"
+            className="p-1.5 rounded transition-colors"
+            style={{ color: 'var(--sidebar-text-dim)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--sidebar-text)';
+              e.currentTarget.style.background = 'var(--sidebar-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--sidebar-text-dim)';
+              e.currentTarget.style.background = '';
+            }}
             title="로그아웃"
           >
             <LogOut size={15} strokeWidth={2.2} />

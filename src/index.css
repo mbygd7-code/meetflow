@@ -59,6 +59,15 @@
   /* ── 셀렉션 ── */
   --selection-bg: rgba(114, 60, 235, 0.4);
 
+  /* ── 사이드바 (다크에선 메인 배경과 동일) ── */
+  --sidebar-bg: #131313;
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: #A0A0A0;
+  --sidebar-text-dim: #6B6B6B;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-divider: rgba(255, 255, 255, 0.06);
+  --sidebar-hover: #252525;
+
   /* ── 트랜지션 ── */
   --transition-fast: 0.15s ease;
   --transition-base: 0.2s ease;
@@ -66,44 +75,55 @@
 }
 
 /* ════════════════════════════════════════
-   LIGHT MODE
+   LIGHT MODE — Warm CRM Style
+   참조: Dynamic 365 / CentralFlow CRM
+   웜 크림/아이보리 배경 + 다크 사이드바 유지
    ════════════════════════════════════════ */
 html[data-theme="light"] {
-  /* ── 배경 ── */
-  --bg-primary: #F8F9FB;
+  /* ── 배경: 따뜻한 크림/아이보리 ── */
+  --bg-primary: #F0EBE3;
   --bg-secondary: #FFFFFF;
-  --bg-tertiary: #F0F2F5;
+  --bg-tertiary: #E8E3DA;
 
   /* ── 텍스트 ── */
-  --text-primary: #1A1A2E;
-  --text-secondary: #6B7280;
+  --text-primary: #2D2A33;
+  --text-secondary: #6B6B6B;
   --text-muted: #9CA3AF;
 
-  /* ── 보더 ── */
-  --border-subtle: rgba(0, 0, 0, 0.06);
-  --border-default: rgba(0, 0, 0, 0.10);
+  /* ── 보더: 따뜻한 톤 ── */
+  --border-subtle: rgba(45, 42, 51, 0.08);
+  --border-default: rgba(45, 42, 51, 0.12);
   --border-focus: rgba(114, 60, 235, 0.5);
-  --border-hover: rgba(0, 0, 0, 0.10);
-  --border-hover-strong: rgba(0, 0, 0, 0.14);
-  --border-hover-max: rgba(0, 0, 0, 0.20);
-  --border-divider: rgba(0, 0, 0, 0.06);
-  --border-divider-faint: rgba(0, 0, 0, 0.03);
+  --border-hover: rgba(45, 42, 51, 0.12);
+  --border-hover-strong: rgba(45, 42, 51, 0.18);
+  --border-hover-max: rgba(45, 42, 51, 0.24);
+  --border-divider: rgba(45, 42, 51, 0.06);
+  --border-divider-faint: rgba(45, 42, 51, 0.03);
 
   /* ── 서페이스 ── */
-  --surface-overlay: rgba(0, 0, 0, 0.40);
+  --surface-overlay: rgba(45, 42, 51, 0.40);
 
-  /* ── 그림자 ── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 20px rgba(114, 60, 235, 0.15);
+  /* ── 그림자: 따뜻한 워밍 쉐도우 ── */
+  --shadow-sm: 0 1px 3px rgba(45, 42, 51, 0.06);
+  --shadow-md: 0 4px 16px rgba(45, 42, 51, 0.08);
+  --shadow-lg: 0 8px 32px rgba(45, 42, 51, 0.12);
+  --shadow-glow: 0 0 24px rgba(114, 60, 235, 0.12);
 
   /* ── 스크롤바 ── */
-  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.16);
+  --scrollbar-thumb: rgba(45, 42, 51, 0.10);
+  --scrollbar-thumb-hover: rgba(45, 42, 51, 0.20);
 
   /* ── 셀렉션 ── */
-  --selection-bg: rgba(114, 60, 235, 0.2);
+  --selection-bg: rgba(114, 60, 235, 0.15);
+
+  /* ── 사이드바: 라이트 모드에서도 다크 유지 (CRM 스타일) ── */
+  --sidebar-bg: #2D2A33;
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: #B0ADB8;
+  --sidebar-text-dim: #7A7880;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-divider: rgba(255, 255, 255, 0.04);
+  --sidebar-hover: #3D3A45;
 }
 
 /* ════════════════════════════════════════
@@ -130,6 +150,54 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ════════════════════════════════════════
+   라이트 모드 — 움직이는 그라디언트 배경
+   ════════════════════════════════════════ */
+@keyframes gradient-drift {
+  0% {
+    background-position: 0% 50%;
+  }
+  25% {
+    background-position: 50% 0%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  75% {
+    background-position: 50% 100%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 메인 콘텐츠 영역에만 적용 */
+html[data-theme="light"] .content-gradient-bg {
+  position: relative;
+}
+html[data-theme="light"] .content-gradient-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 240px; /* 사이드바 너비 */
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  opacity: 0.35;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 600px 600px at 20% 20%, rgba(114, 60, 235, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 500px at 80% 30%, rgba(255, 143, 47, 0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 400px at 40% 80%, rgba(184, 204, 60, 0.10) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 500px at 70% 70%, rgba(114, 60, 235, 0.08) 0%, transparent 70%);
+  background-size: 200% 200%;
+  animation: gradient-drift 20s ease-in-out infinite;
+}
+html[data-theme="light"] .content-gradient-bg > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* 스크롤바 */
@@ -162,7 +230,9 @@ html.theme-transitioning *::after {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
-/* 애니메이션 유틸리티 */
+/* ════════════════════════════════════════
+   애니메이션 유틸리티
+   ════════════════════════════════════════ */
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
