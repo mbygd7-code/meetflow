@@ -17,34 +17,33 @@ export default function TopBar() {
   const { user } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
 
-  // 경로 접두사 매칭으로 타이틀 결정
   const title =
     PAGE_TITLES[pathname] ||
     Object.entries(PAGE_TITLES).find(([path]) => pathname.startsWith(path) && path !== '/')?.[1] ||
     '대시보드';
 
   return (
-    <header className="h-16 shrink-0 border-b border-border-subtle flex items-center justify-between px-6 bg-bg-primary">
-      <h2 className="text-[22px] font-medium text-txt-primary tracking-tight">
+    <header className="h-14 shrink-0 flex items-center justify-between px-8 bg-transparent">
+      <h2 className="text-xl font-semibold text-txt-primary tracking-tight">
         {title}
       </h2>
 
-      <div className="flex items-center gap-2">
-        <button className="p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
-          <Search size={18} strokeWidth={2} />
+      <div className="flex items-center gap-1.5">
+        <button className="p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
+          <Search size={17} strokeWidth={2} />
         </button>
-        <button className="relative p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
-          <Bell size={18} strokeWidth={2} />
+        <button className="relative p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
+          <Bell size={17} strokeWidth={2} />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand-orange" />
         </button>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+          className="p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
           title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
         >
-          {theme === 'dark' ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
+          {theme === 'dark' ? <Sun size={17} strokeWidth={2} /> : <Moon size={17} strokeWidth={2} />}
         </button>
-        <div className="ml-2">
+        <div className="ml-1.5 pl-1.5 border-l border-border-divider">
           <Avatar name={user?.name || 'U'} size="sm" />
         </div>
       </div>
