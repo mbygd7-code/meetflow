@@ -98,7 +98,7 @@ export default function DashboardPage() {
     <div className="p-6 max-w-[1400px] mx-auto">
       {/* 인사말 */}
       <div className="mb-6">
-        <h1 className="text-[28px] font-semibold text-white">
+        <h1 className="text-[28px] font-semibold text-txt-primary">
           안녕하세요, {user?.name || '사용자'}님 👋
         </h1>
         <p className="text-sm text-txt-secondary mt-1">{today}</p>
@@ -142,7 +142,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-semibold text-white">주간 회의 횟수</h3>
+              <h3 className="text-base font-semibold text-txt-primary">주간 회의 횟수</h3>
               <p className="text-xs text-txt-secondary mt-0.5">
                 지난 주 대비 20% 감소
               </p>
@@ -157,18 +157,18 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3 mb-3">
             <Avatar variant="ai" size="md" label="M" />
             <div>
-              <p className="text-sm font-semibold text-white">Milo 주간 인사이트</p>
+              <p className="text-sm font-semibold text-txt-primary">Milo 주간 인사이트</p>
               <p className="text-[10px] text-txt-muted">자동 생성</p>
             </div>
           </div>
           <p className="text-xs text-txt-secondary leading-relaxed mb-4">
-            이번 주 회의 시간이 지난주 대비 <span className="text-white font-semibold">20% 줄었어요</span>.
-            결정 실행률도 <span className="text-white font-semibold">82%</span>로 높아졌습니다.
+            이번 주 회의 시간이 지난주 대비 <span className="text-txt-primary font-semibold">20% 줄었어요</span>.
+            결정 실행률도 <span className="text-txt-primary font-semibold">82%</span>로 높아졌습니다.
             짧은 회의가 실행력에 긍정적으로 작용하고 있네요.
           </p>
           <Link
             to="/summaries"
-            className="flex items-center gap-1 text-xs text-brand-purple hover:text-white transition-colors"
+            className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors"
           >
             전체 분석 보기
             <ArrowRight size={12} />
@@ -179,10 +179,10 @@ export default function DashboardPage() {
       {/* 오늘의 회의 */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[18px] font-semibold text-white">오늘의 회의</h2>
+          <h2 className="text-[18px] font-semibold text-txt-primary">오늘의 회의</h2>
           <Link
             to="/meetings"
-            className="text-xs text-txt-secondary hover:text-white flex items-center gap-1"
+            className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1"
           >
             모두 보기 <ArrowRight size={12} />
           </Link>
@@ -212,10 +212,10 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[18px] font-semibold text-white">마감 임박 태스크</h2>
+            <h2 className="text-[18px] font-semibold text-txt-primary">마감 임박 태스크</h2>
             <Link
               to="/tasks"
-              className="text-xs text-txt-secondary hover:text-white flex items-center gap-1"
+              className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1"
             >
               모두 보기 <ArrowRight size={12} />
             </Link>
@@ -235,10 +235,10 @@ export default function DashboardPage() {
 
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[18px] font-semibold text-white">최근 회의록</h2>
+            <h2 className="text-[18px] font-semibold text-txt-primary">최근 회의록</h2>
             <Link
               to="/summaries"
-              className="text-xs text-txt-secondary hover:text-white flex items-center gap-1"
+              className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1"
             >
               모두 보기 <ArrowRight size={12} />
             </Link>
@@ -251,13 +251,13 @@ export default function DashboardPage() {
             <div className="space-y-2.5">
               {recentSummaries.map((m) => (
                 <Link key={m.id} to={`/summaries/${m.id}`}>
-                  <Card className="!p-4 hover:border-white/[0.16]">
+                  <Card className="!p-4 hover:border-border-hover-strong">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-md bg-brand-purple/10 border border-brand-purple/20 flex items-center justify-center shrink-0">
                         <FileText size={16} className="text-brand-purple" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">
+                        <p className="text-sm font-medium text-txt-primary truncate">
                           {m.title}
                         </p>
                         <p className="text-[11px] text-txt-muted mt-0.5">

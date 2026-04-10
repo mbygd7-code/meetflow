@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ════════════════════════════════════════
+   DARK MODE (기본값)
+   ════════════════════════════════════════ */
 :root {
   /* ── 배경 ── */
   --bg-primary: #131313;
@@ -13,7 +16,7 @@
   --text-secondary: #A0A0A0;
   --text-muted: #6B6B6B;
 
-  /* ── 브랜드 ── */
+  /* ── 브랜드 (테마 불변) ── */
   --brand-purple: #723CEB;
   --brand-purple-deep: #4C11CE;
   --brand-orange: #FF902F;
@@ -28,12 +31,20 @@
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-default: rgba(255, 255, 255, 0.12);
   --border-focus: rgba(114, 60, 235, 0.5);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-hover-strong: rgba(255, 255, 255, 0.16);
+  --border-hover-max: rgba(255, 255, 255, 0.24);
+  --border-divider: rgba(255, 255, 255, 0.06);
+  --border-divider-faint: rgba(255, 255, 255, 0.04);
 
-  /* ── 상태 컬러 ── */
+  /* ── 상태 컬러 (테마 불변) ── */
   --status-success: #34D399;
   --status-warning: #FFEF63;
   --status-error: #EF4444;
   --status-info: #723CEB;
+
+  /* ── 서페이스 ── */
+  --surface-overlay: rgba(0, 0, 0, 0.60);
 
   /* ── 그림자 ── */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -41,12 +52,63 @@
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px rgba(114, 60, 235, 0.3);
 
+  /* ── 스크롤바 ── */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.16);
+
+  /* ── 셀렉션 ── */
+  --selection-bg: rgba(114, 60, 235, 0.4);
+
   /* ── 트랜지션 ── */
   --transition-fast: 0.15s ease;
   --transition-base: 0.2s ease;
   --transition-slow: 0.3s ease;
 }
 
+/* ════════════════════════════════════════
+   LIGHT MODE
+   ════════════════════════════════════════ */
+html[data-theme="light"] {
+  /* ── 배경 ── */
+  --bg-primary: #F8F9FB;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0F2F5;
+
+  /* ── 텍스트 ── */
+  --text-primary: #1A1A2E;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+
+  /* ── 보더 ── */
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.10);
+  --border-focus: rgba(114, 60, 235, 0.5);
+  --border-hover: rgba(0, 0, 0, 0.10);
+  --border-hover-strong: rgba(0, 0, 0, 0.14);
+  --border-hover-max: rgba(0, 0, 0, 0.20);
+  --border-divider: rgba(0, 0, 0, 0.06);
+  --border-divider-faint: rgba(0, 0, 0, 0.03);
+
+  /* ── 서페이스 ── */
+  --surface-overlay: rgba(0, 0, 0, 0.40);
+
+  /* ── 그림자 ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 20px rgba(114, 60, 235, 0.15);
+
+  /* ── 스크롤바 ── */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.16);
+
+  /* ── 셀렉션 ── */
+  --selection-bg: rgba(114, 60, 235, 0.2);
+}
+
+/* ════════════════════════════════════════
+   BASE STYLES
+   ════════════════════════════════════════ */
 * {
   box-sizing: border-box;
 }
@@ -67,9 +129,10 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* 스크롤바 커스텀 */
+/* 스크롤바 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -78,17 +141,25 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Selection */
 ::selection {
-  background: rgba(114, 60, 235, 0.4);
-  color: #FFFFFF;
+  background: var(--selection-bg);
+  color: var(--text-primary);
+}
+
+/* 테마 전환 시 부드러운 트랜지션 */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
 /* 애니메이션 유틸리티 */

@@ -11,7 +11,7 @@ function SummaryList() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-[22px] font-medium text-white mb-1">회의록</h1>
+      <h1 className="text-[22px] font-medium text-txt-primary mb-1">회의록</h1>
       <p className="text-sm text-txt-secondary mb-6">
         종료된 회의의 AI 요약을 확인하세요
       </p>
@@ -25,10 +25,10 @@ function SummaryList() {
         <div className="space-y-3">
           {completed.map((m) => (
             <Link key={m.id} to={`/summaries/${m.id}`}>
-              <Card className="hover:border-white/[0.16]">
+              <Card className="hover:border-border-hover-strong">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold text-white mb-1 truncate">
+                    <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
                       {m.title}
                     </h3>
                     <p className="text-xs text-txt-secondary">

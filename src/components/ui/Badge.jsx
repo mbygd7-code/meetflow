@@ -4,7 +4,7 @@ const VARIANTS = {
   success: 'bg-status-success/15 text-status-success',
   warning: 'bg-brand-yellow/20 text-brand-yellow',
   danger: 'bg-status-error/15 text-status-error',
-  outline: 'bg-transparent border border-white/[0.12] text-txt-secondary',
+  outline: 'bg-transparent border border-border-default text-txt-secondary',
   info: 'bg-brand-purple/20 text-brand-purple',
 };
 

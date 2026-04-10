@@ -8,12 +8,12 @@ export default function Card({
 }) {
   const base = 'rounded-[12px] p-6 transition-all duration-200';
   const variants = {
-    default: `bg-bg-secondary border border-white/[0.08] ${
-      hoverable ? 'hover:border-white/[0.12]' : ''
+    default: `bg-bg-secondary border border-border-subtle ${
+      hoverable ? 'hover:border-border-hover' : ''
     }`,
     gradient: 'bg-gradient-card text-white border-none shadow-md',
-    subtle: `bg-bg-tertiary border border-white/[0.06] ${
-      hoverable ? 'hover:border-white/[0.12]' : ''
+    subtle: `bg-bg-tertiary border border-border-divider ${
+      hoverable ? 'hover:border-border-hover' : ''
     }`,
   };
 

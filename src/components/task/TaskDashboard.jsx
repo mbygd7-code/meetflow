@@ -50,7 +50,7 @@ export default function TaskDashboard() {
     <div className="p-6 max-w-[1400px] mx-auto">
       {/* 헤더 */}
       <div className="mb-6">
-        <h1 className="text-[22px] font-medium text-white">태스크</h1>
+        <h1 className="text-[22px] font-medium text-txt-primary">태스크</h1>
         <p className="text-sm text-txt-secondary mt-0.5">
           회의에서 자동 생성된 태스크와 수동 태스크를 한 곳에서 관리하세요
         </p>
@@ -84,7 +84,7 @@ export default function TaskDashboard() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-bg-tertiary border border-white/[0.08] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-purple/50"
+            className="bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary focus:outline-none focus:border-brand-purple/50"
           >
             <option value="all">모든 상태</option>
             <option value="todo">To Do</option>
@@ -94,7 +94,7 @@ export default function TaskDashboard() {
           <select
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
-            className="bg-bg-tertiary border border-white/[0.08] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-purple/50"
+            className="bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary focus:outline-none focus:border-brand-purple/50"
           >
             <option value="all">모든 우선순위</option>
             <option value="urgent">긴급</option>
@@ -111,8 +111,8 @@ export default function TaskDashboard() {
               onClick={() => setView(v.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-all ${
                 view === v.id
-                  ? 'bg-bg-secondary text-white shadow-sm'
-                  : 'text-txt-secondary hover:text-white'
+                  ? 'bg-bg-secondary text-txt-primary shadow-sm'
+                  : 'text-txt-secondary hover:text-txt-primary'
               }`}
             >
               <v.icon size={13} strokeWidth={2.2} />

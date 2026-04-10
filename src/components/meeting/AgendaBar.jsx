@@ -2,7 +2,7 @@ import { Check, Clock } from 'lucide-react';
 
 export default function AgendaBar({ agendas = [], activeId, onSelect }) {
   return (
-    <div className="flex items-center gap-1 px-6 py-3 border-b border-white/[0.06] bg-bg-primary overflow-x-auto">
+    <div className="flex items-center gap-1 px-6 py-3 border-b border-border-divider bg-bg-primary overflow-x-auto">
       {agendas.map((a, i) => {
         const isActive = a.status === 'active' || a.id === activeId;
         const isDone = a.status === 'completed';
@@ -14,9 +14,9 @@ export default function AgendaBar({ agendas = [], activeId, onSelect }) {
               shrink-0 flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all
               ${
                 isActive
-                  ? 'bg-brand-purple/[0.14] text-white border border-brand-purple/40'
+                  ? 'bg-brand-purple/[0.14] text-txt-primary border border-brand-purple/40'
                   : isDone
-                    ? 'text-txt-secondary hover:text-white'
+                    ? 'text-txt-secondary hover:text-txt-primary'
                     : 'text-txt-muted hover:text-txt-secondary'
               }
             `}
@@ -30,7 +30,7 @@ export default function AgendaBar({ agendas = [], activeId, onSelect }) {
                 className={`w-4 h-4 rounded-full border text-[9px] flex items-center justify-center ${
                   isActive
                     ? 'border-brand-purple bg-brand-purple text-white'
-                    : 'border-white/20'
+                    : 'border-border-default'
                 }`}
               >
                 {i + 1}

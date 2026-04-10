@@ -1,7 +1,8 @@
-import { Search, Bell } from 'lucide-react';
+import { Search, Bell, Sun, Moon } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 
 const PAGE_TITLES = {
   '/': '대시보드',
@@ -14,6 +15,7 @@ const PAGE_TITLES = {
 export default function TopBar() {
   const { pathname } = useLocation();
   const { user } = useAuthStore();
+  const { theme, toggleTheme } = useThemeStore();
 
   // 경로 접두사 매칭으로 타이틀 결정
   const title =
@@ -22,18 +24,25 @@ export default function TopBar() {
     '대시보드';
 
   return (
-    <header className="h-16 shrink-0 border-b border-white/[0.08] flex items-center justify-between px-6 bg-bg-primary">
-      <h2 className="text-[22px] font-medium text-white tracking-tight">
+    <header className="h-16 shrink-0 border-b border-border-subtle flex items-center justify-between px-6 bg-bg-primary">
+      <h2 className="text-[22px] font-medium text-txt-primary tracking-tight">
         {title}
       </h2>
 
       <div className="flex items-center gap-2">
-        <button className="p-2 rounded-md text-txt-secondary hover:text-white hover:bg-bg-tertiary transition-colors">
+        <button className="p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
           <Search size={18} strokeWidth={2} />
         </button>
-        <button className="relative p-2 rounded-md text-txt-secondary hover:text-white hover:bg-bg-tertiary transition-colors">
+        <button className="relative p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
           <Bell size={18} strokeWidth={2} />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand-orange" />
+        </button>
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+          title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+        >
+          {theme === 'dark' ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
         </button>
         <div className="ml-2">
           <Avatar name={user?.name || 'U'} size="sm" />

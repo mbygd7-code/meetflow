@@ -34,25 +34,25 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in"
+      className="fixed inset-0 bg-surface-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in"
       onClick={onClose}
     >
       <div
         className={`
-          bg-bg-secondary border border-white/[0.08] rounded-[16px]
+          bg-bg-secondary border border-border-subtle rounded-[16px]
           shadow-lg w-full ${sizes[size]} ${className}
         `}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || onClose) && (
-          <div className="flex items-center justify-between px-7 pt-6 pb-4 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between px-7 pt-6 pb-4 border-b border-border-divider">
             {title && (
-              <h3 className="text-lg font-semibold text-white">{title}</h3>
+              <h3 className="text-lg font-semibold text-txt-primary">{title}</h3>
             )}
             {onClose && (
               <button
                 onClick={onClose}
-                className="text-txt-secondary hover:text-white transition-colors p-1 rounded-md hover:bg-bg-tertiary"
+                className="text-txt-secondary hover:text-txt-primary transition-colors p-1 rounded-md hover:bg-bg-tertiary"
               >
                 <X size={18} strokeWidth={2.2} />
               </button>

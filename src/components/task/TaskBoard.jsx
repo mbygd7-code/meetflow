@@ -18,16 +18,16 @@ export default function TaskBoard({ tasks, onToggle, onCardClick }) {
       {grouped.map((col) => (
         <div
           key={col.id}
-          className="bg-bg-secondary border border-white/[0.08] rounded-[12px] p-4"
+          className="bg-bg-secondary border border-border-subtle rounded-[12px] p-4"
         >
           {/* 컬럼 헤더 */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${col.color}`} />
-              <h3 className="text-sm font-semibold text-white">{col.label}</h3>
+              <h3 className="text-sm font-semibold text-txt-primary">{col.label}</h3>
               <span className="text-xs text-txt-muted">{col.tasks.length}</span>
             </div>
-            <button className="text-txt-muted hover:text-white transition-colors">
+            <button className="text-txt-muted hover:text-txt-primary transition-colors">
               <Plus size={14} />
             </button>
           </div>

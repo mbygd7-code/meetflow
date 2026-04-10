@@ -31,7 +31,7 @@ const Input = forwardRef(function Input(
           ref={ref}
           type={type}
           className={`
-            w-full bg-bg-tertiary border rounded-md text-sm text-white
+            w-full bg-bg-tertiary border rounded-md text-sm text-txt-primary
             placeholder:text-txt-muted
             px-4 py-2.5 transition-colors duration-200
             focus:outline-none focus:ring-[3px]
@@ -40,7 +40,7 @@ const Input = forwardRef(function Input(
             ${
               error
                 ? 'border-status-error/60 focus:border-status-error focus:ring-status-error/15'
-                : 'border-white/[0.08] focus:border-brand-purple/50 focus:ring-brand-purple/15'
+                : 'border-border-subtle focus:border-brand-purple/50 focus:ring-brand-purple/15'
             }
             ${className}
           `}

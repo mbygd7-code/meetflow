@@ -52,7 +52,7 @@ export default function MeetingRoom() {
           <p className="text-sm mb-3">회의를 찾을 수 없습니다.</p>
           <button
             onClick={() => navigate('/meetings')}
-            className="text-brand-purple hover:text-white text-xs"
+            className="text-brand-purple hover:text-txt-primary text-xs"
           >
             회의 목록으로 돌아가기
           </button>
@@ -103,15 +103,15 @@ export default function MeetingRoom() {
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       {/* 회의 헤더 */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border-divider">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/meetings')}
-            className="p-1.5 text-txt-secondary hover:text-white hover:bg-bg-tertiary rounded-md transition-colors"
+            className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
           >
             <X size={16} />
           </button>
-          <h1 className="text-[22px] font-medium text-white tracking-tight">
+          <h1 className="text-[22px] font-medium text-txt-primary tracking-tight">
             {meeting.title}
           </h1>
           {meeting.status === 'active' && (

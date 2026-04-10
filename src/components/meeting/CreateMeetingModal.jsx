@@ -86,7 +86,7 @@ export default function CreateMeetingModal({ open, onClose }) {
           <select
             value={teamId}
             onChange={(e) => setTeamId(e.target.value)}
-            className="w-full bg-bg-tertiary border border-white/[0.08] rounded-md px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-purple/50 focus:ring-[3px] focus:ring-brand-purple/15 transition-colors"
+            className="w-full bg-bg-tertiary border border-border-subtle rounded-md px-4 py-2.5 text-sm text-txt-primary focus:outline-none focus:border-brand-purple/50 focus:ring-[3px] focus:ring-brand-purple/15 transition-colors"
           >
             <option value="team-1">프로덕트 팀</option>
             <option value="team-2">디자인 팀</option>
@@ -102,7 +102,7 @@ export default function CreateMeetingModal({ open, onClose }) {
             <button
               type="button"
               onClick={addAgenda}
-              className="text-xs text-brand-purple hover:text-white flex items-center gap-1 transition-colors"
+              className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
             >
               <Plus size={14} strokeWidth={2.4} />
               추가
@@ -112,16 +112,16 @@ export default function CreateMeetingModal({ open, onClose }) {
           <div className="space-y-2">
             {agendas.map((a, i) => (
               <div key={i} className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-bg-tertiary border border-white/[0.08] flex items-center justify-center text-[11px] text-txt-secondary shrink-0">
+                <div className="w-6 h-6 rounded-md bg-bg-tertiary border border-border-subtle flex items-center justify-center text-[11px] text-txt-secondary shrink-0">
                   {i + 1}
                 </div>
                 <input
                   placeholder="어젠다 제목"
                   value={a.title}
                   onChange={(e) => updateAgenda(i, 'title', e.target.value)}
-                  className="flex-1 bg-bg-tertiary border border-white/[0.08] rounded-md px-3 py-2 text-sm text-white placeholder:text-txt-muted focus:outline-none focus:border-brand-purple/50"
+                  className="flex-1 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:border-brand-purple/50"
                 />
-                <div className="flex items-center gap-1 bg-bg-tertiary border border-white/[0.08] rounded-md px-2 py-2 w-24">
+                <div className="flex items-center gap-1 bg-bg-tertiary border border-border-subtle rounded-md px-2 py-2 w-24">
                   <Clock size={13} className="text-txt-muted" />
                   <input
                     type="number"
@@ -130,7 +130,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                     onChange={(e) =>
                       updateAgenda(i, 'duration_minutes', parseInt(e.target.value) || 0)
                     }
-                    className="w-full bg-transparent text-sm text-white text-center focus:outline-none"
+                    className="w-full bg-transparent text-sm text-txt-primary text-center focus:outline-none"
                   />
                   <span className="text-[11px] text-txt-muted">분</span>
                 </div>

@@ -22,8 +22,8 @@ export default function TaskCard({ task, onToggle, onClick, compact = false }) {
     <div
       onClick={() => onClick?.(task)}
       className={`
-        group bg-bg-secondary border border-white/[0.08] rounded-[12px]
-        p-4 hover:border-white/[0.16] transition-all cursor-pointer
+        group bg-bg-secondary border border-border-subtle rounded-[12px]
+        p-4 hover:border-border-hover-strong transition-all cursor-pointer
         ${isDone ? 'opacity-60' : ''}
       `}
     >
@@ -46,7 +46,7 @@ export default function TaskCard({ task, onToggle, onClick, compact = false }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1.5">
             <p
-              className={`text-sm font-medium text-white leading-snug ${
+              className={`text-sm font-medium text-txt-primary leading-snug ${
                 isDone ? 'line-through' : ''
               }`}
             >

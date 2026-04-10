@@ -51,7 +51,7 @@ export default function ChatArea({ messages, onSend, disabled }) {
 
       {/* 입력창 */}
       <div className="px-6 pb-5 pt-2">
-        <div className="relative flex items-end gap-2 bg-bg-tertiary border border-white/[0.08] rounded-full pl-5 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
+        <div className="relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-5 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
           <textarea
             ref={textareaRef}
             value={input}
@@ -60,7 +60,7 @@ export default function ChatArea({ messages, onSend, disabled }) {
             placeholder="의견을 입력하세요... (@Milo로 AI에게 질문)"
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent text-sm text-white placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
+            className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
           />
           <button
             type="button"

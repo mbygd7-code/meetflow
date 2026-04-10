@@ -76,7 +76,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="bg-bg-secondary border border-white/[0.08] rounded-[16px] p-8 shadow-lg">
+        <div className="bg-bg-secondary border border-border-subtle rounded-[16px] p-8 shadow-lg">
           {/* 탭 */}
           <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
             {['signin', 'signup'].map((m) => (
@@ -89,8 +89,8 @@ export default function LoginPage() {
                 }}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
                   mode === m
-                    ? 'bg-bg-secondary text-white shadow-sm'
-                    : 'text-txt-secondary hover:text-white'
+                    ? 'bg-bg-secondary text-txt-primary shadow-sm'
+                    : 'text-txt-secondary hover:text-txt-primary'
                 }`}
               >
                 {m === 'signin' ? '로그인' : '회원가입'}
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
           <div className="relative my-5 text-center">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/[0.08]" />
+              <div className="w-full border-t border-border-subtle" />
             </div>
             <span className="relative inline-block px-3 bg-bg-secondary text-xs text-txt-muted">
               또는

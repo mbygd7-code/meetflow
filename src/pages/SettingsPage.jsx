@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Slack, FileText, Bell, Check } from 'lucide-react';
+import { Slack, FileText, Bell, Check, Sun, Moon, Monitor } from 'lucide-react';
 import { Card, Input, Button, Badge } from '@/components/ui';
+import { useThemeStore } from '@/stores/themeStore';
 
 function Toggle({ checked, onChange, label }) {
   return (
     <label className="flex items-center justify-between py-2.5 cursor-pointer">
-      <span className="text-sm text-white">{label}</span>
+      <span className="text-sm text-txt-primary">{label}</span>
       <button
         type="button"
         onClick={() => onChange(!checked)}
         className={`relative w-10 h-5 rounded-full transition-colors ${
-          checked ? 'bg-brand-purple' : 'bg-bg-tertiary border border-white/[0.12]'
+          checked ? 'bg-brand-purple' : 'bg-bg-tertiary border border-border-default'
         }`}
       >
         <span
@@ -34,22 +35,73 @@ export default function SettingsPage() {
     miloSummary: false,
   });
 
+  const { theme, setTheme } = useThemeStore();
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-[22px] font-medium text-white mb-1">설정</h1>
+      <h1 className="text-[22px] font-medium text-txt-primary mb-1">설정</h1>
       <p className="text-sm text-txt-secondary mb-6">
         외부 서비스 연동 및 알림 설정
       </p>
+
+      {/* 테마 설정 */}
+      <Card className="mb-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-md bg-bg-tertiary border border-border-subtle flex items-center justify-center">
+            <Monitor size={18} className="text-brand-purple" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-txt-primary">테마</h3>
+            <p className="text-xs text-txt-secondary">
+              다크 모드와 라이트 모드 중 선택하세요
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setTheme('dark')}
+            className={`p-4 rounded-md border text-left transition-all flex items-center gap-3 ${
+              theme === 'dark'
+                ? 'border-brand-purple bg-brand-purple/[0.08]'
+                : 'border-border-subtle hover:border-border-hover-strong'
+            }`}
+          >
+            <div className="w-10 h-10 rounded-md bg-[#131313] border border-border-subtle flex items-center justify-center shrink-0">
+              <Moon size={16} className="text-brand-purple" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-txt-primary">다크 모드</p>
+              <p className="text-xs text-txt-secondary">어두운 배경, 눈의 피로 감소</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setTheme('light')}
+            className={`p-4 rounded-md border text-left transition-all flex items-center gap-3 ${
+              theme === 'light'
+                ? 'border-brand-purple bg-brand-purple/[0.08]'
+                : 'border-border-subtle hover:border-border-hover-strong'
+            }`}
+          >
+            <div className="w-10 h-10 rounded-md bg-[#F8F9FB] border border-border-subtle flex items-center justify-center shrink-0">
+              <Sun size={16} className="text-brand-orange" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-txt-primary">라이트 모드</p>
+              <p className="text-xs text-txt-secondary">밝은 배경, 높은 가독성</p>
+            </div>
+          </button>
+        </div>
+      </Card>
 
       {/* Slack 연동 */}
       <Card className="mb-5">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-bg-tertiary border border-white/[0.08] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-bg-tertiary border border-border-subtle flex items-center justify-center">
               <Slack size={18} className="text-brand-purple" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Slack 연동</h3>
+              <h3 className="text-base font-semibold text-txt-primary">Slack 연동</h3>
               <p className="text-xs text-txt-secondary">
                 팀 Slack 채널과 MeetFlow를 양방향 동기화하세요
               </p>
@@ -66,11 +118,11 @@ export default function SettingsPage() {
           onChange={(e) => setSlackChannel(e.target.value)}
         />
 
-        <div className="mt-5 pt-5 border-t border-white/[0.06]">
+        <div className="mt-5 pt-5 border-t border-border-divider">
           <p className="text-xs font-medium text-txt-secondary uppercase tracking-wider mb-3">
             알림 설정
           </p>
-          <div className="space-y-0.5 divide-y divide-white/[0.04]">
+          <div className="space-y-0.5 divide-y divide-border-divider-faint">
             <Toggle
               label="회의 시작 알림"
               checked={notif.meetingStart}
@@ -105,11 +157,11 @@ export default function SettingsPage() {
       <Card className="mb-5">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-bg-tertiary border border-white/[0.08] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md bg-bg-tertiary border border-border-subtle flex items-center justify-center">
               <FileText size={18} className="text-brand-orange" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Notion 연동</h3>
+              <h3 className="text-base font-semibold text-txt-primary">Notion 연동</h3>
               <p className="text-xs text-txt-secondary">
                 회의록과 태스크를 Notion에 자동 아카이브하세요
               </p>
@@ -149,7 +201,7 @@ export default function SettingsPage() {
             <Bell size={18} className="text-white" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-white">Milo 프리셋</h3>
+            <h3 className="text-base font-semibold text-txt-primary">Milo 프리셋</h3>
             <p className="text-xs text-txt-secondary">
               팀 성향에 맞게 Milo의 개입 스타일을 선택하세요
             </p>
@@ -167,10 +219,10 @@ export default function SettingsPage() {
               className={`p-4 rounded-md border text-left transition-all ${
                 i === 0
                   ? 'border-brand-purple bg-brand-purple/[0.08]'
-                  : 'border-white/[0.08] hover:border-white/[0.16]'
+                  : 'border-border-subtle hover:border-border-hover-strong'
               }`}
             >
-              <p className="text-sm font-medium text-white mb-1">{p.label}</p>
+              <p className="text-sm font-medium text-txt-primary mb-1">{p.label}</p>
               <p className="text-xs text-txt-secondary">{p.desc}</p>
             </button>
           ))}

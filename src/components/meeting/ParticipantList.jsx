@@ -3,8 +3,8 @@ import { Slack, Globe } from 'lucide-react';
 
 export default function ParticipantList({ participants = [] }) {
   return (
-    <aside className="w-[200px] shrink-0 border-r border-white/[0.08] bg-bg-primary flex flex-col">
-      <div className="px-4 py-4 border-b border-white/[0.06]">
+    <aside className="w-[200px] shrink-0 border-r border-border-subtle bg-bg-primary flex flex-col">
+      <div className="px-4 py-4 border-b border-border-divider">
         <h3 className="text-[11px] font-semibold text-txt-muted uppercase tracking-wider">
           참여자 {participants.length + 1}
         </h3>
@@ -15,7 +15,7 @@ export default function ParticipantList({ participants = [] }) {
         <div className="flex items-center gap-3 p-2 rounded-md bg-brand-purple/[0.06]">
           <Avatar variant="ai" size="sm" label="M" online />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Milo</p>
+            <p className="text-sm font-medium text-txt-primary truncate">Milo</p>
             <p className="text-[10px] text-brand-purple">AI 팀원</p>
           </div>
         </div>
@@ -32,7 +32,7 @@ export default function ParticipantList({ participants = [] }) {
               online={p.online !== false}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-medium text-txt-primary truncate">
                 {p.name}
               </p>
               <div className="flex items-center gap-1">

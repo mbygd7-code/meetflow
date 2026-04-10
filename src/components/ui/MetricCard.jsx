@@ -20,7 +20,7 @@ export default function MetricCard({
         ${
           isGradient
             ? 'bg-gradient-card border-none shadow-md'
-            : 'bg-bg-secondary border border-white/[0.08] hover:border-white/[0.12]'
+            : 'bg-bg-secondary border border-border-subtle hover:border-border-hover'
         }
         ${className}
       `}
@@ -42,7 +42,7 @@ export default function MetricCard({
       </div>
       <p
         className={`text-[32px] font-bold leading-none ${
-          isGradient ? 'text-white' : 'text-white'
+          isGradient ? 'text-white' : 'text-txt-primary'
         }`}
       >
         {value}

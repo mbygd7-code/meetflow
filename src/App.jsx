@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 
 import Layout from '@/components/layout/Layout';
 import LoginPage from '@/pages/LoginPage';
@@ -32,10 +33,12 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   const init = useAuthStore((s) => s.init);
+  const initTheme = useThemeStore((s) => s.init);
 
   useEffect(() => {
     init();
-  }, [init]);
+    initTheme();
+  }, [init, initTheme]);
 
   return (
     <Routes>

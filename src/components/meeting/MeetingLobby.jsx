@@ -24,7 +24,7 @@ export default function MeetingLobby() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-medium text-white">회의</h1>
+          <h1 className="text-[22px] font-medium text-txt-primary">회의</h1>
           <p className="text-sm text-txt-secondary mt-0.5">
             팀과 함께 회의를 진행하거나 새 회의를 만드세요
           </p>
@@ -40,7 +40,7 @@ export default function MeetingLobby() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-white/[0.06]">
+      <div className="flex gap-1 mb-6 border-b border-border-divider">
         {TABS.map((t) => {
           const count =
             t.id === 'all'
@@ -53,7 +53,7 @@ export default function MeetingLobby() {
               onClick={() => setTab(t.id)}
               className={`
                 relative px-4 py-2.5 text-sm font-medium transition-colors
-                ${active ? 'text-white' : 'text-txt-secondary hover:text-white'}
+                ${active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'}
               `}
             >
               {t.label}

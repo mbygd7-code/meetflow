@@ -6,9 +6,9 @@ const VARIANTS = {
   gradient:
     'bg-gradient-brand text-white font-semibold hover:opacity-95 disabled:opacity-50 shadow-md',
   secondary:
-    'bg-transparent text-white border border-white/[0.12] hover:border-white/[0.24] disabled:opacity-50',
+    'bg-transparent text-txt-primary border border-border-default hover:border-border-hover-max disabled:opacity-50',
   ghost:
-    'bg-transparent text-txt-secondary hover:text-white hover:bg-bg-tertiary disabled:opacity-50',
+    'bg-transparent text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary disabled:opacity-50',
   danger:
     'bg-status-error text-white hover:opacity-90 disabled:opacity-50',
 };

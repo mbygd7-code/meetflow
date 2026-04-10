@@ -46,12 +46,12 @@ export default function ChatBubble({ message, currentUserId }) {
 
         {/* 말풍선 */}
         <div
-          className={`px-4 py-3 text-sm text-white leading-relaxed ${
+          className={`px-4 py-3 text-sm leading-relaxed ${
             isAi
-              ? 'bg-brand-purple/10 border border-brand-purple/20 rounded-2xl rounded-tl-sm'
+              ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-2xl rounded-tl-sm'
               : isMine
                 ? 'bg-brand-purple text-white rounded-2xl rounded-tr-sm'
-                : 'bg-bg-tertiary border border-white/[0.08] rounded-2xl rounded-tl-sm'
+                : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-2xl rounded-tl-sm'
           }`}
         >
           {message.content}

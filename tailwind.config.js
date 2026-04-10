@@ -4,27 +4,46 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* ── 배경 (CSS 변수 → 테마 전환 시 자동 변경) ── */
         bg: {
-          primary: '#131313',
-          secondary: '#1A1A1A',
-          tertiary: '#252525',
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
         },
+        /* ── 텍스트 (CSS 변수) ── */
+        txt: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+        },
+        /* ── 브랜드 (hex 고정 — opacity modifier 정상 동작) ── */
         brand: {
           purple: '#723CEB',
           'purple-deep': '#4C11CE',
           orange: '#FF902F',
           yellow: '#FFEF63',
         },
-        txt: {
-          primary: '#FFFFFF',
-          secondary: '#A0A0A0',
-          muted: '#6B6B6B',
-        },
+        /* ── 상태 (hex 고정) ── */
         status: {
           success: '#34D399',
           warning: '#FFEF63',
           error: '#EF4444',
           info: '#723CEB',
+        },
+        /* ── 시맨틱 보더 (CSS 변수) ── */
+        border: {
+          subtle: 'var(--border-subtle)',
+          DEFAULT: 'var(--border-default)',
+          hover: 'var(--border-hover)',
+          'hover-strong': 'var(--border-hover-strong)',
+          'hover-max': 'var(--border-hover-max)',
+          focus: 'var(--border-focus)',
+          divider: 'var(--border-divider)',
+          'divider-faint': 'var(--border-divider-faint)',
+        },
+        /* ── 서페이스 (CSS 변수) ── */
+        surface: {
+          overlay: 'var(--surface-overlay)',
         },
       },
       borderRadius: {
@@ -39,10 +58,10 @@ export default {
         body: ['Inter', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
-        sm: '0 1px 2px rgba(0,0,0,0.3)',
-        md: '0 4px 12px rgba(0,0,0,0.4)',
-        lg: '0 8px 32px rgba(0,0,0,0.5)',
-        glow: '0 0 20px rgba(114,60,235,0.3)',
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        glow: 'var(--shadow-glow)',
       },
       backgroundImage: {
         'gradient-brand': 'linear-gradient(135deg, #FF902F 0%, #723CEB 50%, #4C11CE 100%)',

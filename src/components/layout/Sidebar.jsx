@@ -29,13 +29,13 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-60 bg-bg-primary border-r border-white/[0.08] flex flex-col p-3 shrink-0">
+    <aside className="w-60 bg-bg-primary border-r border-border-subtle flex flex-col p-3 shrink-0">
       {/* 로고 */}
       <div className="flex items-center gap-2.5 px-3 py-4 mb-2">
         <div className="w-8 h-8 rounded-lg bg-gradient-brand shadow-glow flex items-center justify-center">
           <Sparkles size={16} className="text-white" strokeWidth={2.5} />
         </div>
-        <span className="text-base font-bold tracking-tight text-white">
+        <span className="text-base font-bold tracking-tight text-txt-primary">
           MeetFlow
         </span>
       </div>
@@ -50,8 +50,8 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
                 isActive
-                  ? 'bg-brand-purple/[0.12] text-white font-medium'
-                  : 'text-txt-secondary hover:bg-bg-tertiary hover:text-white'
+                  ? 'bg-brand-purple/[0.12] text-txt-primary font-medium'
+                  : 'text-txt-secondary hover:bg-bg-tertiary hover:text-txt-primary'
               }`
             }
           >
@@ -62,11 +62,11 @@ export default function Sidebar() {
       </nav>
 
       {/* 하단 유저 */}
-      <div className="border-t border-white/[0.06] pt-3 mt-3">
+      <div className="border-t border-border-divider pt-3 mt-3">
         <div className="flex items-center gap-3 px-2 py-2 rounded-md">
           <Avatar name={user?.name || 'U'} size="sm" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">
+            <p className="text-sm font-medium text-txt-primary truncate">
               {user?.name || '사용자'}
             </p>
             <p className="text-[11px] text-txt-muted truncate">
@@ -75,7 +75,7 @@ export default function Sidebar() {
           </div>
           <button
             onClick={handleLogout}
-            className="text-txt-muted hover:text-white transition-colors p-1.5 rounded hover:bg-bg-tertiary"
+            className="text-txt-muted hover:text-txt-primary transition-colors p-1.5 rounded hover:bg-bg-tertiary"
             title="로그아웃"
           >
             <LogOut size={15} strokeWidth={2.2} />

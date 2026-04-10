@@ -29,11 +29,11 @@ const DEMO_SUMMARY = {
 function Section({ icon: Icon, title, color, children, count }) {
   return (
     <Card className="!p-0 overflow-hidden">
-      <div className={`flex items-center gap-2.5 px-6 py-4 border-b border-white/[0.06]`}>
+      <div className={`flex items-center gap-2.5 px-6 py-4 border-b border-border-divider`}>
         <div className={`w-7 h-7 rounded-md flex items-center justify-center ${color}`}>
           <Icon size={14} strokeWidth={2.4} />
         </div>
-        <h3 className="text-base font-semibold text-white">{title}</h3>
+        <h3 className="text-base font-semibold text-txt-primary">{title}</h3>
         {typeof count === 'number' && (
           <span className="ml-auto text-xs text-txt-muted">{count}개</span>
         )}
@@ -62,7 +62,7 @@ export default function MeetingSummary() {
       {/* 헤더 */}
       <Link
         to="/summaries"
-        className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-white mb-4 transition-colors"
+        className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4 transition-colors"
       >
         <ArrowLeft size={14} />
         회의록 목록으로
@@ -70,7 +70,7 @@ export default function MeetingSummary() {
 
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-[28px] font-semibold text-white">{meeting.title}</h1>
+          <h1 className="text-[28px] font-semibold text-txt-primary">{meeting.title}</h1>
           <Badge variant="outline">완료</Badge>
         </div>
         <div className="flex items-center gap-4 text-sm text-txt-secondary">
@@ -88,7 +88,7 @@ export default function MeetingSummary() {
           <Avatar variant="ai" size="lg" label="M" />
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-semibold text-white">Milo 인사이트</span>
+              <span className="text-sm font-semibold text-txt-primary">Milo 인사이트</span>
               <Badge variant="purple" className="!text-[10px]">
                 <Sparkles size={10} strokeWidth={2.4} /> AI
               </Badge>
@@ -111,7 +111,7 @@ export default function MeetingSummary() {
           <ul className="space-y-3">
             {summary.decisions.map((d, i) => (
               <li key={i}>
-                <p className="text-sm font-medium text-white mb-1">{d.title}</p>
+                <p className="text-sm font-medium text-txt-primary mb-1">{d.title}</p>
                 <p className="text-xs text-txt-secondary">{d.detail}</p>
               </li>
             ))}
@@ -128,7 +128,7 @@ export default function MeetingSummary() {
           <ul className="space-y-3">
             {summary.discussions.map((d, i) => (
               <li key={i}>
-                <p className="text-sm font-medium text-white mb-1">{d.title}</p>
+                <p className="text-sm font-medium text-txt-primary mb-1">{d.title}</p>
                 <p className="text-xs text-txt-secondary">{d.detail}</p>
               </li>
             ))}
@@ -145,7 +145,7 @@ export default function MeetingSummary() {
           <ul className="space-y-3">
             {summary.deferred.map((d, i) => (
               <li key={i}>
-                <p className="text-sm font-medium text-white mb-1">{d.title}</p>
+                <p className="text-sm font-medium text-txt-primary mb-1">{d.title}</p>
                 <p className="text-xs text-txt-muted">{d.reason}</p>
               </li>
             ))}
@@ -162,9 +162,9 @@ export default function MeetingSummary() {
           <ul className="space-y-3">
             {summary.action_items.map((a, i) => (
               <li key={i} className="flex items-start gap-2">
-                <div className="w-4 h-4 rounded border border-white/20 mt-0.5 shrink-0" />
+                <div className="w-4 h-4 rounded border border-border-default mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{a.title}</p>
+                  <p className="text-sm font-medium text-txt-primary">{a.title}</p>
                   <div className="flex items-center gap-2 mt-1 text-[11px] text-txt-muted">
                     <span>{a.assignee_hint}</span>
                     <span>·</span>

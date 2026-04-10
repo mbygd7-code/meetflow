@@ -77,7 +77,7 @@ export default function TaskDetailModal({ task, open, onClose, onUpdate }) {
             <label className="block text-xs font-medium text-txt-secondary mb-1.5 uppercase tracking-wider">
               설명
             </label>
-            <p className="text-sm text-white bg-bg-tertiary rounded-md p-3 border border-white/[0.08]">
+            <p className="text-sm text-txt-primary bg-bg-tertiary rounded-md p-3 border border-border-subtle">
               {task.description}
             </p>
           </div>
@@ -91,7 +91,7 @@ export default function TaskDetailModal({ task, open, onClose, onUpdate }) {
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full bg-bg-tertiary border border-white/[0.08] rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-purple/50"
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2.5 text-sm text-txt-primary focus:outline-none focus:border-brand-purple/50"
             >
               {STATUSES.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -107,7 +107,7 @@ export default function TaskDetailModal({ task, open, onClose, onUpdate }) {
             <select
               value={form.priority}
               onChange={(e) => setForm({ ...form, priority: e.target.value })}
-              className="w-full bg-bg-tertiary border border-white/[0.08] rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-purple/50"
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2.5 text-sm text-txt-primary focus:outline-none focus:border-brand-purple/50"
             >
               {PRIORITIES.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -130,13 +130,13 @@ export default function TaskDetailModal({ task, open, onClose, onUpdate }) {
             <label className="block text-xs font-medium text-txt-secondary mb-1.5 uppercase tracking-wider">
               담당자
             </label>
-            <div className="flex items-center gap-3 bg-bg-tertiary rounded-md p-3 border border-white/[0.08]">
+            <div className="flex items-center gap-3 bg-bg-tertiary rounded-md p-3 border border-border-subtle">
               <Avatar
                 name={task.assignee.name}
                 color={task.assignee.color}
                 size="sm"
               />
-              <span className="text-sm text-white">{task.assignee.name}</span>
+              <span className="text-sm text-txt-primary">{task.assignee.name}</span>
             </div>
           </div>
         )}
@@ -148,10 +148,10 @@ export default function TaskDetailModal({ task, open, onClose, onUpdate }) {
             </label>
             <Link
               to={`/summaries/${task.meeting_id}`}
-              className="flex items-center gap-2 bg-bg-tertiary rounded-md p-3 border border-white/[0.08] hover:border-brand-purple/50 transition-colors group"
+              className="flex items-center gap-2 bg-bg-tertiary rounded-md p-3 border border-border-subtle hover:border-brand-purple/50 transition-colors group"
             >
               <Link2 size={14} className="text-brand-purple" />
-              <span className="text-sm text-white group-hover:text-brand-purple">
+              <span className="text-sm text-txt-primary group-hover:text-brand-purple">
                 {task.meeting_title}
               </span>
             </Link>

@@ -28,12 +28,12 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
   const hasContent = sections.some((s) => s.items.length > 0);
 
   return (
-    <aside className="w-80 shrink-0 border-l border-white/[0.08] bg-bg-primary flex flex-col">
+    <aside className="w-80 shrink-0 border-l border-border-subtle bg-bg-primary flex flex-col">
       {/* 헤더 */}
-      <div className="px-5 py-4 border-b border-white/[0.06] flex items-center gap-3">
+      <div className="px-5 py-4 border-b border-border-divider flex items-center gap-3">
         <Avatar variant="ai" size="sm" label="M" />
         <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Milo 실시간 요약</p>
+          <p className="text-sm font-semibold text-txt-primary">Milo 실시간 요약</p>
           <p className="text-[10px] text-txt-muted">매 턴마다 자동 업데이트</p>
         </div>
         <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
@@ -55,7 +55,7 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
 
         {sections.map((s) => (
           <div key={s.key} className={`border-l-2 ${s.border} pl-3`}>
-            <h4 className="text-[11px] font-semibold text-white uppercase tracking-wider mb-2">
+            <h4 className="text-[11px] font-semibold text-txt-primary uppercase tracking-wider mb-2">
               {s.title}
               {s.items.length > 0 && (
                 <span className="ml-1.5 text-txt-muted">{s.items.length}</span>
@@ -73,10 +73,10 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
       </div>
 
       {/* 하단 링크 */}
-      <div className="px-5 py-4 border-t border-white/[0.06]">
+      <div className="px-5 py-4 border-t border-border-divider">
         <Link
           to={`/summaries/${meetingId || ''}`}
-          className="flex items-center justify-center gap-2 text-xs text-brand-purple hover:text-white transition-colors"
+          className="flex items-center justify-center gap-2 text-xs text-brand-purple hover:text-txt-primary transition-colors"
         >
           <FileText size={12} />
           전체 회의록 보기
