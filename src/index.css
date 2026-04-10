@@ -133,15 +133,15 @@ html[data-theme="light"] {
   /* ── 셀렉션 ── */
   --selection-bg: rgba(181, 204, 24, 0.25);
 
-  /* ── 사이드바: 딥 퍼플-블랙 (Dynamic 365) ── */
-  --sidebar-bg: #1E1B2E;
-  --sidebar-text: #FFFFFF;
-  --sidebar-text-muted: #B0ADB8;
-  --sidebar-text-dim: #7A7880;
-  --sidebar-border: rgba(255, 255, 255, 0.05);
-  --sidebar-divider: rgba(255, 255, 255, 0.04);
-  --sidebar-hover: #2E2B40;
-  --sidebar-active-bg: rgba(181, 204, 24, 0.18);
+  /* ── 사이드바: 메인 배경과 동일 컬러 ── */
+  --sidebar-bg: #EDE8E0;
+  --sidebar-text: #2D2A33;
+  --sidebar-text-muted: #6B6B6B;
+  --sidebar-text-dim: #9CA3AF;
+  --sidebar-border: rgba(45, 42, 51, 0.08);
+  --sidebar-divider: rgba(45, 42, 51, 0.06);
+  --sidebar-hover: #E5E0D7;
+  --sidebar-active-bg: rgba(181, 204, 24, 0.15);
 }
 
 /* ════════════════════════════════════════
