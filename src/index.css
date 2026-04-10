@@ -6,29 +6,24 @@
    DARK MODE (기본값)
    ════════════════════════════════════════ */
 :root {
-  /* ── 배경 ── */
   --bg-primary: #131313;
   --bg-secondary: #1A1A1A;
   --bg-tertiary: #252525;
   --bg-content: #1A1A1A;
 
-  /* ── 텍스트 ── */
   --text-primary: #FFFFFF;
   --text-secondary: #A0A0A0;
   --text-muted: #6B6B6B;
 
-  /* ── 브랜드 (RGB 채널 — opacity modifier 호환) ── */
   --brand-purple-rgb: 114 60 235;
   --brand-purple-deep-rgb: 76 17 206;
   --brand-orange-rgb: 255 144 47;
   --brand-yellow-rgb: 255 239 99;
 
-  /* ── 그라디언트 ── */
   --gradient-brand: linear-gradient(135deg, #FF902F 0%, #723CEB 50%, #4C11CE 100%);
   --gradient-warm: linear-gradient(180deg, #723CEB 0%, #FF902F 100%);
   --gradient-card: linear-gradient(135deg, #723CEB 0%, #4C11CE 100%);
 
-  /* ── 보더 ── */
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-default: rgba(255, 255, 255, 0.12);
   --border-focus: rgba(114, 60, 235, 0.5);
@@ -38,29 +33,22 @@
   --border-divider: rgba(255, 255, 255, 0.06);
   --border-divider-faint: rgba(255, 255, 255, 0.04);
 
-  /* ── 상태 컬러 (RGB 채널) ── */
   --status-success-rgb: 52 211 153;
   --status-warning-rgb: 255 239 99;
   --status-error-rgb: 239 68 68;
   --status-info-rgb: 114 60 235;
 
-  /* ── 서페이스 ── */
   --surface-overlay: rgba(0, 0, 0, 0.60);
 
-  /* ── 그림자 ── */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px rgba(114, 60, 235, 0.3);
 
-  /* ── 스크롤바 ── */
   --scrollbar-thumb: rgba(255, 255, 255, 0.08);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.16);
-
-  /* ── 셀렉션 ── */
   --selection-bg: rgba(114, 60, 235, 0.4);
 
-  /* ── 사이드바 ── */
   --sidebar-bg: #131313;
   --sidebar-text: #FFFFFF;
   --sidebar-text-muted: #A0A0A0;
@@ -70,96 +58,79 @@
   --sidebar-hover: #252525;
   --sidebar-active-bg: rgba(114, 60, 235, 0.15);
 
-  /* ── 트랜지션 ── */
   --transition-fast: 0.15s ease;
   --transition-base: 0.2s ease;
   --transition-slow: 0.3s ease;
 }
 
 /* ════════════════════════════════════════
-   LIGHT MODE — Dynamic 365 CRM 컬러키
-   올리브/라임 그린 액센트 + 웜 크림 배경
+   LIGHT MODE — 조화로운 올리브/크림 톤
    ════════════════════════════════════════ */
 html[data-theme="light"] {
-  /* ── 배경: Dynamic 365 웜 크림 ── */
-  --bg-primary: #EDE8E0;
+  /* ── 배경: 웜 크림 톤 패밀리 ── */
+  --bg-primary: #EBE6DE;
   --bg-secondary: #FFFFFF;
-  --bg-tertiary: #E5E0D7;
-  --bg-content: #F5F2EC;
+  --bg-tertiary: #F5F3EF;
+  --bg-content: #F2EFEA;
 
   /* ── 텍스트 ── */
   --text-primary: #2D2A33;
   --text-secondary: #6B6B6B;
-  --text-muted: #9CA3AF;
+  --text-muted: #A3A09A;
 
-  /* ── 브랜드 → 올리브/라임 그린 (Dynamic 365) ── */
-  --brand-purple-rgb: 181 204 24;        /* #B5CC18 올리브 그린 */
-  --brand-purple-deep-rgb: 143 168 20;   /* #8FA814 딥 올리브 */
-  --brand-orange-rgb: 232 212 77;        /* #E8D44D 웜 골드 */
-  --brand-yellow-rgb: 212 225 87;        /* #D4E157 라임 옐로우 */
+  /* ── 브랜드: 올리브/골드 (통일 톤) ── */
+  --brand-purple-rgb: 158 180 36;
+  --brand-purple-deep-rgb: 128 152 20;
+  --brand-orange-rgb: 206 190 68;
+  --brand-yellow-rgb: 192 206 76;
 
-  /* ── 그라디언트 → 올리브/골드 계열 ── */
-  --gradient-brand: linear-gradient(135deg, #E8D44D 0%, #B5CC18 50%, #8FA814 100%);
-  --gradient-warm: linear-gradient(180deg, #B5CC18 0%, #E8D44D 100%);
-  --gradient-card: linear-gradient(135deg, #B5CC18 0%, #8FA814 100%);
+  /* ── 그라디언트: 올리브 모노톤 (과하지 않게) ── */
+  --gradient-brand: linear-gradient(135deg, #CEC04A 0%, #9EB424 50%, #809814 100%);
+  --gradient-warm: linear-gradient(180deg, #9EB424 0%, #CEC04A 100%);
+  --gradient-card: linear-gradient(135deg, #9EB424 0%, #809814 100%);
 
-  /* ── 보더: 웜 톤 ── */
-  --border-subtle: rgba(45, 42, 51, 0.07);
-  --border-default: rgba(45, 42, 51, 0.10);
-  --border-focus: rgba(181, 204, 24, 0.5);
-  --border-hover: rgba(45, 42, 51, 0.10);
-  --border-hover-strong: rgba(45, 42, 51, 0.16);
-  --border-hover-max: rgba(45, 42, 51, 0.22);
-  --border-divider: rgba(45, 42, 51, 0.06);
+  /* ── 보더: 웜 뉴트럴 ── */
+  --border-subtle: rgba(45, 42, 51, 0.06);
+  --border-default: rgba(45, 42, 51, 0.09);
+  --border-focus: rgba(158, 180, 36, 0.4);
+  --border-hover: rgba(45, 42, 51, 0.09);
+  --border-hover-strong: rgba(45, 42, 51, 0.14);
+  --border-hover-max: rgba(45, 42, 51, 0.20);
+  --border-divider: rgba(45, 42, 51, 0.05);
   --border-divider-faint: rgba(45, 42, 51, 0.03);
 
-  /* ── 상태 컬러 → CRM 틸/웜 ── */
-  --status-success-rgb: 77 182 172;      /* #4DB6AC 틸 그린 */
-  --status-warning-rgb: 232 212 77;      /* #E8D44D 웜 골드 */
-  --status-error-rgb: 239 68 68;         /* 동일 */
-  --status-info-rgb: 181 204 24;         /* #B5CC18 올리브 */
+  /* ── 상태: 구분되는 고유 색상 ── */
+  --status-success-rgb: 72 166 152;
+  --status-warning-rgb: 220 180 50;
+  --status-error-rgb: 220 72 72;
+  --status-info-rgb: 110 140 40;
 
-  /* ── 서페이스 ── */
-  --surface-overlay: rgba(30, 27, 46, 0.40);
+  --surface-overlay: rgba(30, 27, 46, 0.35);
 
-  /* ── 그림자: 웜 섀도우 ── */
-  --shadow-sm: 0 1px 3px rgba(45, 42, 51, 0.06);
-  --shadow-md: 0 4px 16px rgba(45, 42, 51, 0.08);
-  --shadow-lg: 0 8px 32px rgba(45, 42, 51, 0.12);
-  --shadow-glow: 0 0 24px rgba(181, 204, 24, 0.20);
+  /* ── 그림자: 아주 부드럽게 ── */
+  --shadow-sm: 0 1px 3px rgba(45, 42, 51, 0.04);
+  --shadow-md: 0 4px 16px rgba(45, 42, 51, 0.06);
+  --shadow-lg: 0 8px 32px rgba(45, 42, 51, 0.10);
+  --shadow-glow: 0 0 20px rgba(158, 180, 36, 0.12);
 
-  /* ── 스크롤바 ── */
-  --scrollbar-thumb: rgba(45, 42, 51, 0.10);
-  --scrollbar-thumb-hover: rgba(45, 42, 51, 0.20);
+  --scrollbar-thumb: rgba(45, 42, 51, 0.08);
+  --scrollbar-thumb-hover: rgba(45, 42, 51, 0.16);
+  --selection-bg: rgba(158, 180, 36, 0.20);
 
-  /* ── 셀렉션 ── */
-  --selection-bg: rgba(181, 204, 24, 0.25);
-
-  /* ── 사이드바: 메인 배경과 동일 컬러 ── */
-  --sidebar-bg: #EDE8E0;
+  /* ── 사이드바: 메인 배경 동일 ── */
+  --sidebar-bg: #EBE6DE;
   --sidebar-text: #2D2A33;
   --sidebar-text-muted: #6B6B6B;
-  --sidebar-text-dim: #9CA3AF;
-  --sidebar-border: rgba(45, 42, 51, 0.08);
-  --sidebar-divider: rgba(45, 42, 51, 0.06);
-  --sidebar-hover: #E5E0D7;
-  --sidebar-active-bg: rgba(181, 204, 24, 0.15);
+  --sidebar-text-dim: #A3A09A;
+  --sidebar-border: rgba(45, 42, 51, 0.06);
+  --sidebar-divider: rgba(45, 42, 51, 0.05);
+  --sidebar-hover: #E3DED5;
+  --sidebar-active-bg: rgba(158, 180, 36, 0.12);
 }
 
-/* ════════════════════════════════════════
-   BASE STYLES
-   ════════════════════════════════════════ */
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
+/* ════════════════════════════════════════ */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
 
 body {
   background: var(--bg-primary);
@@ -173,14 +144,11 @@ body {
 }
 
 /* ════════════════════════════════════════
-   라이트 모드 — 움직이는 그라디언트 배경
-   올리브/골드/틸 블롭
+   라이트 모드 배경 그라디언트 (은은하게)
    ════════════════════════════════════════ */
 @keyframes gradient-drift {
   0%   { background-position: 0% 50%; }
-  25%  { background-position: 50% 0%; }
   50%  { background-position: 100% 50%; }
-  75%  { background-position: 50% 100%; }
   100% { background-position: 0% 50%; }
 }
 
@@ -195,15 +163,14 @@ html[data-theme="light"] .content-gradient-bg::before {
   right: 0;
   bottom: 0;
   z-index: 0;
-  opacity: 0.30;
+  opacity: 0.20;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 600px 600px at 15% 15%, rgba(181, 204, 24, 0.15) 0%, transparent 70%),
-    radial-gradient(ellipse 500px 500px at 80% 25%, rgba(232, 212, 77, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 450px 450px at 35% 80%, rgba(77, 182, 172, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 500px 500px at 75% 75%, rgba(181, 204, 24, 0.10) 0%, transparent 70%);
+    radial-gradient(ellipse 600px 600px at 20% 20%, rgba(158,180,36,0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 500px at 75% 30%, rgba(206,192,74,0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 400px at 40% 80%, rgba(72,166,152,0.08) 0%, transparent 70%);
   background-size: 200% 200%;
-  animation: gradient-drift 20s ease-in-out infinite;
+  animation: gradient-drift 25s ease-in-out infinite;
 }
 html[data-theme="light"] .content-gradient-bg > * {
   position: relative;
@@ -211,18 +178,16 @@ html[data-theme="light"] .content-gradient-bg > * {
 }
 
 /* 스크롤바 */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* Selection */
 ::selection {
   background: var(--selection-bg);
   color: var(--text-primary);
 }
 
-/* 테마 전환 트랜지션 */
 html.theme-transitioning,
 html.theme-transitioning *,
 html.theme-transitioning *::before,
@@ -230,7 +195,6 @@ html.theme-transitioning *::after {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
-/* 애니메이션 유틸리티 */
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -244,29 +208,21 @@ html.theme-transitioning *::after {
 .fade-in { animation: fade-in 0.2s ease-out; }
 
 /* ════════════════════════════════════════
-   라이트 모드 서브 섹션 형광 포인트 스타일
+   라이트 모드 서브 섹션 (통일된 톤)
    ════════════════════════════════════════ */
-
-/* 서브 섹션: 올리브 형광 틴트 */
 html[data-theme="light"] .subsection-olive {
-  background: linear-gradient(135deg, rgba(181,204,24,0.08) 0%, rgba(212,225,87,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
-  border: 1px solid rgba(181,204,24,0.12) !important;
+  background: linear-gradient(145deg, rgba(158,180,36,0.05) 0%, rgba(255,255,255,0.95) 60%) !important;
+  border-color: rgba(158,180,36,0.10) !important;
 }
-
-/* 서브 섹션: 틸 형광 틴트 */
 html[data-theme="light"] .subsection-teal {
-  background: linear-gradient(135deg, rgba(77,182,172,0.08) 0%, rgba(128,203,196,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
-  border: 1px solid rgba(77,182,172,0.12) !important;
+  background: linear-gradient(145deg, rgba(72,166,152,0.05) 0%, rgba(255,255,255,0.95) 60%) !important;
+  border-color: rgba(72,166,152,0.10) !important;
 }
-
-/* 서브 섹션: 골드 형광 틴트 */
 html[data-theme="light"] .subsection-gold {
-  background: linear-gradient(135deg, rgba(232,212,77,0.10) 0%, rgba(255,213,79,0.06) 50%, rgba(255,255,255,0.9) 100%) !important;
-  border: 1px solid rgba(232,212,77,0.15) !important;
+  background: linear-gradient(145deg, rgba(206,190,68,0.06) 0%, rgba(255,255,255,0.95) 60%) !important;
+  border-color: rgba(206,190,68,0.10) !important;
 }
-
-/* 서브 섹션: 피치 형광 틴트 */
 html[data-theme="light"] .subsection-peach {
-  background: linear-gradient(135deg, rgba(255,171,145,0.08) 0%, rgba(255,213,79,0.05) 50%, rgba(255,255,255,0.9) 100%) !important;
-  border: 1px solid rgba(255,171,145,0.12) !important;
+  background: linear-gradient(145deg, rgba(220,120,90,0.04) 0%, rgba(255,255,255,0.95) 60%) !important;
+  border-color: rgba(220,120,90,0.08) !important;
 }

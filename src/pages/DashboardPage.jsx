@@ -25,7 +25,7 @@ function WeeklyChart({ data }) {
       {data.map((d, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2">
           <div
-            className="w-full rounded-t-md bg-gradient-to-t from-brand-purple-deep via-brand-purple to-brand-orange transition-all hover:opacity-90"
+            className="w-full rounded-t-md bg-gradient-to-t from-brand-purple-deep via-brand-purple to-brand-orange transition-all hover:opacity-80"
             style={{ height: `${(d.value / max) * 100}%`, minHeight: '4px' }}
           />
           <span className="text-[10px] text-txt-muted">{d.label}</span>
@@ -45,27 +45,18 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const weekMeetings = meetings.length;
     const doneTasks = tasks.filter((t) => t.status === 'done').length;
-    const completionRate =
-      tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
+    const completionRate = tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 0;
     return { weekMeetings, avgDuration: '24분', completionRate, decidedRate: 82 };
   }, [meetings, tasks]);
 
-  const todayMeetings = meetings.filter(
-    (m) => m.status === 'active' || m.status === 'scheduled'
-  );
-
+  const todayMeetings = meetings.filter((m) => m.status === 'active' || m.status === 'scheduled');
   const urgentTasks = useMemo(() => {
-    return tasks
-      .filter((t) => {
-        if (t.status === 'done' || !t.due_date) return false;
-        return differenceInDays(parseISO(t.due_date), new Date()) <= 3;
-      })
-      .slice(0, 3);
+    return tasks.filter((t) => {
+      if (t.status === 'done' || !t.due_date) return false;
+      return differenceInDays(parseISO(t.due_date), new Date()) <= 3;
+    }).slice(0, 3);
   }, [tasks]);
-
-  const recentSummaries = meetings
-    .filter((m) => m.status === 'completed')
-    .slice(0, 3);
+  const recentSummaries = meetings.filter((m) => m.status === 'completed').slice(0, 3);
 
   const weeklyData = [
     { label: '월', value: 3 }, { label: '화', value: 5 }, { label: '수', value: 2 },
@@ -75,7 +66,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
-      {/* ═══ 인사말 (배경 위에 바로) ═══ */}
+      {/* 인사말 */}
       <div>
         <h1 className="text-[26px] font-semibold text-txt-primary">
           안녕하세요, {user?.name || '사용자'}님 👋
@@ -83,9 +74,8 @@ export default function DashboardPage() {
         <p className="text-sm text-txt-secondary mt-0.5">{today}</p>
       </div>
 
-      {/* ═══ 패널 1: 메트릭 + 차트 + Milo (큰 섹션 안에 작은 섹션들) ═══ */}
+      {/* ═══ 패널 1: 메트릭 + 차트 + Milo ═══ */}
       <SectionPanel>
-        {/* 메트릭 그리드 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <MetricCard label="이번 주 회의" value={stats.weekMeetings} change="+2" changeType="up" icon={Calendar} />
           <MetricCard label="평균 회의 시간" value={stats.avgDuration} change="-8분" changeType="up" icon={Clock} />
@@ -93,8 +83,8 @@ export default function DashboardPage() {
           <MetricCard label="결정 실행률" value={`${stats.decidedRate}%`} change="+5%" changeType="up" icon={Target} />
         </div>
 
-        {/* 차트 + Milo 2컬럼 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* 차트: 뉴트럴 서브섹션 */}
           <Card className="lg:col-span-2 !bg-bg-tertiary subsection-olive">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -106,7 +96,8 @@ export default function DashboardPage() {
             <WeeklyChart data={weeklyData} />
           </Card>
 
-          <Card className="!bg-bg-tertiary subsection-gold border-brand-purple/20">
+          {/* Milo: 유일한 강조 포인트 (올리브 틴트) */}
+          <Card className="!bg-bg-tertiary subsection-gold">
             <div className="flex items-center gap-3 mb-3">
               <Avatar variant="ai" size="md" label="M" />
               <div>
@@ -125,9 +116,8 @@ export default function DashboardPage() {
         </div>
       </SectionPanel>
 
-      {/* ═══ 패널 2: 오늘의 회의 (큰 섹션) ═══ */}
+      {/* ═══ 패널 2: 오늘의 회의 ═══ */}
       <SectionPanel
-        tint="gold"
         title="오늘의 회의"
         action={
           <Link to="/meetings" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -152,10 +142,10 @@ export default function DashboardPage() {
         )}
       </SectionPanel>
 
-      {/* ═══ 패널 3: 태스크 + 회의록 (큰 섹션 안에 2개 작은 섹션) ═══ */}
-      <SectionPanel tint="teal">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 작은 섹션 A: 마감 임박 태스크 */}
+      {/* ═══ 패널 3: 태스크 + 회의록 ═══ */}
+      <SectionPanel>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* 마감 임박 태스크 */}
           <div className="bg-bg-tertiary subsection-peach rounded-[14px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">마감 임박 태스크</h3>
@@ -167,14 +157,12 @@ export default function DashboardPage() {
               <p className="text-sm text-txt-secondary text-center py-6">임박한 태스크가 없습니다</p>
             ) : (
               <div className="space-y-2.5">
-                {urgentTasks.map((t) => (
-                  <TaskCard key={t.id} task={t} compact />
-                ))}
+                {urgentTasks.map((t) => <TaskCard key={t.id} task={t} compact />)}
               </div>
             )}
           </div>
 
-          {/* 작은 섹션 B: 최근 회의록 */}
+          {/* 최근 회의록 */}
           <div className="bg-bg-tertiary subsection-teal rounded-[14px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">최근 회의록</h3>
@@ -188,9 +176,9 @@ export default function DashboardPage() {
               <div className="space-y-2.5">
                 {recentSummaries.map((m) => (
                   <Link key={m.id} to={`/summaries/${m.id}`}>
-                    <Card className="!p-3 !bg-bg-secondary hover:border-border-hover-strong">
+                    <Card className="!p-3 hover:border-border-hover-strong">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-md bg-brand-purple/10 border border-brand-purple/20 flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-md bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
                           <FileText size={14} className="text-brand-purple" />
                         </div>
                         <div className="flex-1 min-w-0">
