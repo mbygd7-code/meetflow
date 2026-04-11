@@ -1,6 +1,25 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 
+// JWT 페이로드에서 AMR(Authentication Methods Reference) 확인
+// PKCE 플로우에서는 PASSWORD_RECOVERY 이벤트가 setTimeout(0)으로 지연 발생하므로
+// getSession() 반환 시점에 JWT를 직접 디코딩하여 recovery 세션을 동기 감지
+function isRecoveryFromJwt(accessToken) {
+  if (!accessToken) return false;
+  try {
+    const base64 = accessToken.split('.')[1];
+    // base64url → base64 변환
+    const padded = base64.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(padded));
+    return (
+      Array.isArray(payload.amr) &&
+      payload.amr.some((entry) => entry.method === 'recovery')
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
@@ -38,8 +57,13 @@ export const useAuthStore = create((set, get) => ({
         data: { session },
       } = await supabase.auth.getSession();
 
+      // ★ PKCE 플로우 대응: JWT AMR에서 recovery 메서드를 동기 확인
+      // PASSWORD_RECOVERY 이벤트(setTimeout 0)보다 먼저 감지하여 리다이렉트 방지
+      const recoveryDetected = isRecoveryFromJwt(session?.access_token);
+
       set({
         session,
+        isPasswordRecovery: recoveryDetected,
         user: session?.user
           ? {
               id: session.user.id,
