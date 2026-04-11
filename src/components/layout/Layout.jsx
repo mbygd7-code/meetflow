@@ -1,6 +1,7 @@
 import { useState, createContext, useContext } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
@@ -11,13 +12,14 @@ const PAGE_TITLES = {
   '/tasks': '태스크',
   '/summaries': '회의록',
   '/settings': '설정',
+  '/admin': '관리자 대시보드',
 };
 
 // 모바일 사이드바 토글 컨텍스트
 export const SidebarContext = createContext();
 export const useSidebar = () => useContext(SidebarContext);
 
-const MOBILE_TABS = [
+const BASE_MOBILE_TABS = [
   { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
   { to: '/summaries', label: '회의록', icon: FileText },
   { to: '/tasks', label: '태스크', icon: CheckSquare },
@@ -25,11 +27,16 @@ const MOBILE_TABS = [
 ];
 
 function MobileTabBar() {
+  const { isAdmin } = useAuthStore();
+  const tabs = isAdmin()
+    ? [...BASE_MOBILE_TABS, { to: '/admin', label: '관리자', icon: Shield }]
+    : BASE_MOBILE_TABS;
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around px-2 pt-2 touch-none"
       style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
     >
-      {MOBILE_TABS.map(({ to, label, icon: Icon, end }) => (
+      {tabs.map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={to}
           to={to}

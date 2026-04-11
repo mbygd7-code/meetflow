@@ -2,13 +2,10 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 
 // JWT 페이로드에서 AMR(Authentication Methods Reference) 확인
-// PKCE 플로우에서는 PASSWORD_RECOVERY 이벤트가 setTimeout(0)으로 지연 발생하므로
-// getSession() 반환 시점에 JWT를 직접 디코딩하여 recovery 세션을 동기 감지
 function isRecoveryFromJwt(accessToken) {
   if (!accessToken) return false;
   try {
     const base64 = accessToken.split('.')[1];
-    // base64url → base64 변환
     const padded = base64.replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(padded));
     return (
@@ -20,6 +17,33 @@ function isRecoveryFromJwt(accessToken) {
   }
 }
 
+// DB에서 유저 role 조회
+async function fetchUserRole(userId) {
+  if (!userId || !import.meta.env.VITE_SUPABASE_URL) return 'member';
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    if (error) return 'member';
+    return data?.role || 'member';
+  } catch {
+    return 'member';
+  }
+}
+
+// 유저 객체 생성 헬퍼
+function buildUser(authUser, role = 'member') {
+  if (!authUser) return null;
+  return {
+    id: authUser.id,
+    email: authUser.email,
+    name: authUser.user_metadata?.name || authUser.email?.split('@')[0],
+    role,
+  };
+}
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
@@ -27,50 +51,44 @@ export const useAuthStore = create((set, get) => ({
   error: null,
   isPasswordRecovery: false,
 
+  // computed
+  isAdmin: () => get().user?.role === 'admin',
+
   init: async () => {
     set({ loading: true });
     try {
-      // ★ 리스너를 getSession() 보다 먼저 등록해야 PASSWORD_RECOVERY 이벤트를 놓치지 않음
-      supabase.auth.onAuthStateChange((_event, newSession) => {
+      supabase.auth.onAuthStateChange(async (_event, newSession) => {
         if (_event === 'PASSWORD_RECOVERY') {
           set({ isPasswordRecovery: true, session: newSession });
           return;
         }
-        // INITIAL_SESSION은 아래 getSession()에서 직접 처리
         if (_event === 'INITIAL_SESSION') return;
+
+        // role 비동기 페칭
+        const role = newSession?.user
+          ? await fetchUserRole(newSession.user.id)
+          : 'member';
 
         set({
           session: newSession,
           isPasswordRecovery: false,
-          user: newSession?.user
-            ? {
-                id: newSession.user.id,
-                email: newSession.user.email,
-                name: newSession.user.user_metadata?.name || newSession.user.email?.split('@')[0],
-              }
-            : null,
+          user: buildUser(newSession?.user, role),
         });
       });
 
-      // 초기 세션 로드
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      // ★ PKCE 플로우 대응: JWT AMR에서 recovery 메서드를 동기 확인
-      // PASSWORD_RECOVERY 이벤트(setTimeout 0)보다 먼저 감지하여 리다이렉트 방지
       const recoveryDetected = isRecoveryFromJwt(session?.access_token);
+      const role = session?.user
+        ? await fetchUserRole(session.user.id)
+        : 'member';
 
       set({
         session,
         isPasswordRecovery: recoveryDetected,
-        user: session?.user
-          ? {
-              id: session.user.id,
-              email: session.user.email,
-              name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
-            }
-          : null,
+        user: buildUser(session?.user, role),
         loading: false,
       });
     } catch (err) {
@@ -85,7 +103,12 @@ export const useAuthStore = create((set, get) => ({
       set({ error: error.message, loading: false });
       return { error };
     }
-    set({ session: data.session, user: data.user, loading: false });
+    const role = await fetchUserRole(data.user?.id);
+    set({
+      session: data.session,
+      user: buildUser(data.user, role),
+      loading: false,
+    });
     return { data };
   },
 
@@ -112,7 +135,6 @@ export const useAuthStore = create((set, get) => ({
     return { error };
   },
 
-  // 새 비밀번호 업데이트 (PASSWORD_RECOVERY 세션에서 호출)
   updatePassword: async (newPassword) => {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (!error) {
@@ -128,11 +150,12 @@ export const useAuthStore = create((set, get) => ({
     set({ session: null, user: null });
   },
 
-  mockSignIn: (email) => {
+  mockSignIn: (email, role = 'member') => {
     const mockUser = {
       id: 'mock-' + Date.now(),
       email,
       name: email?.split('@')[0] || 'Demo User',
+      role,
     };
     set({ user: mockUser, session: { user: mockUser }, loading: false });
   },

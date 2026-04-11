@@ -7,7 +7,9 @@ import {
   Users, Settings,
 } from 'lucide-react';
 import { Card, Input, Button, Badge, SectionPanel } from '@/components/ui';
+import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
+import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import { useAiTeamStore, AI_EMPLOYEES, MEETING_PRESETS, LLM_MODELS } from '@/stores/aiTeamStore';
 
 // ── Toggle 컴포넌트 ──
@@ -230,6 +232,7 @@ function ExpandedEmployeePanel({ employee }) {
 }
 
 export default function SettingsPage() {
+  const { isAdmin } = useAuthStore();
   const [slackChannel, setSlackChannel] = useState('');
   const [notionApiKey, setNotionApiKey] = useState('');
   const [notionDbId, setNotionDbId] = useState('');
@@ -491,6 +494,13 @@ export default function SettingsPage() {
           </div>
         </div>
       </SectionPanel>
+
+      {/* ── 관리자 설정 (admin만 표시) ── */}
+      {isAdmin() && (
+        <SectionPanel title="관리자 설정" icon={Shield}>
+          <AdminUserManagement />
+        </SectionPanel>
+      )}
 
       </div>
       {/* column 3 scroll wrapper end */}

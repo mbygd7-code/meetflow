@@ -11,6 +11,7 @@ import MeetingRoomPage from '@/pages/MeetingRoomPage';
 import TasksPage from '@/pages/TasksPage';
 import SummariesPage from '@/pages/SummariesPage';
 import SettingsPage from '@/pages/SettingsPage';
+import AdminDashboardPage from '@/pages/AdminDashboardPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore();
@@ -26,6 +27,24 @@ function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuthStore();
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-bg-primary">
+        <div className="w-10 h-10 rounded-full bg-gradient-brand shadow-glow animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -57,6 +76,7 @@ export default function App() {
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

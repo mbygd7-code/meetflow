@@ -5,6 +5,7 @@ import {
   CheckSquare,
   FileText,
   Settings,
+  Shield,
   LogOut,
   X,
   Sparkles,
@@ -12,17 +13,22 @@ import {
 import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 
-const NAV_ITEMS = [
-  { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
-  { to: '/meetings', label: '회의', icon: MessageSquare },
-  { to: '/tasks', label: '태스크', icon: CheckSquare },
-  { to: '/summaries', label: '회의록', icon: FileText },
-  { to: '/settings', label: '설정', icon: Settings },
-];
+function getNavItems(isAdmin) {
+  const items = [
+    { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
+    ...(isAdmin ? [{ to: '/admin', label: '관리자', icon: Shield }] : []),
+    { to: '/meetings', label: '회의', icon: MessageSquare },
+    { to: '/tasks', label: '태스크', icon: CheckSquare },
+    { to: '/summaries', label: '회의록', icon: FileText },
+    { to: '/settings', label: '설정', icon: Settings },
+  ];
+  return items;
+}
 
 export default function Sidebar({ mobile = false, onClose }) {
-  const { user, signOut } = useAuthStore();
+  const { user, signOut, isAdmin } = useAuthStore();
   const navigate = useNavigate();
+  const navItems = getNavItems(isAdmin());
 
   const handleLogout = async () => {
     await signOut();
@@ -59,7 +65,7 @@ export default function Sidebar({ mobile = false, onClose }) {
 
       {/* 네비게이션 */}
       <nav className="flex flex-col gap-0.5 flex-1 mt-2">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}

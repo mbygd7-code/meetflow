@@ -86,46 +86,30 @@ export default function DashboardPage() {
         <p className="text-sm text-txt-secondary mt-0.5">{today}</p>
       </div>
 
-      {/* ═══ 패널 1: 메트릭 + 차트 + Milo ═══ */}
+      {/* ═══ 패널 1: 메트릭 + Milo ═══ */}
       <SectionPanel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
-          <MetricCard label="이번 주 회의" value={stats.weekMeetings} change="+2" changeType="up" icon={Calendar} />
-          <MetricCard label="평균 회의 시간" value={stats.avgDuration} change="-8분" changeType="up" icon={Clock} />
-          <MetricCard label="태스크 완수율" value={`${stats.completionRate}%`} change="+12%" changeType="up" variant="gradient" icon={CheckCircle2} />
-          <MetricCard label="결정 실행률" value={`${stats.decidedRate}%`} change="+5%" changeType="up" icon={Target} />
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <MetricCard label="이번 주 내 회의" value={stats.weekMeetings} change="+2" changeType="up" icon={Calendar} />
+          <MetricCard label="내 태스크 완수율" value={`${stats.completionRate}%`} change="+12%" changeType="up" variant="gradient" icon={CheckCircle2} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-          {/* 차트: 뉴트럴 서브섹션 */}
-          <Card className="lg:col-span-2 !bg-bg-tertiary subsection-olive">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-txt-primary">주간 회의 횟수</h3>
-                <p className="text-[11px] text-txt-secondary mt-0.5">지난 주 대비 20% 감소</p>
-              </div>
-              <Badge variant="success">↓ 효율 개선</Badge>
+        {/* Milo 인사이트 */}
+        <Card className="!bg-bg-tertiary subsection-gold">
+          <div className="flex items-center gap-3 mb-3">
+            <Avatar variant="ai" size="md" label="M" />
+            <div>
+              <p className="text-sm font-semibold text-txt-primary">Milo 인사이트</p>
+              <p className="text-[10px] text-txt-muted">자동 생성</p>
             </div>
-            <WeeklyChart data={weeklyData} />
-          </Card>
-
-          {/* Milo: 유일한 강조 포인트 (올리브 틴트) */}
-          <Card className="!bg-bg-tertiary subsection-gold">
-            <div className="flex items-center gap-3 mb-3">
-              <Avatar variant="ai" size="md" label="M" />
-              <div>
-                <p className="text-sm font-semibold text-txt-primary">Milo 인사이트</p>
-                <p className="text-[10px] text-txt-muted">자동 생성</p>
-              </div>
-            </div>
-            <p className="text-xs text-txt-secondary leading-relaxed mb-3">
-              이번 주 회의 시간이 지난주 대비 <span className="text-txt-primary font-semibold">20% 줄었어요</span>.
-              결정 실행률도 <span className="text-txt-primary font-semibold">82%</span>로 높아졌습니다.
-            </p>
-            <Link to="/summaries" className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors">
-              전체 분석 보기 <ArrowRight size={12} />
-            </Link>
-          </Card>
-        </div>
+          </div>
+          <p className="text-xs text-txt-secondary leading-relaxed mb-3">
+            이번 주 회의 시간이 지난주 대비 <span className="text-txt-primary font-semibold">20% 줄었어요</span>.
+            결정 실행률도 <span className="text-txt-primary font-semibold">82%</span>로 높아졌습니다.
+          </p>
+          <Link to="/summaries" className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors">
+            전체 분석 보기 <ArrowRight size={12} />
+          </Link>
+        </Card>
       </SectionPanel>
 
       {/* ═══ 패널 2: 오늘의 회의 ═══ */}
