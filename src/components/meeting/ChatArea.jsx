@@ -27,7 +27,8 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // 한글 IME 조합 중에는 전송하지 않음 (중복/분할 전송 방지)
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }

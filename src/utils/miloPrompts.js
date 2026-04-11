@@ -230,7 +230,7 @@ milo_insights는 회의 전반에 대한 Milo의 통찰 한 단락 (2-3문장).`
 }
 
 export const MILO_INTERVENTION_TRIGGERS = {
-  MENTION: /(@milo|@밀로|밀로[야가는를의에게한테]|밀로\s|밀로,)/i,
+  MENTION: /(@milo|@밀로|밀로[야가는를의에게한테]|밀로[\s,]|밀로$)/im,
   AI_EMPLOYEE_MENTION: /(@?노먼|@?코틀러|@?프뢰벨|@?간트|@?코르프|@?데밍|@?norman|@?kotler|@?froebel|@?gantt|@?korff|@?deming)/i,
   GUESS: /(아마|같아|할 것 같|느낌이|대충|에바|것 같은데|거 같)/,
   AGREEMENT: /(동의|좋아요|합의|결정|그렇게 가|그걸로|확정)/,

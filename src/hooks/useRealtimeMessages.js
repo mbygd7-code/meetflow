@@ -102,8 +102,22 @@ export function useRealtimeMessages(meetingId) {
           table: 'messages',
           filter: `meeting_id=eq.${meetingId}`,
         },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+        async (payload) => {
+          const msg = payload.new;
+          // Realtime payload에는 JOIN 데이터가 없으므로 user 정보 보강
+          if (msg.user_id && !msg.user) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('id, name, avatar_color')
+              .eq('id', msg.user_id)
+              .single();
+            msg.user = userData;
+          }
+          setMessages((prev) => {
+            // 이미 동일 ID가 있으면 중복 방지
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
         }
       )
       .subscribe();
