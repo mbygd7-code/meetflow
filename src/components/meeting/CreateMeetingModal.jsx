@@ -233,6 +233,9 @@ export default function CreateMeetingModal({ open, onClose }) {
       resetForm();
       onClose();
       addToast('Slack과 Google Calendar에 회의 요청이 완료되었습니다.', 'success');
+    } catch (err) {
+      console.error('[handleRequest] 회의 요청 실패:', err);
+      addToast(`회의 요청 실패: ${err.message || '알 수 없는 오류'}`, 'error');
     } finally {
       setBusy(false);
     }
