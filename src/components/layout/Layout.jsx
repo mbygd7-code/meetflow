@@ -26,8 +26,8 @@ const MOBILE_TABS = [
 
 function MobileTabBar() {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around h-16 px-2"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around px-2 pt-2 touch-none"
+      style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
     >
       {MOBILE_TABS.map(({ to, label, icon: Icon, end }) => (
         <NavLink
@@ -35,14 +35,14 @@ function MobileTabBar() {
           to={to}
           end={end}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold transition-colors min-w-[60px] ${
+            `flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors min-w-[60px] ${
               isActive
                 ? 'text-brand-purple'
                 : 'text-txt-muted'
             }`
           }
         >
-          <Icon size={24} strokeWidth={1.8} />
+          <Icon size={22} strokeWidth={1.8} />
           <span>{label}</span>
         </NavLink>
       ))}

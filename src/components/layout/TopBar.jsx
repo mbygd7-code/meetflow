@@ -85,7 +85,7 @@ export default function TopBar() {
   }, [user, meetings, tasks]);
 
   return (
-    <header className="relative z-30 h-14 md:h-16 shrink-0 flex items-center bg-transparent pt-2 px-2 md:px-0 gap-2 md:gap-0">
+    <header className="relative z-30 h-14 md:h-16 shrink-0 flex items-center bg-transparent pt-2 px-2 md:px-0 gap-2 md:gap-0 touch-none">
       {/* 모바일 햄버거 */}
       <button
         className="md:hidden p-2 rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors shrink-0"
