@@ -3,6 +3,7 @@ import { Outlet, useLocation, NavLink } from 'react-router-dom';
 import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings } from 'lucide-react';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import Toast from '@/components/ui/Toast';
 
 const PAGE_TITLES = {
   '/': '대시보드',
@@ -93,6 +94,7 @@ export default function Layout() {
 
         {/* 모바일 하단 탭 바 */}
         {!hideTopBar && <MobileTabBar />}
+        <Toast />
       </div>
     </SidebarContext.Provider>
   );

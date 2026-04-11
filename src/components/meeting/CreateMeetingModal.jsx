@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File } from 'lucide-react';
 import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
+import { useToastStore } from '@/stores/toastStore';
 
 const TEAMS = [
   { id: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7', name: '프로덕트 팀' },
@@ -121,6 +122,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   const defaultTimes = ['09:00', '10:00', '14:00', '15:00', '16:00'];
   const timeSuggestions = recentTimes.length > 0 ? recentTimes : defaultTimes;
   const { requestMeeting } = useMeeting();
+  const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
 
   const toggleTeam = (teamId) => {
@@ -230,6 +232,7 @@ export default function CreateMeetingModal({ open, onClose }) {
       clearDraft();
       resetForm();
       onClose();
+      addToast('Slack과 Google Calendar에 회의 요청이 완료되었습니다.', 'success');
     } finally {
       setBusy(false);
     }
