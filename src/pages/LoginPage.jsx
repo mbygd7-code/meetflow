@@ -33,6 +33,8 @@ export default function LoginPage() {
   const [localError, setLocalError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
+  const [recoveryCompleted, setRecoveryCompleted] = useState(false);
 
   // ★ 첫 렌더링 시 URL을 동기적으로 확인 — 비동기 이벤트보다 앞서 복구 폼 결정
   const [urlRecovery] = useState(detectRecoveryFromUrl);
@@ -44,7 +46,8 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   // URL 감지 OR 스토어 이벤트 감지 중 하나라도 true면 복구 모드
-  const isRecovery = urlRecovery || isPasswordRecovery;
+  // (비밀번호 변경 완료 후 "다시 로그인" 클릭 시 recoveryCompleted로 해제)
+  const isRecovery = !recoveryCompleted && (urlRecovery || isPasswordRecovery);
 
   // 이미 로그인된 사용자가 /login 접근 시 대시보드로 이동
   // (단, 비밀번호 복구 흐름 중이면 유지)
@@ -69,15 +72,30 @@ export default function LoginPage() {
     }
     setBusy(true);
     try {
+      // 비밀번호 변경 전에 이메일 캡처 (updatePassword → signOut 후 user가 null)
+      const currentEmail = user?.email || '';
       const { error } = await updatePassword(newPassword);
       if (error) {
         setLocalError(error.message);
         return;
       }
       setSuccessMsg('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
+      setPasswordChanged(true);
+      setEmail(currentEmail);
     } finally {
       setBusy(false);
     }
+  };
+
+  // 비밀번호 변경 완료 후 → 로그인 폼으로 전환 (이메일 유지)
+  const handleGoToLogin = () => {
+    setRecoveryCompleted(true);
+    setMode('signin');
+    setPassword('');
+    setNewPassword('');
+    setNewPasswordConfirm('');
+    setLocalError(null);
+    setSuccessMsg(null);
   };
 
   const handleSubmit = async (e) => {
@@ -161,48 +179,71 @@ export default function LoginPage() {
           {isRecovery ? (
             <>
               <div className="mb-6">
-                <h3 className="text-base font-semibold text-txt-primary mb-1">새 비밀번호 설정</h3>
-                <p className="text-xs text-txt-secondary">사용할 새 비밀번호를 입력해주세요.</p>
+                <h3 className="text-base font-semibold text-txt-primary mb-1">
+                  {passwordChanged ? '비밀번호 변경 완료' : '새 비밀번호 설정'}
+                </h3>
+                <p className="text-xs text-txt-secondary">
+                  {passwordChanged
+                    ? '새 비밀번호로 다시 로그인해주세요.'
+                    : '사용할 새 비밀번호를 입력해주세요.'}
+                </p>
               </div>
-              <form onSubmit={handleUpdatePassword} className="space-y-4">
-                <Input
-                  label="새 비밀번호"
-                  icon={Lock}
-                  type="password"
-                  placeholder="6자 이상"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
-                <Input
-                  label="새 비밀번호 확인"
-                  icon={Lock}
-                  type="password"
-                  placeholder="동일하게 입력"
-                  value={newPasswordConfirm}
-                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                  required
-                />
-                {localError && (
-                  <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
-                    {localError}
-                  </p>
-                )}
-                {successMsg && (
+
+              {!passwordChanged ? (
+                <form onSubmit={handleUpdatePassword} className="space-y-4">
+                  <Input
+                    label="새 비밀번호"
+                    icon={Lock}
+                    type="password"
+                    placeholder="6자 이상"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="새 비밀번호 확인"
+                    icon={Lock}
+                    type="password"
+                    placeholder="동일하게 입력"
+                    value={newPasswordConfirm}
+                    onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                    required
+                  />
+                  {localError && (
+                    <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
+                      {localError}
+                    </p>
+                  )}
+                  {successMsg && (
+                    <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
+                      {successMsg}
+                    </p>
+                  )}
+                  <Button
+                    type="submit"
+                    variant="gradient"
+                    size="lg"
+                    loading={busy}
+                    className="w-full"
+                  >
+                    비밀번호 변경
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-4">
                   <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
-                    {successMsg}
+                    비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.
                   </p>
-                )}
-                <Button
-                  type="submit"
-                  variant="gradient"
-                  size="lg"
-                  loading={busy}
-                  className="w-full"
-                >
-                  비밀번호 변경
-                </Button>
-              </form>
+                  <Button
+                    variant="gradient"
+                    size="lg"
+                    onClick={handleGoToLogin}
+                    className="w-full"
+                  >
+                    다시 로그인
+                  </Button>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -256,6 +297,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  readOnly={mode === 'signin' && recoveryCompleted && !!email}
+                  className={mode === 'signin' && recoveryCompleted && email ? 'opacity-70' : ''}
                 />
                 {mode !== 'reset' && (
                   <Input
