@@ -57,23 +57,28 @@ export const useAuthStore = create((set, get) => ({
   init: async () => {
     set({ loading: true });
     try {
-      supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      // ★ 콜백은 반드시 동기 — async/await 사용 시 Supabase 내부 auth lock과
+      // 데이터 쿼리의 token 획득이 충돌하여 deadlock 발생
+      supabase.auth.onAuthStateChange((_event, newSession) => {
         if (_event === 'PASSWORD_RECOVERY') {
           set({ isPasswordRecovery: true, session: newSession });
           return;
         }
         if (_event === 'INITIAL_SESSION') return;
 
-        // role 비동기 페칭
-        const role = newSession?.user
-          ? await fetchUserRole(newSession.user.id)
-          : 'member';
-
+        // 동기적으로 user 세팅 (role 없이 먼저)
         set({
           session: newSession,
           isPasswordRecovery: false,
-          user: buildUser(newSession?.user, role),
+          user: buildUser(newSession?.user),
         });
+
+        // role은 lock 해제 후 비동기로 후속 업데이트
+        if (newSession?.user) {
+          fetchUserRole(newSession.user.id).then((role) => {
+            set((s) => ({ user: s.user ? { ...s.user, role } : null }));
+          });
+        }
       });
 
       const {
