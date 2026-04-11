@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS input 포커스 시 자동 확대 방지 — 16px 이상이면 확대 안 됨 */
+@media screen and (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* ════════════════════════════════════════
    DARK MODE (기본값)
    ════════════════════════════════════════ */
