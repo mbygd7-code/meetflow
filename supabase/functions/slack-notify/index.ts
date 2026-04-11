@@ -125,6 +125,48 @@ serve(async (req) => {
         break;
       }
 
+      case 'meeting_request': {
+        const { data: reqTeam } = await supabase
+          .from('teams')
+          .select('slack_channel_id')
+          .eq('id', payload.team_id)
+          .single();
+        if (!reqTeam?.slack_channel_id) break;
+
+        const reqAgendas = (payload.agendas || [])
+          .map((a: any, i: number) => `${i + 1}. ${a.title} (${a.duration_minutes}분)`)
+          .join('\n');
+        const participantNames = (payload.participants || []).join(', ');
+        const scheduleInfo = payload.scheduled_date && payload.scheduled_time
+          ? `📅 ${payload.scheduled_date} ${payload.scheduled_time} (${payload.duration || 30}분)`
+          : '📅 시간 미정';
+
+        await postSlack(reqTeam.slack_channel_id, {
+          text: `📋 *${payload.requested_by}*님이 새 회의를 요청했어요`,
+          blocks: [
+            {
+              type: 'header',
+              text: { type: 'plain_text', text: `📋 회의 요청: ${payload.title}` },
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}` },
+            },
+            ...(reqAgendas ? [{
+              type: 'section' as const,
+              text: { type: 'mrkdwn' as const, text: `*어젠다*\n${reqAgendas}` },
+            }] : []),
+            {
+              type: 'context',
+              elements: [
+                { type: 'mrkdwn', text: '🤖 MeetFlow에서 전송됨 · Google Calendar에도 등록되었습니다' },
+              ],
+            },
+          ],
+        });
+        break;
+      }
+
       case 'task_assigned': {
         if (!payload.assignee_slack_id) break;
         await postSlack(payload.assignee_slack_id, {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File } from 'lucide-react';
 import { Modal, Input, Button } from '@/components/ui';
@@ -34,18 +34,72 @@ const SUGGESTED_TITLES = [
   '팀 빌딩 회의',
 ];
 
+const DRAFT_KEY = 'meetflow-meeting-draft';
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveDraft(data) {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY);
+}
+
 export default function CreateMeetingModal({ open, onClose }) {
-  const [title, setTitle] = useState('');
+  const draft = useRef(loadDraft());
+
+  const [title, setTitle] = useState(draft.current?.title || '');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedTeams, setSelectedTeams] = useState([]);
-  const [selectedMembers, setSelectedMembers] = useState([]);
-  const [agendas, setAgendas] = useState([
-    { title: '', duration_minutes: 10 },
-  ]);
-  const [scheduledDate, setScheduledDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [scheduledTime, setScheduledTime] = useState('');
+  const [suggestionsReady, setSuggestionsReady] = useState(false);
+  const [modalReady, setModalReady] = useState(false);
+
+  // 모달이 열리면 짧은 딜레이 후 드롭다운 허용
+  useEffect(() => {
+    if (open) {
+      // 모달 열릴 때 임시저장 데이터 복원
+      const saved = loadDraft();
+      if (saved) {
+        setTitle(saved.title || '');
+        setSelectedTeams(saved.selectedTeams || []);
+        setSelectedMembers(saved.selectedMembers || []);
+        setAgendas(saved.agendas?.length ? saved.agendas : [{ title: '', duration_minutes: 10 }]);
+        setScheduledDate(saved.scheduledDate || new Date().toISOString().slice(0, 10));
+        setScheduledTime(saved.scheduledTime || '');
+        setDuration(saved.duration || 30);
+      }
+      setModalReady(false);
+      setSuggestionsReady(false);
+      const t = setTimeout(() => setModalReady(true), 300);
+      return () => clearTimeout(t);
+    } else {
+      setModalReady(false);
+      setSuggestionsReady(false);
+    }
+  }, [open]);
+
+  // modalReady 후 드롭다운 펼치기 애니메이션 트리거
+  useEffect(() => {
+    if (modalReady && showSuggestions) {
+      requestAnimationFrame(() => setSuggestionsReady(true));
+    } else if (!showSuggestions) {
+      setSuggestionsReady(false);
+    }
+  }, [modalReady, showSuggestions]);
+  const [selectedTeams, setSelectedTeams] = useState(draft.current?.selectedTeams || []);
+  const [selectedMembers, setSelectedMembers] = useState(draft.current?.selectedMembers || []);
+  const [agendas, setAgendas] = useState(
+    draft.current?.agendas?.length ? draft.current.agendas : [{ title: '', duration_minutes: 10 }]
+  );
+  const [scheduledDate, setScheduledDate] = useState(draft.current?.scheduledDate || (() => new Date().toISOString().slice(0, 10)));
+  const [scheduledTime, setScheduledTime] = useState(draft.current?.scheduledTime || '');
   const [showTimeSuggestions, setShowTimeSuggestions] = useState(false);
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(draft.current?.duration || 30);
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef(null);
@@ -66,7 +120,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   const recentTimes = getRecentTimes();
   const defaultTimes = ['09:00', '10:00', '14:00', '15:00', '16:00'];
   const timeSuggestions = recentTimes.length > 0 ? recentTimes : defaultTimes;
-  const { createMeeting, startMeeting } = useMeeting();
+  const { requestMeeting } = useMeeting();
   const navigate = useNavigate();
 
   const toggleTeam = (teamId) => {
@@ -136,32 +190,46 @@ export default function CreateMeetingModal({ open, onClose }) {
       agendas.map((a, idx) => (idx === i ? { ...a, [field]: value } : a))
     );
 
-  const handleSubmit = async (startNow) => {
+  const resetForm = () => {
+    setTitle('');
+    setSelectedTeams([]);
+    setSelectedMembers([]);
+    setAgendas([{ title: '', duration_minutes: 10 }]);
+    setScheduledDate(new Date().toISOString().slice(0, 10));
+    setScheduledTime('');
+    setDuration(30);
+    setFiles([]);
+  };
+
+  // 임시저장
+  const handleSaveDraft = () => {
+    saveDraft({
+      title, selectedTeams, selectedMembers, agendas,
+      scheduledDate, scheduledTime, duration,
+    });
+    onClose();
+  };
+
+  // 회의 요청 — Slack + Calendar 연동
+  const handleRequest = async () => {
     if (!title.trim()) return;
     if (allParticipants.length === 0) return;
     setBusy(true);
     try {
       const cleaned = agendas.filter((a) => a.title.trim());
-      const meeting = await createMeeting({
+      await requestMeeting({
         title: title.trim(),
         team_id: selectedTeams[0] || null,
         agendas: cleaned,
         participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
+        scheduledDate,
+        scheduledTime,
+        duration,
       });
-      if (startNow) {
-        await startMeeting(meeting.id);
-        navigate(`/meetings/${meeting.id}`);
-      }
-      onClose();
       saveRecentTime(scheduledTime);
-      setTitle('');
-      setSelectedTeams([]);
-      setSelectedMembers([]);
-      setAgendas([{ title: '', duration_minutes: 10 }]);
-      setScheduledDate(new Date().toISOString().slice(0, 10));
-      setScheduledTime('');
-      setDuration(30);
-      setFiles([]);
+      clearDraft();
+      resetForm();
+      onClose();
     } finally {
       setBusy(false);
     }
@@ -175,16 +243,16 @@ export default function CreateMeetingModal({ open, onClose }) {
       size="lg"
       footer={
         <>
-          <Button variant="secondary" onClick={() => handleSubmit(false)} disabled={busy}>
-            예약만 하기
+          <Button variant="secondary" onClick={handleSaveDraft} disabled={busy}>
+            임시저장
           </Button>
           <Button
             variant="gradient"
-            onClick={() => handleSubmit(true)}
+            onClick={handleRequest}
             loading={busy}
             disabled={!title.trim() || allParticipants.length === 0}
           >
-            회의 시작
+            회의 요청
           </Button>
         </>
       }
@@ -199,28 +267,37 @@ export default function CreateMeetingModal({ open, onClose }) {
             type="text"
             placeholder="예: 주간 스탠드업"
             value={title}
-            onChange={(e) => { setTitle(e.target.value); setShowSuggestions(true); }}
-            onFocus={() => setShowSuggestions(true)}
+            onChange={(e) => { setTitle(e.target.value); setShowSuggestions(false); }}
+            onFocus={() => { if (!title.trim()) setShowSuggestions(true); }}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             autoFocus
             className="w-full bg-bg-tertiary border border-border-subtle rounded-md text-sm text-txt-primary placeholder:text-txt-muted px-4 py-2.5 transition-colors duration-200 focus:outline-none focus:ring-[3px] focus:border-brand-purple/50 focus:ring-brand-purple/15"
           />
-          {showSuggestions && (
-            <div className="absolute z-20 left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-border-default rounded-lg shadow-lg max-h-[360px] overflow-y-auto scrollbar-hide">
-              <p className="px-3 pt-2 pb-1 text-[10px] text-txt-muted font-medium uppercase tracking-wider">추천 제목</p>
-              {SUGGESTED_TITLES
-                .filter((s) => !title || s.toLowerCase().includes(title.toLowerCase()))
-                .map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setTitle(suggestion); setShowSuggestions(false); }}
-                    className="w-full text-left px-3 py-2 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+          {showSuggestions && modalReady && (
+            <div
+              className="absolute z-20 left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-border-default rounded-lg shadow-lg overflow-hidden origin-top transition-all duration-200 ease-out"
+              style={{
+                maxHeight: suggestionsReady ? '360px' : '0px',
+                opacity: suggestionsReady ? 1 : 0,
+                transform: suggestionsReady ? 'scaleY(1)' : 'scaleY(0.6)',
+              }}
+            >
+              <div className="overflow-y-auto max-h-[360px] scrollbar-hide">
+                <p className="px-3 pt-2 pb-1 text-[10px] text-txt-muted font-medium uppercase tracking-wider">추천 제목</p>
+                {SUGGESTED_TITLES
+                  .filter((s) => !title || s.toLowerCase().includes(title.toLowerCase()))
+                  .map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setTitle(suggestion); setShowSuggestions(false); }}
+                      className="w-full text-left px-3 py-2 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+              </div>
             </div>
           )}
         </div>
