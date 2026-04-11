@@ -69,8 +69,9 @@ export const useAuthStore = create((set, get) => ({
   },
 
   resetPassword: async (email) => {
+    const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${appUrl}/login`,
     });
     return { error };
   },
