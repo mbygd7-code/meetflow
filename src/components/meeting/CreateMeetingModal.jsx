@@ -5,17 +5,17 @@ import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 
 const TEAMS = [
-  { id: 'team-1', name: '프로덕트 팀' },
-  { id: 'team-2', name: '디자인 팀' },
+  { id: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7', name: '프로덕트 팀' },
+  { id: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b', name: '디자인 팀' },
   { id: 'team-3', name: '엔지니어링 팀' },
 ];
 
 const ALL_MEMBERS = [
-  { id: 'u1', name: '김지우', color: '#FF902F', team: 'team-1' },
-  { id: 'u2', name: '박서연', color: '#34D399', team: 'team-1' },
-  { id: 'u3', name: '이도윤', color: '#38BDF8', team: 'team-1' },
-  { id: 'u4', name: '최하린', color: '#F472B6', team: 'team-2' },
-  { id: 'u5', name: '정민수', color: '#A78BFA', team: 'team-2' },
+  { id: 'u1', name: '김지우', color: '#FF902F', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
+  { id: 'u2', name: '박서연', color: '#34D399', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
+  { id: 'u3', name: '이도윤', color: '#38BDF8', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
+  { id: 'u4', name: '최하린', color: '#F472B6', team: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b' },
+  { id: 'u5', name: '정민수', color: '#A78BFA', team: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b' },
   { id: 'u6', name: '한소율', color: '#FBBF24', team: 'team-3' },
   { id: 'u7', name: '오재현', color: '#F87171', team: 'team-3' },
   { id: 'u8', name: '윤서아', color: '#2DD4BF', team: 'team-3' },
