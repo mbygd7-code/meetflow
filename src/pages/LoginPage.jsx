@@ -8,12 +8,40 @@ export default function LoginPage() {
   const [mode, setMode] = useState('signin'); // signin | signup | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [name, setName] = useState('');
   const [localError, setLocalError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { signIn, signUp, resetPassword, mockSignIn } = useAuthStore();
+  const { signIn, signUp, resetPassword, updatePassword, mockSignIn, isPasswordRecovery } = useAuthStore();
   const navigate = useNavigate();
+
+  // ── 새 비밀번호 설정 (PASSWORD_RECOVERY 흐름) ──────────────────────
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setLocalError(null);
+    setSuccessMsg(null);
+    if (newPassword.length < 6) {
+      setLocalError('비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setLocalError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        setLocalError(error.message);
+        return;
+      }
+      setSuccessMsg('비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -91,130 +119,182 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-bg-secondary border border-border-subtle rounded-[8px] p-8 shadow-lg">
-          {/* 탭 */}
-          {mode !== 'reset' && (
-            <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
-              {['signin', 'signup'].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    setMode(m);
-                    setLocalError(null);
-                    setSuccessMsg(null);
-                  }}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
-                    mode === m
-                      ? 'bg-bg-secondary text-txt-primary shadow-sm'
-                      : 'text-txt-secondary hover:text-txt-primary'
-                  }`}
-                >
-                  {m === 'signin' ? '로그인' : '회원가입'}
-                </button>
-              ))}
-            </div>
-          )}
 
-          {mode === 'reset' && (
-            <div className="mb-6">
-              <h3 className="text-base font-semibold text-txt-primary mb-1">비밀번호 찾기</h3>
-              <p className="text-xs text-txt-secondary">가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'signup' && (
-              <Input
-                label="이름"
-                icon={User}
-                placeholder="홍길동"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            )}
-            <Input
-              label="이메일"
-              icon={Mail}
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            {mode !== 'reset' && (
-              <Input
-                label="패스워드"
-                icon={Lock}
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            )}
-            {mode === 'signin' && (
-              <div className="flex justify-end -mt-1">
-                <button
-                  type="button"
-                  onClick={() => { setMode('reset'); setLocalError(null); setSuccessMsg(null); }}
-                  className="text-xs text-txt-muted hover:text-brand-purple transition-colors"
-                >
-                  비밀번호를 잊으셨나요?
-                </button>
+          {/* ── 비밀번호 재설정 완료 화면 (이메일 링크 클릭 후) ── */}
+          {isPasswordRecovery ? (
+            <>
+              <div className="mb-6">
+                <h3 className="text-base font-semibold text-txt-primary mb-1">새 비밀번호 설정</h3>
+                <p className="text-xs text-txt-secondary">사용할 새 비밀번호를 입력해주세요.</p>
               </div>
-            )}
-            {localError && (
-              <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
-                {localError}
-              </p>
-            )}
-            {successMsg && (
-              <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
-                {successMsg}
-              </p>
-            )}
-            <Button
-              type="submit"
-              variant="gradient"
-              size="lg"
-              loading={busy}
-              className="w-full"
-            >
-              {mode === 'signin' ? '로그인' : mode === 'signup' ? '회원가입' : '재설정 링크 보내기'}
-            </Button>
-            {mode === 'reset' && (
-              <button
-                type="button"
-                onClick={() => { setMode('signin'); setLocalError(null); setSuccessMsg(null); }}
-                className="w-full text-center text-xs text-txt-muted hover:text-txt-primary transition-colors py-1"
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <Input
+                  label="새 비밀번호"
+                  icon={Lock}
+                  type="password"
+                  placeholder="6자 이상"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+                <Input
+                  label="새 비밀번호 확인"
+                  icon={Lock}
+                  type="password"
+                  placeholder="동일하게 입력"
+                  value={newPasswordConfirm}
+                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                  required
+                />
+                {localError && (
+                  <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
+                    {localError}
+                  </p>
+                )}
+                {successMsg && (
+                  <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
+                    {successMsg}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  variant="gradient"
+                  size="lg"
+                  loading={busy}
+                  className="w-full"
+                >
+                  비밀번호 변경
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              {/* 탭 */}
+              {mode !== 'reset' && (
+                <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
+                  {['signin', 'signup'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setMode(m);
+                        setLocalError(null);
+                        setSuccessMsg(null);
+                      }}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
+                        mode === m
+                          ? 'bg-bg-secondary text-txt-primary shadow-sm'
+                          : 'text-txt-secondary hover:text-txt-primary'
+                      }`}
+                    >
+                      {m === 'signin' ? '로그인' : '회원가입'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {mode === 'reset' && (
+                <div className="mb-6">
+                  <h3 className="text-base font-semibold text-txt-primary mb-1">비밀번호 찾기</h3>
+                  <p className="text-xs text-txt-secondary">가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === 'signup' && (
+                  <Input
+                    label="이름"
+                    icon={User}
+                    placeholder="홍길동"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                )}
+                <Input
+                  label="이메일"
+                  icon={Mail}
+                  type="email"
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                {mode !== 'reset' && (
+                  <Input
+                    label="패스워드"
+                    icon={Lock}
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                )}
+                {mode === 'signin' && (
+                  <div className="flex justify-end -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setMode('reset'); setLocalError(null); setSuccessMsg(null); }}
+                      className="text-xs text-txt-muted hover:text-brand-purple transition-colors"
+                    >
+                      비밀번호를 잊으셨나요?
+                    </button>
+                  </div>
+                )}
+                {localError && (
+                  <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
+                    {localError}
+                  </p>
+                )}
+                {successMsg && (
+                  <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
+                    {successMsg}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  variant="gradient"
+                  size="lg"
+                  loading={busy}
+                  className="w-full"
+                >
+                  {mode === 'signin' ? '로그인' : mode === 'signup' ? '회원가입' : '재설정 링크 보내기'}
+                </Button>
+                {mode === 'reset' && (
+                  <button
+                    type="button"
+                    onClick={() => { setMode('signin'); setLocalError(null); setSuccessMsg(null); }}
+                    className="w-full text-center text-xs text-txt-muted hover:text-txt-primary transition-colors py-1"
+                  >
+                    ← 로그인으로 돌아가기
+                  </button>
+                )}
+              </form>
+
+              <div className="relative my-5 text-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border-subtle" />
+                </div>
+                <span className="relative inline-block px-3 bg-bg-secondary text-xs text-txt-muted">
+                  또는
+                </span>
+              </div>
+
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={handleDemo}
+                className="w-full"
               >
-                ← 로그인으로 돌아가기
-              </button>
-            )}
-          </form>
+                데모 계정으로 바로 시작
+              </Button>
 
-          <div className="relative my-5 text-center">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border-subtle" />
-            </div>
-            <span className="relative inline-block px-3 bg-bg-secondary text-xs text-txt-muted">
-              또는
-            </span>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={handleDemo}
-            className="w-full"
-          >
-            데모 계정으로 바로 시작
-          </Button>
-
-          <p className="mt-6 text-center text-xs text-txt-muted">
-            계속 진행 시 MeetFlow의 이용약관에 동의합니다.
-          </p>
+              <p className="mt-6 text-center text-xs text-txt-muted">
+                계속 진행 시 MeetFlow의 이용약관에 동의합니다.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

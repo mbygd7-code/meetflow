@@ -6,6 +6,7 @@ export const useAuthStore = create((set, get) => ({
   session: null,
   loading: true,
   error: null,
+  isPasswordRecovery: false, // 비밀번호 재설정 링크 클릭 후 복구 모드
 
   init: async () => {
     set({ loading: true });
@@ -26,8 +27,14 @@ export const useAuthStore = create((set, get) => ({
       });
 
       supabase.auth.onAuthStateChange((_event, newSession) => {
+        if (_event === 'PASSWORD_RECOVERY') {
+          // 비밀번호 재설정 링크 클릭 — 새 비밀번호 입력 화면으로 전환
+          set({ isPasswordRecovery: true, session: newSession });
+          return;
+        }
         set({
           session: newSession,
+          isPasswordRecovery: false,
           user: newSession?.user
             ? {
                 id: newSession.user.id,
@@ -73,6 +80,18 @@ export const useAuthStore = create((set, get) => ({
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${appUrl}/login`,
     });
+    return { error };
+  },
+
+  // 새 비밀번호로 업데이트 (PASSWORD_RECOVERY 세션에서 호출)
+  updatePassword: async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) {
+      // 업데이트 완료 후 세션 초기화 → 재로그인 유도
+      set({ isPasswordRecovery: false });
+      await supabase.auth.signOut();
+      set({ session: null, user: null });
+    }
     return { error };
   },
 
