@@ -19,15 +19,14 @@ export const useSidebar = () => useContext(SidebarContext);
 
 const MOBILE_TABS = [
   { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
-  { to: '/meetings', label: '회의', icon: MessageSquare },
-  { to: '/tasks', label: '태스크', icon: CheckSquare },
   { to: '/summaries', label: '회의록', icon: FileText },
-  { to: '/settings', label: '설정', icon: Settings },
+  { to: '/tasks', label: '태스크', icon: CheckSquare },
+  { to: '/meetings', label: '회의', icon: MessageSquare },
 ];
 
 function MobileTabBar() {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around h-14 px-1"
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around h-16 px-2"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {MOBILE_TABS.map(({ to, label, icon: Icon, end }) => (
@@ -36,14 +35,14 @@ function MobileTabBar() {
           to={to}
           end={end}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors min-w-[52px] ${
+            `flex flex-col items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold transition-colors min-w-[60px] ${
               isActive
                 ? 'text-brand-purple'
                 : 'text-txt-muted'
             }`
           }
         >
-          <Icon size={20} strokeWidth={1.8} />
+          <Icon size={24} strokeWidth={1.8} />
           <span>{label}</span>
         </NavLink>
       ))}
@@ -86,7 +85,7 @@ export default function Layout() {
           )}
 
           <main className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto content-gradient-bg scrollbar-hide pb-16 md:pb-0">
+            <div className="flex-1 overflow-y-auto content-gradient-bg scrollbar-hide pb-[72px] md:pb-0">
               <Outlet context={{ pageTitle }} />
             </div>
           </main>

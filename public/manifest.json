@@ -1,0 +1,19 @@
+{
+  "name": "MeetFlow",
+  "short_name": "MeetFlow",
+  "description": "AI 팀원 Milo와 함께하는 스마트 회의",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E4DFD5",
+  "theme_color": "#E4DFD5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "scope": "/",
+  "lang": "ko"
+}
