@@ -22,7 +22,7 @@ export default function TaskCard({ task, onToggle, onClick, compact = false }) {
     <div
       onClick={() => onClick?.(task)}
       className={`
-        group bg-bg-secondary border border-border-subtle rounded-[12px]
+        group bg-bg-secondary border border-border-subtle rounded-[6px]
         p-4 hover:border-border-hover-strong transition-all cursor-pointer
         ${isDone ? 'opacity-60' : ''}
       `}

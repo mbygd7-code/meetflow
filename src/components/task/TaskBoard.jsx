@@ -18,7 +18,7 @@ export default function TaskBoard({ tasks, onToggle, onCardClick }) {
       {grouped.map((col) => (
         <div
           key={col.id}
-          className="bg-bg-secondary border border-border-subtle rounded-[12px] p-4"
+          className="bg-bg-secondary border border-border-subtle rounded-[6px] p-4"
         >
           {/* 컬럼 헤더 */}
           <div className="flex items-center justify-between mb-4">

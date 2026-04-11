@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import {
   Calendar,
   Clock,
@@ -8,6 +8,8 @@ import {
   FileText,
   Sparkles,
   ArrowRight,
+  Circle,
+  CircleDot,
 } from 'lucide-react';
 import { Card, MetricCard, Avatar, Badge, Button, SectionPanel } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
@@ -36,6 +38,7 @@ function WeeklyChart({ data }) {
 }
 
 export default function DashboardPage() {
+  const { pageTitle } = useOutletContext() || {};
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
   const { tasks } = useTaskStore();
@@ -64,10 +67,19 @@ export default function DashboardPage() {
     { label: '일', value: 0 },
   ];
 
+  const myTasks = useMemo(() => {
+    return tasks.filter((t) => t.status !== 'done');
+  }, [tasks]);
+
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
-      {/* 인사말 */}
+    <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
+      {/* 메인 콘텐츠 */}
+      <div className="flex-1 min-w-0 bg-[var(--bg-content)] rounded-[12px] p-2 md:p-3 lg:p-4 lg:overflow-y-auto scrollbar-hide space-y-3">
+      {/* 페이지 타이틀 + 인사말 */}
       <div>
+        {pageTitle && (
+          <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+        )}
         <h1 className="text-[26px] font-semibold text-txt-primary">
           안녕하세요, {user?.name || '사용자'}님 👋
         </h1>
@@ -76,14 +88,14 @@ export default function DashboardPage() {
 
       {/* ═══ 패널 1: 메트릭 + 차트 + Milo ═══ */}
       <SectionPanel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
           <MetricCard label="이번 주 회의" value={stats.weekMeetings} change="+2" changeType="up" icon={Calendar} />
           <MetricCard label="평균 회의 시간" value={stats.avgDuration} change="-8분" changeType="up" icon={Clock} />
           <MetricCard label="태스크 완수율" value={`${stats.completionRate}%`} change="+12%" changeType="up" variant="gradient" icon={CheckCircle2} />
           <MetricCard label="결정 실행률" value={`${stats.decidedRate}%`} change="+5%" changeType="up" icon={Target} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
           {/* 차트: 뉴트럴 서브섹션 */}
           <Card className="lg:col-span-2 !bg-bg-tertiary subsection-olive">
             <div className="flex items-center justify-between mb-4">
@@ -126,7 +138,7 @@ export default function DashboardPage() {
         }
       >
         {todayMeetings.length === 0 ? (
-          <div className="text-center py-10 bg-bg-tertiary rounded-[14px]">
+          <div className="text-center py-10 bg-bg-tertiary rounded-[7px]">
             <Calendar size={24} className="mx-auto text-txt-muted mb-2" />
             <p className="text-sm text-txt-secondary mb-4">오늘 예정된 회의가 없습니다</p>
             <Link to="/meetings">
@@ -134,7 +146,7 @@ export default function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {todayMeetings.slice(0, 3).map((m) => (
               <MeetingCard key={m.id} meeting={m} />
             ))}
@@ -144,9 +156,9 @@ export default function DashboardPage() {
 
       {/* ═══ 패널 3: 태스크 + 회의록 ═══ */}
       <SectionPanel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
           {/* 마감 임박 태스크 */}
-          <div className="bg-bg-tertiary subsection-peach rounded-[14px] p-5">
+          <div className="bg-bg-tertiary subsection-peach rounded-[7px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">마감 임박 태스크</h3>
               <Link to="/tasks" className="text-[11px] text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -163,7 +175,7 @@ export default function DashboardPage() {
           </div>
 
           {/* 최근 회의록 */}
-          <div className="bg-bg-tertiary subsection-teal rounded-[14px] p-5">
+          <div className="bg-bg-tertiary subsection-teal rounded-[7px] p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-txt-primary">최근 회의록</h3>
               <Link to="/summaries" className="text-[11px] text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -178,7 +190,7 @@ export default function DashboardPage() {
                   <Link key={m.id} to={`/summaries/${m.id}`}>
                     <Card className="!p-3 hover:border-border-hover-strong">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-md bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
                           <FileText size={14} className="text-brand-purple" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -198,6 +210,66 @@ export default function DashboardPage() {
           </div>
         </div>
       </SectionPanel>
+      </div>
+
+      {/* My Task 사이드바 */}
+      <aside className="hidden lg:block w-[300px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-txt-primary">My Tasks</h2>
+          <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+            전체 <ArrowRight size={12} />
+          </Link>
+        </div>
+        {myTasks.length === 0 ? (
+          <p className="text-sm text-txt-secondary text-center py-8">할당된 태스크가 없습니다</p>
+        ) : (
+          <div className="space-y-3">
+            {myTasks.map((t) => {
+              const daysLeft = differenceInDays(parseISO(t.due_date), new Date());
+              const isUrgent = daysLeft <= 1;
+              const priorityColors = {
+                urgent: 'text-red-500',
+                high: 'text-orange-500',
+                medium: 'text-yellow-600',
+                low: 'text-txt-muted',
+              };
+              return (
+                <div
+                  key={t.id}
+                  className="bg-[var(--card-bg)] rounded-[6px] border border-border-subtle p-3.5 hover:border-border-hover-strong transition-all cursor-pointer"
+                >
+                  <div className="flex items-start gap-2.5">
+                    {t.status === 'in_progress' ? (
+                      <CircleDot size={16} className="text-brand-purple mt-0.5 shrink-0" />
+                    ) : (
+                      <Circle size={16} className="text-txt-muted mt-0.5 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-txt-primary leading-snug line-clamp-2">{t.title}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {t.assignee && (
+                          <span
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                            style={{ backgroundColor: t.assignee.color }}
+                          >
+                            {t.assignee.name[0]}
+                          </span>
+                        )}
+                        <span className={`text-[11px] ${isUrgent ? 'text-red-500 font-semibold' : 'text-txt-muted'}`}>
+                          {daysLeft === 0 ? 'D-Day' : daysLeft > 0 ? `D-${daysLeft}` : `D+${Math.abs(daysLeft)}`}
+                        </span>
+                        <span className={`text-[10px] font-medium ${priorityColors[t.priority]}`}>
+                          {t.priority === 'urgent' ? '긴급' : t.priority === 'high' ? '높음' : t.priority === 'medium' ? '보통' : '낮음'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

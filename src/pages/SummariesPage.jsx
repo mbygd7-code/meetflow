@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useOutletContext } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 import { Card, Badge, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -7,11 +7,15 @@ import MeetingSummary from '@/components/summary/MeetingSummary';
 
 function SummaryList() {
   const { meetings } = useMeeting();
+  const { pageTitle } = useOutletContext() || {};
   const completed = meetings.filter((m) => m.status === 'completed');
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
+    <div className="p-3 md:p-4 lg:p-4 max-w-5xl space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
       <div>
+        {pageTitle && (
+          <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+        )}
         <p className="text-sm text-txt-secondary">
           종료된 회의의 AI 요약을 확인하세요
         </p>

@@ -16,7 +16,7 @@ export default function MetricCard({
   return (
     <div
       className={`
-        rounded-[12px] p-5 transition-all duration-200
+        rounded-[6px] p-5 transition-all duration-200
         ${
           isGradient
             ? 'bg-gradient-card border-none shadow-md'

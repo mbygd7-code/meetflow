@@ -39,7 +39,7 @@ export default function Modal({
     >
       <div
         className={`
-          bg-bg-secondary border border-border-subtle rounded-[16px]
+          bg-bg-secondary border border-border-subtle rounded-[8px]
           shadow-lg w-full ${sizes[size]} ${className}
         `}
         onClick={(e) => e.stopPropagation()}

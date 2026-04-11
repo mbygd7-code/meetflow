@@ -12,7 +12,7 @@ const TABS = [
   { id: 'completed', label: '완료' },
 ];
 
-export default function MeetingLobby() {
+export default function MeetingLobby({ pageTitle }) {
   const [tab, setTab] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const { meetings } = useMeeting();
@@ -20,10 +20,13 @@ export default function MeetingLobby() {
   const filtered = meetings.filter((m) => tab === 'all' || m.status === tab);
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
+    <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
+          {pageTitle && (
+            <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+          )}
           <p className="text-sm text-txt-secondary">
             팀과 함께 회의를 진행하거나 새 회의를 만드세요
           </p>

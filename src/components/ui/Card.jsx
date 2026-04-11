@@ -6,7 +6,7 @@ export default function Card({
   onClick,
   ...props
 }) {
-  const base = 'rounded-[12px] p-6 transition-all duration-200';
+  const base = 'rounded-[6px] p-6 transition-all duration-200';
   const variants = {
     default: `bg-bg-secondary border border-border-subtle ${
       hoverable ? 'hover:border-border-hover' : ''

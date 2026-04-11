@@ -6,6 +6,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  X,
   Sparkles,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui';
@@ -19,7 +20,7 @@ const NAV_ITEMS = [
   { to: '/settings', label: '설정', icon: Settings },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false, onClose }) {
   const { user, signOut } = useAuthStore();
   const navigate = useNavigate();
 
@@ -28,40 +29,45 @@ export default function Sidebar() {
     navigate('/login');
   };
 
-  // 사이드바는 라이트/다크 모드 모두 다크 스타일 유지 (CRM 패턴)
-  // CSS 변수 --sidebar-* 를 사용하여 테마에 따라 미세 조정
+  const handleNavClick = () => {
+    if (mobile && onClose) onClose();
+  };
+
   return (
     <aside
-      className="w-48 flex flex-col p-3 shrink-0"
-      style={{
-        background: 'var(--sidebar-bg)',
-      }}
+      className={`${mobile ? 'w-64' : 'w-48'} h-full flex flex-col p-3 shrink-0`}
+      style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 로고 */}
-      <div className="flex items-center gap-2.5 px-3 py-4 mb-2">
-        <div className="w-8 h-8 rounded-lg bg-gradient-brand shadow-glow flex items-center justify-center">
-          <Sparkles size={16} className="text-white" strokeWidth={2.5} />
+      {/* 모바일: 로고 + 닫기 버튼 */}
+      {mobile && (
+        <div className="flex items-center justify-between px-2 pb-3 mb-2" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center">
+              <Sparkles size={16} className="text-white" strokeWidth={2.5} />
+            </div>
+            <span className="text-base font-bold" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md transition-colors"
+            style={{ color: 'var(--sidebar-text-muted)' }}
+          >
+            <X size={18} />
+          </button>
         </div>
-        <span
-          className="text-base font-bold tracking-tight"
-          style={{ color: 'var(--sidebar-text)' }}
-        >
-          MeetFlow
-        </span>
-      </div>
+      )}
 
       {/* 네비게이션 */}
-      <nav className="flex flex-col gap-0.5 flex-1">
+      <nav className="flex flex-col gap-0.5 flex-1 mt-2">
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
+            onClick={handleNavClick}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
-                isActive
-                  ? 'font-medium'
-                  : ''
+                isActive ? 'font-medium' : ''
               }`
             }
             style={({ isActive }) => ({
@@ -89,23 +95,14 @@ export default function Sidebar() {
       </nav>
 
       {/* 하단 유저 */}
-      <div
-        className="pt-3 mt-3"
-        style={{ borderTop: '1px solid var(--sidebar-divider)' }}
-      >
+      <div className="pt-3 mt-3" style={{ borderTop: '1px solid var(--sidebar-divider)' }}>
         <div className="flex items-center gap-3 px-2 py-2 rounded-md">
           <Avatar name={user?.name || 'U'} size="sm" />
           <div className="flex-1 min-w-0">
-            <p
-              className="text-sm font-medium truncate"
-              style={{ color: 'var(--sidebar-text)' }}
-            >
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--sidebar-text)' }}>
               {user?.name || '사용자'}
             </p>
-            <p
-              className="text-[11px] truncate"
-              style={{ color: 'var(--sidebar-text-dim)' }}
-            >
+            <p className="text-[11px] truncate" style={{ color: 'var(--sidebar-text-dim)' }}>
               {user?.email}
             </p>
           </div>

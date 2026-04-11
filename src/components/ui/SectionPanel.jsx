@@ -17,9 +17,9 @@ export default function SectionPanel({
   return (
     <section
       className={`
-        bg-bg-secondary rounded-[20px] shadow-md
+        bg-[var(--panel-bg)] rounded-[10px] shadow-md
         border border-border-subtle
-        ${flush ? '' : 'p-6 lg:p-8'}
+        ${flush ? '' : 'p-3 lg:p-4'}
         ${className}
       `}
     >

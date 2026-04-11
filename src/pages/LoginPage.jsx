@@ -67,7 +67,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         {/* 로고 */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-brand shadow-glow flex items-center justify-center mb-4">
+          <div className="w-14 h-14 rounded-xl bg-gradient-brand shadow-glow flex items-center justify-center mb-4">
             <Sparkles size={24} className="text-white" strokeWidth={2.4} />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">MeetFlow</h1>
@@ -76,7 +76,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="bg-bg-secondary border border-border-subtle rounded-[16px] p-8 shadow-lg">
+        <div className="bg-bg-secondary border border-border-subtle rounded-[8px] p-8 shadow-lg">
           {/* 탭 */}
           <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
             {['signin', 'signup'].map((m) => (

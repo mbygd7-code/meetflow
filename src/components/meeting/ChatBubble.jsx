@@ -5,9 +5,10 @@ import { Sparkles } from 'lucide-react';
 export default function ChatBubble({ message, currentUserId }) {
   const isAi = message.is_ai;
   const isMine = !isAi && message.user_id === currentUserId;
-  const senderName = isAi ? 'Milo' : message.user?.name || '알 수 없음';
+  const senderName = isAi ? (message.user?.name || 'Milo') : (message.user?.name || '알 수 없음');
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';
   const time = formatTime(message.created_at);
+  const isMilo = isAi && (!message.ai_employee || message.ai_employee === 'drucker');
 
   return (
     <div
@@ -15,7 +16,16 @@ export default function ChatBubble({ message, currentUserId }) {
     >
       {/* 아바타 */}
       {isAi ? (
-        <Avatar variant="ai" size="md" label="M" />
+        isMilo ? (
+          <Avatar variant="ai" size="md" label="Mi" />
+        ) : (
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
+            style={{ backgroundColor: senderColor }}
+          >
+            {senderName.slice(0, 2)}
+          </div>
+        )
       ) : (
         <Avatar name={senderName} color={senderColor} size="md" />
       )}
@@ -46,15 +56,17 @@ export default function ChatBubble({ message, currentUserId }) {
 
         {/* 말풍선 */}
         <div
-          className={`px-4 py-3 text-sm leading-relaxed ${
+          className={`px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
             isAi
-              ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-2xl rounded-tl-sm'
+              ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-xl rounded-tl-sm'
               : isMine
-                ? 'bg-brand-purple text-white rounded-2xl rounded-tr-sm'
-                : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-2xl rounded-tl-sm'
+                ? 'bg-brand-purple text-white rounded-xl rounded-tr-sm'
+                : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm'
           }`}
         >
-          {message.content}
+          {isAi
+            ? message.content.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
+            : message.content}
         </div>
       </div>
     </div>

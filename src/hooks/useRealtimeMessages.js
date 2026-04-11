@@ -117,7 +117,7 @@ export function useRealtimeMessages(meetingId) {
   }, [meetingId]);
 
   const sendMessage = useCallback(
-    async (content, { agendaId, isAi = false, aiType, source = 'web' } = {}) => {
+    async (content, { agendaId, isAi = false, aiType, aiEmployee, source = 'web' } = {}) => {
       if (!content?.trim()) return;
       const messagePayload = {
         meeting_id: meetingId,
@@ -126,17 +126,31 @@ export function useRealtimeMessages(meetingId) {
         content: content.trim(),
         is_ai: isAi,
         ai_type: aiType,
+        ai_employee: aiEmployee,
         source,
       };
 
       if (!SUPABASE_ENABLED) {
+        // AI 직원 정보 조회
+        let aiUser = { id: 'milo', name: 'Milo', color: '#723CEB' };
+        if (isAi && aiEmployee) {
+          const AI_EMPLOYEE_MAP = {
+            drucker: { id: 'milo', name: 'Milo', color: '#723CEB' },
+            kotler: { id: 'kotler', name: 'Kotler', color: '#FF902F' },
+            froebel: { id: 'froebel', name: 'Froebel', color: '#34D399' },
+            gantt: { id: 'gantt', name: 'Gantt', color: '#3B82F6' },
+            norman: { id: 'norman', name: 'Norman', color: '#EC4899' },
+            korff: { id: 'korff', name: 'Korff', color: '#F59E0B' },
+            deming: { id: 'deming', name: 'Deming', color: '#8B5CF6' },
+          };
+          aiUser = AI_EMPLOYEE_MAP[aiEmployee] || aiUser;
+        }
+
         // 로컬 데모: 직접 state 업데이트
         const newMsg = {
           id: `m-local-${Date.now()}`,
           ...messagePayload,
-          user: isAi
-            ? { id: 'milo', name: 'Milo', color: '#723CEB' }
-            : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
+          user: isAi ? aiUser : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, newMsg]);

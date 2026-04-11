@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, AtSign } from 'lucide-react';
 import ChatBubble from './ChatBubble';
+import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-export default function ChatArea({ messages, onSend, disabled }) {
+export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   const [input, setInput] = useState('');
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -15,7 +17,7 @@ export default function ChatArea({ messages, onSend, disabled }) {
       top: scrollRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [messages.length]);
+  }, [messages.length, aiThinking]);
 
   const handleSend = async () => {
     if (!input.trim() || disabled) return;
@@ -46,6 +48,25 @@ export default function ChatArea({ messages, onSend, disabled }) {
           messages.map((m) => (
             <ChatBubble key={m.id} message={m} currentUserId={user?.id} />
           ))
+        )}
+
+        {/* AI 생각 중 표시 */}
+        {aiThinking?.active && (
+          <div className="flex gap-3 fade-in">
+            <Avatar variant="ai" size="md" label={
+              AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId)?.initials || 'Mi'
+            } />
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-medium text-brand-purple mb-1">
+                {AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId)?.nameKo || 'Milo'}
+              </span>
+              <div className="px-4 py-3 bg-brand-purple/10 border border-brand-purple/20 rounded-xl rounded-tl-sm flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-brand-purple/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 rounded-full bg-brand-purple/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 rounded-full bg-brand-purple/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

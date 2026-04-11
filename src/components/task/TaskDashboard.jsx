@@ -12,7 +12,7 @@ const VIEWS = [
   { id: 'board', label: '칸반', icon: LayoutGrid },
 ];
 
-export default function TaskDashboard() {
+export default function TaskDashboard({ pageTitle }) {
   const { tasks, updateTask, updateTaskStatus } = useTaskStore();
   const [view, setView] = useState('list');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -43,9 +43,12 @@ export default function TaskDashboard() {
   };
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1400px] mx-auto space-y-6 bg-[var(--bg-content)] rounded-[24px] ml-0 mr-4 my-4 lg:ml-0 lg:mr-6 lg:my-6">
+    <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
       {/* 헤더 */}
       <div>
+        {pageTitle && (
+          <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+        )}
         <p className="text-sm text-txt-secondary">
           회의에서 자동 생성된 태스크와 수동 태스크를 한 곳에서 관리하세요
         </p>
@@ -53,7 +56,7 @@ export default function TaskDashboard() {
 
       {/* ═══ 패널 1: 메트릭 ═══ */}
       <SectionPanel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
           <MetricCard label="전체 태스크" value={stats.total} icon={List} />
           <MetricCard label="진행 중" value={stats.inProgress} icon={Loader} />
           <MetricCard
@@ -69,8 +72,8 @@ export default function TaskDashboard() {
       {/* ═══ 패널 2: 필터 + 태스크 리스트/보드 ═══ */}
       <SectionPanel flush>
         {/* 툴바 — 패널 상단에 내장 */}
-        <div className="flex items-center justify-between px-6 lg:px-8 pt-5 pb-4 border-b border-border-divider flex-wrap gap-3">
-          <div className="flex gap-3">
+        <div className="flex items-center justify-between px-3 md:px-6 lg:px-8 pt-4 md:pt-5 pb-3 md:pb-4 border-b border-border-divider flex-wrap gap-2 md:gap-3">
+          <div className="flex gap-2 md:gap-3">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -113,7 +116,7 @@ export default function TaskDashboard() {
         </div>
 
         {/* 콘텐츠 */}
-        <div className="p-6 lg:p-8">
+        <div className="p-3 md:p-6 lg:p-8">
           {view === 'list' ? (
             filtered.length === 0 ? (
               <div className="text-center py-16 text-txt-muted text-sm">
