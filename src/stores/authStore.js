@@ -6,32 +6,20 @@ export const useAuthStore = create((set, get) => ({
   session: null,
   loading: true,
   error: null,
-  isPasswordRecovery: false, // 비밀번호 재설정 링크 클릭 후 복구 모드
+  isPasswordRecovery: false,
 
   init: async () => {
     set({ loading: true });
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      set({
-        session,
-        user: session?.user
-          ? {
-              id: session.user.id,
-              email: session.user.email,
-              name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
-            }
-          : null,
-        loading: false,
-      });
-
+      // ★ 리스너를 getSession() 보다 먼저 등록해야 PASSWORD_RECOVERY 이벤트를 놓치지 않음
       supabase.auth.onAuthStateChange((_event, newSession) => {
         if (_event === 'PASSWORD_RECOVERY') {
-          // 비밀번호 재설정 링크 클릭 — 새 비밀번호 입력 화면으로 전환
           set({ isPasswordRecovery: true, session: newSession });
           return;
         }
+        // INITIAL_SESSION은 아래 getSession()에서 직접 처리
+        if (_event === 'INITIAL_SESSION') return;
+
         set({
           session: newSession,
           isPasswordRecovery: false,
@@ -43,6 +31,23 @@ export const useAuthStore = create((set, get) => ({
               }
             : null,
         });
+      });
+
+      // 초기 세션 로드
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      set({
+        session,
+        user: session?.user
+          ? {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
+            }
+          : null,
+        loading: false,
       });
     } catch (err) {
       set({ error: err.message, loading: false });
@@ -83,11 +88,10 @@ export const useAuthStore = create((set, get) => ({
     return { error };
   },
 
-  // 새 비밀번호로 업데이트 (PASSWORD_RECOVERY 세션에서 호출)
+  // 새 비밀번호 업데이트 (PASSWORD_RECOVERY 세션에서 호출)
   updatePassword: async (newPassword) => {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (!error) {
-      // 업데이트 완료 후 세션 초기화 → 재로그인 유도
       set({ isPasswordRecovery: false });
       await supabase.auth.signOut();
       set({ session: null, user: null });
@@ -100,7 +104,6 @@ export const useAuthStore = create((set, get) => ({
     set({ session: null, user: null });
   },
 
-  // 데모 목적: Supabase 없이 로컬 세션으로 로그인 (개발 편의)
   mockSignIn: (email) => {
     const mockUser = {
       id: 'mock-' + Date.now(),

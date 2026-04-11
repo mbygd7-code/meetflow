@@ -1,8 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Input } from '@/components/ui';
+
+// URL 해시/쿼리에서 type=recovery 여부를 동기적으로 감지
+// — onAuthStateChange 이벤트보다 먼저 실행되므로 첫 렌더링부터 복구 폼을 표시할 수 있음
+function detectRecoveryFromUrl() {
+  try {
+    // 해시 방식: /login#access_token=...&type=recovery
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      const hashParams = new URLSearchParams(hash);
+      if (hashParams.get('type') === 'recovery') return true;
+    }
+    // 쿼리 방식: /login?type=recovery
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('type') === 'recovery') return true;
+  } catch {
+    // SSR 등 예외 상황 무시
+  }
+  return false;
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState('signin'); // signin | signup | reset
@@ -14,8 +33,26 @@ export default function LoginPage() {
   const [localError, setLocalError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { signIn, signUp, resetPassword, updatePassword, mockSignIn, isPasswordRecovery } = useAuthStore();
+
+  // ★ 첫 렌더링 시 URL을 동기적으로 확인 — 비동기 이벤트보다 앞서 복구 폼 결정
+  const [urlRecovery] = useState(detectRecoveryFromUrl);
+
+  const {
+    signIn, signUp, resetPassword, updatePassword, mockSignIn,
+    isPasswordRecovery, user, loading,
+  } = useAuthStore();
   const navigate = useNavigate();
+
+  // URL 감지 OR 스토어 이벤트 감지 중 하나라도 true면 복구 모드
+  const isRecovery = urlRecovery || isPasswordRecovery;
+
+  // 이미 로그인된 사용자가 /login 접근 시 대시보드로 이동
+  // (단, 비밀번호 복구 흐름 중이면 유지)
+  useEffect(() => {
+    if (!loading && user && !isRecovery) {
+      navigate('/', { replace: true });
+    }
+  }, [user, loading, isRecovery, navigate]);
 
   // ── 새 비밀번호 설정 (PASSWORD_RECOVERY 흐름) ──────────────────────
   const handleUpdatePassword = async (e) => {
@@ -121,7 +158,7 @@ export default function LoginPage() {
         <div className="bg-bg-secondary border border-border-subtle rounded-[8px] p-8 shadow-lg">
 
           {/* ── 비밀번호 재설정 완료 화면 (이메일 링크 클릭 후) ── */}
-          {isPasswordRecovery ? (
+          {isRecovery ? (
             <>
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-txt-primary mb-1">새 비밀번호 설정</h3>
