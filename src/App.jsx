@@ -12,6 +12,7 @@ import TasksPage from '@/pages/TasksPage';
 import SummariesPage from '@/pages/SummariesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuthStore();
@@ -77,6 +78,7 @@ export default function App() {
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+        <Route path="/admin/employee/:id" element={<AdminRoute><EmployeeDetailPage /></AdminRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

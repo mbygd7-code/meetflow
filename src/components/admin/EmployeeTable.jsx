@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { Avatar, Badge } from '@/components/ui';
 
 function getStatusBadge(rate) {
@@ -7,6 +9,8 @@ function getStatusBadge(rate) {
 }
 
 export default function EmployeeTable({ employees = [] }) {
+  const navigate = useNavigate();
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -18,18 +22,23 @@ export default function EmployeeTable({ employees = [] }) {
             <th className="pb-3 text-center">완료</th>
             <th className="pb-3 text-center">완수율</th>
             <th className="pb-3 text-center">상태</th>
+            <th className="pb-3 text-center w-20"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border-subtle">
           {employees.length === 0 ? (
             <tr>
-              <td colSpan={6} className="py-8 text-center text-txt-muted text-sm">
+              <td colSpan={7} className="py-8 text-center text-txt-muted text-sm">
                 직원 데이터가 없습니다
               </td>
             </tr>
           ) : (
             employees.map((emp) => (
-              <tr key={emp.user_id} className="hover:bg-bg-tertiary/50 transition-colors">
+              <tr
+                key={emp.user_id}
+                className="group hover:bg-bg-tertiary/50 transition-colors cursor-pointer"
+                onClick={() => navigate(`/admin/employee/${emp.user_id}`)}
+              >
                 <td className="py-3 pl-2">
                   <div className="flex items-center gap-2.5">
                     <Avatar
@@ -56,6 +65,17 @@ export default function EmployeeTable({ employees = [] }) {
                   </span>
                 </td>
                 <td className="py-3 text-center">{getStatusBadge(emp.completion_rate)}</td>
+                <td className="py-3 text-center">
+                  <button
+                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/20 rounded-md hover:bg-brand-purple/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/admin/employee/${emp.user_id}`);
+                    }}
+                  >
+                    상세보기 <ArrowRight size={11} />
+                  </button>
+                </td>
               </tr>
             ))
           )}
