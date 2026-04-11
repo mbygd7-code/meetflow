@@ -5,24 +5,38 @@ import { useAuthStore } from '@/stores/authStore';
 import { Button, Input } from '@/components/ui';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('signin'); // signin | signup
+  const [mode, setMode] = useState('signin'); // signin | signup | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [localError, setLocalError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { signIn, signUp, mockSignIn } = useAuthStore();
+  const { signIn, signUp, resetPassword, mockSignIn } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLocalError(null);
+    setSuccessMsg(null);
     setBusy(true);
     try {
+      if (mode === 'reset') {
+        if (!email.trim()) {
+          setLocalError('이메일을 입력해주세요.');
+          return;
+        }
+        const { error } = await resetPassword(email);
+        if (error) {
+          setLocalError(error.message);
+          return;
+        }
+        setSuccessMsg('비밀번호 재설정 링크가 이메일로 전송되었습니다. 메일함을 확인해주세요.');
+        return;
+      }
       if (mode === 'signin') {
         const { error } = await signIn(email, password);
         if (error) {
-          // Supabase 미설정 시 데모 모드로 우회
           if (!import.meta.env.VITE_SUPABASE_URL) {
             mockSignIn(email || 'demo@meetflow.ai');
             navigate('/');
@@ -43,7 +57,7 @@ export default function LoginPage() {
           setLocalError(error.message);
           return;
         }
-        setLocalError('가입 완료! 이메일을 확인한 뒤 로그인해주세요.');
+        setSuccessMsg('가입 완료! 이메일을 확인한 뒤 로그인해주세요.');
         setMode('signin');
       }
     } finally {
@@ -78,25 +92,35 @@ export default function LoginPage() {
 
         <div className="bg-bg-secondary border border-border-subtle rounded-[8px] p-8 shadow-lg">
           {/* 탭 */}
-          <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
-            {['signin', 'signup'].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setLocalError(null);
-                }}
-                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
-                  mode === m
-                    ? 'bg-bg-secondary text-txt-primary shadow-sm'
-                    : 'text-txt-secondary hover:text-txt-primary'
-                }`}
-              >
-                {m === 'signin' ? '로그인' : '회원가입'}
-              </button>
-            ))}
-          </div>
+          {mode !== 'reset' && (
+            <div className="flex gap-1 mb-6 p-1 bg-bg-tertiary rounded-md">
+              {['signin', 'signup'].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setMode(m);
+                    setLocalError(null);
+                    setSuccessMsg(null);
+                  }}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
+                    mode === m
+                      ? 'bg-bg-secondary text-txt-primary shadow-sm'
+                      : 'text-txt-secondary hover:text-txt-primary'
+                  }`}
+                >
+                  {m === 'signin' ? '로그인' : '회원가입'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {mode === 'reset' && (
+            <div className="mb-6">
+              <h3 className="text-base font-semibold text-txt-primary mb-1">비밀번호 찾기</h3>
+              <p className="text-xs text-txt-secondary">가입한 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
@@ -118,18 +142,36 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <Input
-              label="패스워드"
-              icon={Lock}
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            {mode !== 'reset' && (
+              <Input
+                label="패스워드"
+                icon={Lock}
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            )}
+            {mode === 'signin' && (
+              <div className="flex justify-end -mt-1">
+                <button
+                  type="button"
+                  onClick={() => { setMode('reset'); setLocalError(null); setSuccessMsg(null); }}
+                  className="text-xs text-txt-muted hover:text-brand-purple transition-colors"
+                >
+                  비밀번호를 잊으셨나요?
+                </button>
+              </div>
+            )}
             {localError && (
               <p className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-md px-3 py-2">
                 {localError}
+              </p>
+            )}
+            {successMsg && (
+              <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-md px-3 py-2">
+                {successMsg}
               </p>
             )}
             <Button
@@ -139,8 +181,17 @@ export default function LoginPage() {
               loading={busy}
               className="w-full"
             >
-              {mode === 'signin' ? '로그인' : '회원가입'}
+              {mode === 'signin' ? '로그인' : mode === 'signup' ? '회원가입' : '재설정 링크 보내기'}
             </Button>
+            {mode === 'reset' && (
+              <button
+                type="button"
+                onClick={() => { setMode('signin'); setLocalError(null); setSuccessMsg(null); }}
+                className="w-full text-center text-xs text-txt-muted hover:text-txt-primary transition-colors py-1"
+              >
+                ← 로그인으로 돌아가기
+              </button>
+            )}
           </form>
 
           <div className="relative my-5 text-center">
