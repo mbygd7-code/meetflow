@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/authStore';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
+// mock 회의 ID인지 확인 (UUID가 아닌 'mtg-' 패턴)
+const isMockMeetingId = (id) => !id || typeof id !== 'string' || id.startsWith('mtg-');
+
 // 데모 초기 메시지 생성기
 function makeMockSeed(meetingId) {
   const now = Date.now();
@@ -66,7 +69,7 @@ export function useRealtimeMessages(meetingId) {
 
     async function load() {
       setLoading(true);
-      if (!SUPABASE_ENABLED) {
+      if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) {
         const seed = makeMockSeed(meetingId);
         if (!cancelled) {
           setMessages(seed);
@@ -89,7 +92,7 @@ export function useRealtimeMessages(meetingId) {
     }
     load();
 
-    if (!SUPABASE_ENABLED) return () => (cancelled = true);
+    if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) return () => (cancelled = true);
 
     // Realtime 구독
     const channel = supabase
@@ -144,7 +147,7 @@ export function useRealtimeMessages(meetingId) {
         source,
       };
 
-      if (!SUPABASE_ENABLED) {
+      if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) {
         // AI 직원 정보 조회
         let aiUser = { id: 'milo', name: 'Milo', color: '#723CEB' };
         if (isAi && aiEmployee) {
