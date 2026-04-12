@@ -119,7 +119,8 @@ export function useMeeting() {
       // 2. Slack 통지 (Edge Function 호출)
       if (SUPABASE_ENABLED && team_id) {
         try {
-          await supabase.functions.invoke('slack-notify', {
+          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id);
+          const { data: slackRes, error: slackErr } = await supabase.functions.invoke('slack-notify', {
             body: {
               event: 'meeting_request',
               payload: {
@@ -135,8 +136,13 @@ export function useMeeting() {
               },
             },
           });
+          if (slackErr) {
+            console.error('[requestMeeting] Slack Edge Function 에러:', slackErr);
+          } else {
+            console.log('[requestMeeting] Slack 통지 응답:', slackRes);
+          }
         } catch (err) {
-          console.warn('[requestMeeting] Slack 통지 실패:', err);
+          console.error('[requestMeeting] Slack 통지 실패:', err);
         }
       }
 
