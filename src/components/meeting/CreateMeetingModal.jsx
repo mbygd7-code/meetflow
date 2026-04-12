@@ -219,11 +219,23 @@ export default function CreateMeetingModal({ open, onClose }) {
     setBusy(true);
     try {
       const cleaned = agendas.filter((a) => a.title.trim());
+      // 첨부 파일을 base64로 변환
+      const filePayloads = await Promise.all(
+        files.map(async (f) => {
+          const buf = await f.file.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), '')
+          );
+          return { name: f.name, type: f.type, size: f.size, base64 };
+        })
+      );
+
       await requestMeeting({
         title: title.trim(),
         team_id: selectedTeams[0] || null,
         agendas: cleaned,
         participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
+        files: filePayloads,
         scheduledDate,
         scheduledTime,
         duration,

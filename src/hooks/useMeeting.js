@@ -112,7 +112,7 @@ export function useMeeting() {
 
   // 회의 요청 — Slack 통지 + Google Calendar 연동
   const requestMeeting = useCallback(
-    async ({ title, team_id, agendas = [], participants = [], scheduledDate, scheduledTime, duration }) => {
+    async ({ title, team_id, agendas = [], participants = [], files = [], scheduledDate, scheduledTime, duration }) => {
       // 1. 회의 생성
       const meeting = await createMeeting({ title, team_id, agendas, participants });
 
@@ -133,6 +133,7 @@ export function useMeeting() {
                 scheduled_time: scheduledTime,
                 duration,
                 requested_by: user?.name || '사용자',
+                files: files.slice(0, 5),
               },
             },
           });

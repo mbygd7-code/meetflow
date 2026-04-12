@@ -25,6 +25,29 @@ async function postSlack(channel: string, payload: any) {
   });
 }
 
+async function uploadFileToSlack(channel: string, file: any, threadTs?: string) {
+  // base64 → binary
+  const binaryStr = atob(file.base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  const formData = new FormData();
+  formData.append('file', new Blob([bytes], { type: file.type }), file.name);
+  formData.append('channels', channel);
+  formData.append('filename', file.name);
+  formData.append('title', file.name);
+  if (threadTs) formData.append('thread_ts', threadTs);
+
+  const res = await fetch('https://slack.com/api/files.upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+    body: formData,
+  });
+  return res.json();
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -141,7 +164,10 @@ serve(async (req) => {
           ? `📅 ${payload.scheduled_date} ${payload.scheduled_time} (${payload.duration || 30}분)`
           : '📅 시간 미정';
 
-        await postSlack(reqTeam.slack_channel_id, {
+        const fileCount = (payload.files || []).length;
+        const fileNotice = fileCount > 0 ? `\n📎 첨부 파일 ${fileCount}개` : '';
+
+        const msgRes = await postSlack(reqTeam.slack_channel_id, {
           text: `📋 *${payload.requested_by}*님이 새 회의를 요청했어요`,
           blocks: [
             {
@@ -150,7 +176,7 @@ serve(async (req) => {
             },
             {
               type: 'section',
-              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}` },
+              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}${fileNotice}` },
             },
             ...(reqAgendas ? [{
               type: 'section',
@@ -164,6 +190,19 @@ serve(async (req) => {
             },
           ],
         });
+
+        // 첨부 파일 업로드 (메시지 스레드에 연결)
+        if (fileCount > 0) {
+          const msgJson = await msgRes.json();
+          const threadTs = msgJson?.ts;
+          for (const file of payload.files) {
+            try {
+              await uploadFileToSlack(reqTeam.slack_channel_id, file, threadTs);
+            } catch (fileErr) {
+              console.error('[slack-notify] 파일 업로드 실패:', file.name, fileErr);
+            }
+          }
+        }
         break;
       }
 
