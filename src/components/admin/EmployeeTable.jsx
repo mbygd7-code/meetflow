@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
 import { Avatar, Badge } from '@/components/ui';
 
 function getStatusBadge(rate) {
@@ -11,76 +10,59 @@ function getStatusBadge(rate) {
 export default function EmployeeTable({ employees = [] }) {
   const navigate = useNavigate();
 
+  if (employees.length === 0) {
+    return <p className="py-8 text-center text-txt-muted text-sm">직원 데이터가 없습니다</p>;
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-[11px] text-txt-muted uppercase tracking-wider">
-            <th className="pb-3 pl-2">직원</th>
-            <th className="pb-3 text-center">참여 회의</th>
-            <th className="pb-3 text-center">배정 태스크</th>
-            <th className="pb-3 text-center">완료</th>
-            <th className="pb-3 text-center">완수율</th>
-            <th className="pb-3 text-center">상태</th>
-            <th className="pb-3 text-center w-20"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border-subtle">
-          {employees.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="py-8 text-center text-txt-muted text-sm">
-                직원 데이터가 없습니다
-              </td>
-            </tr>
-          ) : (
-            employees.map((emp) => (
-              <tr
-                key={emp.user_id}
-                className="group hover:bg-bg-tertiary/50 transition-colors cursor-pointer"
-                onClick={() => navigate(`/admin/employee/${emp.user_id}`)}
-              >
-                <td className="py-3 pl-2">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar
-                      name={emp.user_name || 'U'}
-                      color={emp.avatar_color}
-                      size="sm"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-txt-primary">{emp.user_name}</p>
-                      <p className="text-[10px] text-txt-muted">{emp.user_email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3 text-center text-txt-secondary">{emp.meeting_count}</td>
-                <td className="py-3 text-center text-txt-secondary">{emp.total_tasks}</td>
-                <td className="py-3 text-center text-txt-secondary">{emp.done_tasks}</td>
-                <td className="py-3 text-center">
-                  <span className={`text-sm font-semibold ${
-                    emp.completion_rate >= 80 ? 'text-status-success' :
-                    emp.completion_rate >= 50 ? 'text-status-warning' :
-                    'text-status-error'
-                  }`}>
-                    {emp.completion_rate}%
-                  </span>
-                </td>
-                <td className="py-3 text-center">{getStatusBadge(emp.completion_rate)}</td>
-                <td className="py-3 text-center">
-                  <button
-                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/20 rounded-md hover:bg-brand-purple/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/admin/employee/${emp.user_id}`);
-                    }}
-                  >
-                    상세보기 <ArrowRight size={11} />
-                  </button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+    <div className="space-y-1.5">
+      {/* 헤더 */}
+      <div className="grid grid-cols-[1fr_72px_72px_48px_56px_72px] gap-2 px-3 pb-1 text-[11px] text-txt-muted uppercase tracking-wider">
+        <span>직원</span>
+        <span className="text-center">참여 회의</span>
+        <span className="text-center">배정 태스크</span>
+        <span className="text-center">완료</span>
+        <span className="text-center">완수율</span>
+        <span className="text-center">상태</span>
+      </div>
+
+      {/* 직원 행 */}
+      {employees.map((emp) => (
+        <div
+          key={emp.user_id}
+          className="grid grid-cols-[1fr_72px_72px_48px_56px_72px] gap-2 items-center px-3 py-2.5 rounded-lg transition-colors duration-200 cursor-pointer"
+          title="직원 상세 보기"
+          onClick={() => navigate(`/admin/employee/${emp.user_id}`)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--sidebar-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '';
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <Avatar
+              name={emp.user_name || 'U'}
+              color={emp.avatar_color}
+              size="sm"
+            />
+            <p className="text-sm font-medium text-txt-primary">{emp.user_name}</p>
+          </div>
+          <p className="text-center text-sm text-txt-secondary">{emp.meeting_count}</p>
+          <p className="text-center text-sm text-txt-secondary">{emp.total_tasks}</p>
+          <p className="text-center text-sm text-txt-secondary">{emp.done_tasks}</p>
+          <p className="text-center">
+            <span className={`text-sm font-semibold ${
+              emp.completion_rate >= 80 ? 'text-status-success' :
+              emp.completion_rate >= 50 ? 'text-status-warning' :
+              'text-status-error'
+            }`}>
+              {emp.completion_rate}%
+            </span>
+          </p>
+          <div className="text-center">{getStatusBadge(emp.completion_rate)}</div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { useToastStore } from '@/stores/toastStore';
 
 const ICONS = {

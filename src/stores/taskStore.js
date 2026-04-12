@@ -111,7 +111,5 @@ export const useTaskStore = create((set, get) => ({
     set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) })),
 
   // 필터 / 셀렉터
-  myTasks: (userId) => get().tasks.filter((t) => t.assignee_id === userId),
-
   getById: (id) => get().tasks.find((t) => t.id === id),
 }));

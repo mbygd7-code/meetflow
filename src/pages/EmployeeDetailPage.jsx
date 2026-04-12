@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Card, Avatar, Badge, SectionPanel, MetricCard } from '@/components/ui';
 import EvaluationReportModal from '@/components/admin/EvaluationReportModal';
+import { getOverallGrade, gradeToStyle } from '@/utils/gradeUtils';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 
@@ -19,33 +20,6 @@ function calcParticipationScore(msgCount, meetingCount) {
   if (avgMsg >= 3) return 60;
   if (avgMsg >= 1) return 40;
   return 20;
-}
-
-// ── 종합 등급 (8단계) ──
-function getOverallGrade(score) {
-  if (score >= 95) return { label: 'S', color: 'text-brand-purple', bg: 'bg-brand-purple/15' };
-  if (score >= 88) return { label: 'A+', color: 'text-status-success', bg: 'bg-status-success/15' };
-  if (score >= 80) return { label: 'A', color: 'text-status-success', bg: 'bg-status-success/15' };
-  if (score >= 70) return { label: 'B+', color: 'text-brand-orange', bg: 'bg-brand-orange/15' };
-  if (score >= 60) return { label: 'B', color: 'text-brand-orange', bg: 'bg-brand-orange/15' };
-  if (score >= 45) return { label: 'C', color: 'text-status-warning', bg: 'bg-status-warning/15' };
-  if (score >= 30) return { label: 'D', color: 'text-status-error', bg: 'bg-status-error/15' };
-  return { label: 'F', color: 'text-status-error', bg: 'bg-status-error/15' };
-}
-
-// ── 등급 문자열 → 스타일 ──
-function gradeToStyle(gradeLabel) {
-  const map = {
-    S: { color: 'text-brand-purple', bg: 'bg-brand-purple/15' },
-    'A+': { color: 'text-status-success', bg: 'bg-status-success/15' },
-    A: { color: 'text-status-success', bg: 'bg-status-success/15' },
-    'B+': { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
-    B: { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
-    C: { color: 'text-status-warning', bg: 'bg-status-warning/15' },
-    D: { color: 'text-status-error', bg: 'bg-status-error/15' },
-    F: { color: 'text-status-error', bg: 'bg-status-error/15' },
-  };
-  return map[gradeLabel] || map.F;
 }
 
 // ── 평가 항목 바 ──
@@ -244,7 +218,9 @@ export default function EmployeeDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-10 h-10 rounded-full bg-gradient-brand shadow-glow animate-pulse" />
+        <div className="loader-symbol w-12 h-12 rounded-xl bg-gradient-brand shadow-glow flex items-center justify-center">
+          <Sparkles size={22} className="text-white" strokeWidth={2.5} />
+        </div>
       </div>
     );
   }

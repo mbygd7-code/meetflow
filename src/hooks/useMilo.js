@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { analyzeMilo } from '@/lib/claude';
 import { MILO_INTERVENTION_TRIGGERS } from '@/utils/miloPrompts';
-import { MILO_PRESETS } from '@/lib/constants';
+import { MILO_PRESETS, EMPLOYEE_NAME_MAP } from '@/lib/constants';
 import { useMiloStore } from '@/stores/miloStore';
 import { useAiTeamStore, AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
@@ -124,14 +124,6 @@ export function useMilo({ messages, agenda, onRespond, onThinking }) {
         let specialists = routedEmployees.filter((id) => id !== 'drucker');
 
         // AI 직원 직접 멘션 시 — 멘션된 직원 식별
-        const EMPLOYEE_NAME_MAP = {
-          '노먼': 'norman', 'norman': 'norman',
-          '코틀러': 'kotler', 'kotler': 'kotler',
-          '프뢰벨': 'froebel', 'froebel': 'froebel',
-          '간트': 'gantt', 'gantt': 'gantt',
-          '코르프': 'korff', 'korff': 'korff',
-          '데밍': 'deming', 'deming': 'deming',
-        };
         let directSpecialist = null;
         if (directEmployeeMention) {
           const match = lastMsg.content.match(MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION);

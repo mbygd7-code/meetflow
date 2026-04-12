@@ -28,21 +28,6 @@ function MarqueeTicker({ segments }) {
         <span className="inline-flex items-center pr-[120px]">{content}</span>
         <span className="inline-flex items-center pr-[120px]">{content}</span>
       </div>
-
-      <style>{`
-        .marquee-scroll {
-          display: inline-flex;
-          align-items: center;
-          animation: marquee 40s linear infinite;
-        }
-        .marquee-scroll:hover {
-          animation-play-state: paused;
-        }
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   );
 }

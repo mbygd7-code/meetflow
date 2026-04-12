@@ -3,21 +3,7 @@ import {
   ThumbsUp, ThumbsDown, Minus, Star, AlertTriangle,
 } from 'lucide-react';
 import { Modal, Badge } from '@/components/ui';
-
-// ── 등급 스타일 ──
-function gradeStyle(grade) {
-  const map = {
-    S: { color: 'text-brand-purple', bg: 'bg-brand-purple/15' },
-    'A+': { color: 'text-status-success', bg: 'bg-status-success/15' },
-    A: { color: 'text-status-success', bg: 'bg-status-success/15' },
-    'B+': { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
-    B: { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
-    C: { color: 'text-status-warning', bg: 'bg-status-warning/15' },
-    D: { color: 'text-status-error', bg: 'bg-status-error/15' },
-    F: { color: 'text-status-error', bg: 'bg-status-error/15' },
-  };
-  return map[grade] || map.F;
-}
+import { gradeToStyle } from '@/utils/gradeUtils';
 
 // ── 미니 프로그레스 바 ──
 function MiniBar({ label, value, icon: Icon }) {
@@ -65,7 +51,7 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
     evidence = [], strengths = [], improvements = [], month,
     meeting_count, message_count, task_count } = evaluation;
 
-  const gs = gradeStyle(grade);
+  const gs = gradeToStyle(grade);
 
   return (
     <Modal open={open} onClose={onClose} title="AI 세부 평가 리포트" size="xl">

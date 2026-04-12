@@ -182,23 +182,6 @@ ${transcript}
 응답이 필요 없다면 should_respond=false로 응답하라.`;
 }
 
-export function MILO_DECISION_PROMPT(messages, agenda) {
-  const transcript = messages
-    .map((m) => `[${m.user?.name || 'Milo'}] ${m.content}`)
-    .join('\n');
-
-  return `## 어젠다
-${agenda?.title}
-
-## 전체 대화
-${transcript}
-
-## 과제
-이 대화에서 도달한 결정사항과 후속 태스크를 추출하라.
-suggested_tasks 배열에 {title, priority} 형태로 제안 태스크를 넣어라.
-결정이 합의된 순간이라면 "합의 내용을 정리해드릴게요" 형식의 요약을 response_text에 담아라.`;
-}
-
 export function MILO_SUMMARY_PROMPT(allMessages, agendas) {
   const transcript = allMessages
     .map((m) => `[${m.user?.name || (m.is_ai ? 'Milo' : '참가자')}] ${m.content}`)

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 
@@ -14,39 +15,22 @@ import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 
-function ProtectedRoute({ children }) {
+function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
   const location = useLocation();
 
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-bg-primary">
-        <div className="w-10 h-10 rounded-full bg-gradient-brand shadow-glow animate-pulse" />
+        <div className="loader-symbol w-12 h-12 rounded-xl bg-gradient-brand shadow-glow flex items-center justify-center">
+          <Sparkles size={22} className="text-white" strokeWidth={2.5} />
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
-  return children;
-}
-
-function AdminRoute({ children }) {
-  const { user, loading } = useAuthStore();
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-bg-primary">
-        <div className="w-10 h-10 rounded-full bg-gradient-brand shadow-glow animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!user || user.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (requireAdmin && user.role !== 'admin') return <Navigate to="/" replace />;
 
   return children;
 }
@@ -65,9 +49,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route
         element={
-          <ProtectedRoute>
+          <RouteGuard>
             <Layout />
-          </ProtectedRoute>
+          </RouteGuard>
         }
       >
         <Route path="/" element={<DashboardPage />} />
@@ -77,8 +61,8 @@ export default function App() {
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-        <Route path="/admin/employee/:id" element={<AdminRoute><EmployeeDetailPage /></AdminRoute>} />
+        <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
+        <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

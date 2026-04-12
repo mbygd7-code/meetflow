@@ -81,16 +81,17 @@ export default function Sidebar({ mobile = false, onClose }) {
               background: isActive ? 'var(--sidebar-active-bg)' : undefined,
             })}
             onMouseEnter={(e) => {
-              if (!e.currentTarget.classList.contains('active')) {
+              const active = e.currentTarget.getAttribute('aria-current') === 'page';
+              if (!active) {
                 e.currentTarget.style.background = 'var(--sidebar-hover)';
                 e.currentTarget.style.color = 'var(--sidebar-text)';
               }
             }}
             onMouseLeave={(e) => {
-              if (!e.currentTarget.classList.contains('active')) {
+              const active = e.currentTarget.getAttribute('aria-current') === 'page';
+              if (!active) {
                 e.currentTarget.style.background = '';
-                const isActive = e.currentTarget.getAttribute('aria-current') === 'page';
-                if (!isActive) e.currentTarget.style.color = 'var(--sidebar-text-muted)';
+                e.currentTarget.style.color = 'var(--sidebar-text-muted)';
               }
             }}
           >

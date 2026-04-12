@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight } from 'lucide-react';
+import { Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight, Sparkles } from 'lucide-react';
 import { Card, MetricCard, Badge, SectionPanel } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -8,23 +8,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import EmployeeTable from '@/components/admin/EmployeeTable';
 import TeamOverview from '@/components/admin/TeamOverview';
 import { format, parseISO } from 'date-fns';
-
-function WeeklyChart({ data }) {
-  const max = Math.max(...data.map((d) => d.value), 1);
-  return (
-    <div className="flex items-end justify-between gap-3 h-28 pt-2">
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-2">
-          <div
-            className="w-full rounded-t-md bg-gradient-to-t from-brand-purple-deep via-brand-purple to-brand-orange transition-all hover:opacity-80"
-            style={{ height: `${(d.value / max) * 100}%`, minHeight: '4px' }}
-          />
-          <span className="text-[10px] text-txt-muted">{d.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
+import WeeklyChart from '@/components/ui/WeeklyChart';
 
 export default function AdminDashboardPage() {
   const { pageTitle } = useOutletContext() || {};
@@ -133,7 +117,9 @@ export default function AdminDashboardPage() {
           <div className="bg-bg-tertiary rounded-[7px] p-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 rounded-full bg-gradient-brand shadow-glow animate-pulse" />
+                <div className="loader-symbol w-10 h-10 rounded-xl bg-gradient-brand shadow-glow flex items-center justify-center">
+                  <Sparkles size={18} className="text-white" strokeWidth={2.5} />
+                </div>
               </div>
             ) : (
               <EmployeeTable employees={employees} />

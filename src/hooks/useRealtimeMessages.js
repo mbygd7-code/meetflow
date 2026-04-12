@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { AI_EMPLOYEE_MAP } from '@/lib/constants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -151,15 +152,6 @@ export function useRealtimeMessages(meetingId) {
         // AI 직원 정보 조회
         let aiUser = { id: 'milo', name: 'Milo', color: '#723CEB' };
         if (isAi && aiEmployee) {
-          const AI_EMPLOYEE_MAP = {
-            drucker: { id: 'milo', name: 'Milo', color: '#723CEB' },
-            kotler: { id: 'kotler', name: 'Kotler', color: '#FF902F' },
-            froebel: { id: 'froebel', name: 'Froebel', color: '#34D399' },
-            gantt: { id: 'gantt', name: 'Gantt', color: '#3B82F6' },
-            norman: { id: 'norman', name: 'Norman', color: '#EC4899' },
-            korff: { id: 'korff', name: 'Korff', color: '#F59E0B' },
-            deming: { id: 'deming', name: 'Deming', color: '#8B5CF6' },
-          };
           aiUser = AI_EMPLOYEE_MAP[aiEmployee] || aiUser;
         }
 

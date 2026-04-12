@@ -32,13 +32,21 @@ export const MESSAGE_SOURCE = {
   NOTION: 'notion',
 };
 
-export const AVATAR_COLORS = [
-  '#723CEB',
-  '#FF902F',
-  '#FFEF63',
-  '#34D399',
-  '#EF4444',
-  '#4C11CE',
-  '#F472B6',
-  '#38BDF8',
-];
+export const AI_EMPLOYEE_MAP = {
+  drucker: { id: 'milo', name: 'Milo', color: '#723CEB' },
+  kotler: { id: 'kotler', name: 'Kotler', color: '#FF902F' },
+  froebel: { id: 'froebel', name: 'Froebel', color: '#34D399' },
+  gantt: { id: 'gantt', name: 'Gantt', color: '#3B82F6' },
+  norman: { id: 'norman', name: 'Norman', color: '#EC4899' },
+  korff: { id: 'korff', name: 'Korff', color: '#F59E0B' },
+  deming: { id: 'deming', name: 'Deming', color: '#8B5CF6' },
+};
+
+export const EMPLOYEE_NAME_MAP = {
+  '노먼': 'norman', norman: 'norman',
+  '코틀러': 'kotler', kotler: 'kotler',
+  '프뢰벨': 'froebel', froebel: 'froebel',
+  '간트': 'gantt', gantt: 'gantt',
+  '코르프': 'korff', korff: 'korff',
+  '데밍': 'deming', deming: 'deming',
+};
