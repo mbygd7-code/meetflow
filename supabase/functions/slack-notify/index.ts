@@ -64,7 +64,6 @@ async function uploadFileToSlack(channel: string, file: any, threadTs?: string) 
     body: JSON.stringify({
       files: [{ id: urlData.file_id, title: file.name }],
       channel_id: channel,
-      thread_ts: threadTs || undefined,
     }),
   });
   return completeRes.json();
