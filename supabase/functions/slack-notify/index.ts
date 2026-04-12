@@ -153,8 +153,8 @@ serve(async (req) => {
               text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}` },
             },
             ...(reqAgendas ? [{
-              type: 'section' as const,
-              text: { type: 'mrkdwn' as const, text: `*어젠다*\n${reqAgendas}` },
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*어젠다*\n${reqAgendas}` },
             }] : []),
             {
               type: 'context',
