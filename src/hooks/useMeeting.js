@@ -119,7 +119,7 @@ export function useMeeting() {
       // 2. Slack 통지 (Edge Function 호출)
       if (SUPABASE_ENABLED && team_id) {
         try {
-          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id);
+          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id, '파일 수:', files.length, '파일명:', files.map(f => f.name));
           const { data: slackRes, error: slackErr } = await supabase.functions.invoke('slack-notify', {
             body: {
               event: 'meeting_request',
