@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, CheckCircle2, MessageSquare,
   Clock, Target, TrendingUp, Award, FileText, AlertCircle,
+  MessageCircle, Sparkles, History,
 } from 'lucide-react';
 import { Card, Avatar, Badge, SectionPanel, MetricCard } from '@/components/ui';
+import EvaluationReportModal from '@/components/admin/EvaluationReportModal';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 
@@ -19,14 +21,31 @@ function calcParticipationScore(msgCount, meetingCount) {
   return 20;
 }
 
-// ── 종합 등급 ──
-function getOverallGrade(completion, participation) {
-  const avg = (completion + participation) / 2;
-  if (avg >= 85) return { label: 'S', color: 'text-brand-purple', bg: 'bg-brand-purple/15' };
-  if (avg >= 70) return { label: 'A', color: 'text-status-success', bg: 'bg-status-success/15' };
-  if (avg >= 50) return { label: 'B', color: 'text-brand-orange', bg: 'bg-brand-orange/15' };
-  if (avg >= 30) return { label: 'C', color: 'text-status-warning', bg: 'bg-status-warning/15' };
-  return { label: 'D', color: 'text-status-error', bg: 'bg-status-error/15' };
+// ── 종합 등급 (8단계) ──
+function getOverallGrade(score) {
+  if (score >= 95) return { label: 'S', color: 'text-brand-purple', bg: 'bg-brand-purple/15' };
+  if (score >= 88) return { label: 'A+', color: 'text-status-success', bg: 'bg-status-success/15' };
+  if (score >= 80) return { label: 'A', color: 'text-status-success', bg: 'bg-status-success/15' };
+  if (score >= 70) return { label: 'B+', color: 'text-brand-orange', bg: 'bg-brand-orange/15' };
+  if (score >= 60) return { label: 'B', color: 'text-brand-orange', bg: 'bg-brand-orange/15' };
+  if (score >= 45) return { label: 'C', color: 'text-status-warning', bg: 'bg-status-warning/15' };
+  if (score >= 30) return { label: 'D', color: 'text-status-error', bg: 'bg-status-error/15' };
+  return { label: 'F', color: 'text-status-error', bg: 'bg-status-error/15' };
+}
+
+// ── 등급 문자열 → 스타일 ──
+function gradeToStyle(gradeLabel) {
+  const map = {
+    S: { color: 'text-brand-purple', bg: 'bg-brand-purple/15' },
+    'A+': { color: 'text-status-success', bg: 'bg-status-success/15' },
+    A: { color: 'text-status-success', bg: 'bg-status-success/15' },
+    'B+': { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
+    B: { color: 'text-brand-orange', bg: 'bg-brand-orange/15' },
+    C: { color: 'text-status-warning', bg: 'bg-status-warning/15' },
+    D: { color: 'text-status-error', bg: 'bg-status-error/15' },
+    F: { color: 'text-status-error', bg: 'bg-status-error/15' },
+  };
+  return map[gradeLabel] || map.F;
 }
 
 // ── 평가 항목 바 ──
@@ -62,6 +81,12 @@ export default function EmployeeDetailPage() {
   const [tasks, setTasks] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // AI 평가 관련
+  const [evaluation, setEvaluation] = useState(null);
+  const [evalHistory, setEvalHistory] = useState([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -106,6 +131,17 @@ export default function EmployeeDetailPage() {
           .eq('assignee_id', id)
           .order('created_at', { ascending: false });
         setTasks(taskData || []);
+
+        // 5) AI 평가 이력
+        const { data: evalData } = await supabase
+          .from('employee_evaluations')
+          .select('*')
+          .eq('user_id', id)
+          .order('month', { ascending: false });
+        setEvalHistory(evalData || []);
+        if (evalData && evalData.length > 0) {
+          setEvaluation(evalData[0]);
+        }
       } catch (err) {
         console.error('[EmployeeDetail]', err);
       } finally {
@@ -114,6 +150,31 @@ export default function EmployeeDetailPage() {
     }
     fetchAll();
   }, [id]);
+
+  // ── AI 리포트 생성 ──
+  async function handleGenerateReport() {
+    setReportLoading(true);
+    try {
+      const month = format(new Date(), 'yyyy-MM');
+      const { data, error } = await supabase.functions.invoke('evaluate-employee', {
+        body: { userId: id, month },
+      });
+      if (error) throw error;
+      setEvaluation(data);
+      setReportOpen(true);
+      // 이력 갱신
+      const { data: updated } = await supabase
+        .from('employee_evaluations')
+        .select('*')
+        .eq('user_id', id)
+        .order('month', { ascending: false });
+      setEvalHistory(updated || []);
+    } catch (err) {
+      console.error('[AI Report]', err);
+    } finally {
+      setReportLoading(false);
+    }
+  }
 
   // ── 통계 계산 ──
   const stats = useMemo(() => {
@@ -131,23 +192,39 @@ export default function EmployeeDetailPage() {
     ).length;
     const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
-    // 참여도 점수
-    const participationScore = calcParticipationScore(totalMessages, totalMeetings);
+    // AI 평가 존재 시 AI 점수 사용, 없으면 프론트 계산
+    const hasAI = !!evaluation?.scores?.participation;
 
-    // 태스크 완수율 점수
-    const completionScore = completionRate;
+    const participationScore = hasAI ? evaluation.scores.participation : calcParticipationScore(totalMessages, totalMeetings);
+    const completionScore = hasAI ? evaluation.scores.task_completion : completionRate;
+    const leadershipScore = hasAI ? evaluation.scores.leadership : Math.min(
+      Math.round((totalMeetings * 15 + totalMessages * 2) / 2), 100,
+    );
+    const proactiveScore = hasAI ? evaluation.scores.proactivity : Math.min(avgMsgPerMeeting * 12, 100);
 
-    // 리더십 점수 (회의 참여 빈도 + 발언량 기반)
-    const leadershipScore = Math.min(
-      Math.round((totalMeetings * 15 + totalMessages * 2) / 2),
-      100,
+    // 발언 태도 점수
+    const speechAttitudeScore = hasAI
+      ? evaluation.scores.speech_attitude
+      : Math.min(Math.round(
+          (totalMessages > 0
+            ? (messages.reduce((sum, m) => sum + m.content.length, 0) / totalMessages > 20 ? 55 : 30)
+            : 0) + totalMeetings * 5
+        ), 100);
+
+    // 가중 평균 (5지표)
+    const overallScore = (
+      participationScore * 0.2 +
+      completionScore * 0.25 +
+      leadershipScore * 0.2 +
+      proactiveScore * 0.15 +
+      speechAttitudeScore * 0.2
     );
 
-    // 적극성 점수 (평균 발언수 기반)
-    const proactiveScore = Math.min(avgMsgPerMeeting * 12, 100);
-
-    // 종합 등급
-    const grade = getOverallGrade(completionScore, participationScore);
+    // 등급
+    const grade = hasAI
+      ? gradeToStyle(evaluation.grade)
+      : getOverallGrade(overallScore);
+    const gradeLabel = hasAI ? evaluation.grade : grade.label;
 
     // 회의별 발언 수
     const msgByMeeting = {};
@@ -158,10 +235,11 @@ export default function EmployeeDetailPage() {
     return {
       totalMeetings, completedMeetings, totalMessages, avgMsgPerMeeting,
       totalTasks, doneTasks, inProgressTasks, todoTasks, overdueTasks, completionRate,
-      participationScore, completionScore, leadershipScore, proactiveScore, grade,
+      participationScore, completionScore, leadershipScore, proactiveScore, speechAttitudeScore,
+      overallScore, grade, gradeLabel, hasAI,
       msgByMeeting,
     };
-  }, [meetings, tasks, messages]);
+  }, [meetings, tasks, messages, evaluation]);
 
   if (loading) {
     return (
@@ -207,6 +285,9 @@ export default function EmployeeDetailPage() {
                 <Badge variant={profile.role === 'admin' ? 'info' : 'outline'}>
                   {profile.role === 'admin' ? '관리자' : '멤버'}
                 </Badge>
+                {stats.hasAI && (
+                  <Badge variant="info">AI 평가</Badge>
+                )}
               </div>
               <p className="text-sm text-txt-muted">{profile.email}</p>
               <p className="text-[11px] text-txt-muted mt-0.5">
@@ -216,7 +297,7 @@ export default function EmployeeDetailPage() {
 
             {/* 종합 등급 */}
             <div className={`w-16 h-16 rounded-xl ${stats.grade.bg} flex items-center justify-center shrink-0`}>
-              <span className={`text-3xl font-bold ${stats.grade.color}`}>{stats.grade.label}</span>
+              <span className={`text-2xl font-bold ${stats.grade.color}`}>{stats.gradeLabel}</span>
             </div>
           </div>
         </div>
@@ -237,14 +318,28 @@ export default function EmployeeDetailPage() {
         </SectionPanel>
 
         {/* ═══ 섹션 2: 종합 평가 ═══ */}
-        <SectionPanel title="종합 평가" subtitle="참여도·완수율·리더십·적극성 기반">
+        <SectionPanel
+          title="종합 평가"
+          subtitle="참여도·완수율·리더십·적극성·발언 태도 기반"
+          action={
+            <button
+              onClick={handleGenerateReport}
+              disabled={reportLoading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              <Sparkles size={13} />
+              {reportLoading ? 'AI 분석 중...' : '세부 리포트'}
+            </button>
+          }
+        >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* 평가 바 차트 */}
+            {/* 평가 바 차트 (5개) */}
             <div className="bg-bg-tertiary rounded-[7px] p-5 space-y-4">
               <RatingBar label="참여도 (회의 참석 + 발언)" icon={User} value={stats.participationScore} />
               <RatingBar label="태스크 완수율" icon={Target} value={stats.completionScore} />
               <RatingBar label="리더십 (기여도)" icon={Award} value={stats.leadershipScore} />
               <RatingBar label="적극성 (발언 빈도)" icon={TrendingUp} value={stats.proactiveScore} />
+              <RatingBar label="발언 태도 (건설성·전문성·기여도)" icon={MessageCircle} value={stats.speechAttitudeScore} />
             </div>
 
             {/* 태스크 현황 */}
@@ -272,7 +367,52 @@ export default function EmployeeDetailPage() {
           </div>
         </SectionPanel>
 
-        {/* ═══ 섹션 3: 회의 참여 이력 ═══ */}
+        {/* ═══ 섹션 3: 월별 AI 평가 이력 ═══ */}
+        <SectionPanel
+          title="월별 AI 평가 이력"
+          subtitle={`총 ${evalHistory.length}건`}
+        >
+          {evalHistory.length === 0 ? (
+            <div className="text-center py-8">
+              <History size={32} className="text-txt-muted mx-auto mb-2" />
+              <p className="text-sm text-txt-muted">아직 AI 평가 기록이 없습니다</p>
+              <p className="text-[11px] text-txt-muted mt-1">위의 "세부 리포트" 버튼으로 첫 평가를 생성하세요</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {evalHistory.map((ev) => {
+                const gs = gradeToStyle(ev.grade);
+                return (
+                  <Card
+                    key={ev.id}
+                    className="!p-3.5 cursor-pointer"
+                    onClick={() => { setEvaluation(ev); setReportOpen(true); }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-lg ${gs.bg} flex items-center justify-center shrink-0`}>
+                        <span className={`text-lg font-bold ${gs.color}`}>{ev.grade}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-txt-primary">{ev.month} 평가</p>
+                        <p className="text-[11px] text-txt-muted">
+                          회의 {ev.meeting_count}건 · 발언 {ev.message_count}건 · 태스크 {ev.task_count}건
+                        </p>
+                      </div>
+                      <Badge variant={
+                        ev.grade === 'S' || ev.grade.startsWith('A') ? 'success' :
+                        ev.grade.startsWith('B') ? 'warning' : 'danger'
+                      }>
+                        종합 {Math.round(ev.overall_score)}점
+                      </Badge>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </SectionPanel>
+
+        {/* ═══ 섹션 4: 회의 참여 이력 ═══ */}
         <SectionPanel title="회의 참여 이력" subtitle={`총 ${stats.totalMeetings}건`}>
           {meetings.length === 0 ? (
             <p className="text-sm text-txt-muted text-center py-8">참여한 회의가 없습니다</p>
@@ -313,7 +453,7 @@ export default function EmployeeDetailPage() {
           )}
         </SectionPanel>
 
-        {/* ═══ 섹션 4: 배정 태스크 목록 ═══ */}
+        {/* ═══ 섹션 5: 배정 태스크 목록 ═══ */}
         <SectionPanel title="배정 태스크" subtitle={`총 ${stats.totalTasks}건 · 완료 ${stats.doneTasks}건`}>
           {tasks.length === 0 ? (
             <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
@@ -375,6 +515,14 @@ export default function EmployeeDetailPage() {
         </SectionPanel>
 
       </div>
+
+      {/* ── AI 리포트 모달 ── */}
+      <EvaluationReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        evaluation={evaluation}
+        employeeName={profile?.name}
+      />
     </div>
   );
 }
