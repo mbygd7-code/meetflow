@@ -195,9 +195,14 @@ serve(async (req) => {
         if (fileCount > 0) {
           const msgJson = await msgRes.json();
           const threadTs = msgJson?.ts;
+          console.log('[slack-notify] 메시지 응답:', JSON.stringify(msgJson));
+          console.log('[slack-notify] threadTs:', threadTs);
+          console.log('[slack-notify] 파일 개수:', payload.files.length);
           for (const file of payload.files) {
             try {
-              await uploadFileToSlack(reqTeam.slack_channel_id, file, threadTs);
+              console.log('[slack-notify] 파일 업로드 시작:', file.name, 'base64 길이:', file.base64?.length);
+              const uploadResult = await uploadFileToSlack(reqTeam.slack_channel_id, file, threadTs);
+              console.log('[slack-notify] 파일 업로드 결과:', JSON.stringify(uploadResult));
             } catch (fileErr) {
               console.error('[slack-notify] 파일 업로드 실패:', file.name, fileErr);
             }
