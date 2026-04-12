@@ -8,7 +8,7 @@ import { useToastStore } from '@/stores/toastStore';
 const TEAMS = [
   { id: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7', name: '프로덕트 팀' },
   { id: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b', name: '디자인 팀' },
-  { id: 'team-3', name: '엔지니어링 팀' },
+  { id: 'e7a1b2c3-0000-4000-a000-000000000003', name: '엔지니어링 팀' },
 ];
 
 const ALL_MEMBERS = [
@@ -17,9 +17,9 @@ const ALL_MEMBERS = [
   { id: 'u3', name: '이도윤', color: '#38BDF8', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
   { id: 'u4', name: '최하린', color: '#F472B6', team: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b' },
   { id: 'u5', name: '정민수', color: '#A78BFA', team: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b' },
-  { id: 'u6', name: '한소율', color: '#FBBF24', team: 'team-3' },
-  { id: 'u7', name: '오재현', color: '#F87171', team: 'team-3' },
-  { id: 'u8', name: '윤서아', color: '#2DD4BF', team: 'team-3' },
+  { id: 'u6', name: '한소율', color: '#FBBF24', team: 'e7a1b2c3-0000-4000-a000-000000000003' },
+  { id: 'u7', name: '오재현', color: '#F87171', team: 'e7a1b2c3-0000-4000-a000-000000000003' },
+  { id: 'u8', name: '윤서아', color: '#2DD4BF', team: 'e7a1b2c3-0000-4000-a000-000000000003' },
 ];
 
 const SUGGESTED_TITLES = [
