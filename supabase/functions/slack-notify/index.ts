@@ -33,19 +33,41 @@ async function uploadFileToSlack(channel: string, file: any, threadTs?: string) 
     bytes[i] = binaryStr.charCodeAt(i);
   }
 
-  const formData = new FormData();
-  formData.append('file', new Blob([bytes], { type: file.type }), file.name);
-  formData.append('channels', channel);
-  formData.append('filename', file.name);
-  formData.append('title', file.name);
-  if (threadTs) formData.append('thread_ts', threadTs);
-
-  const res = await fetch('https://slack.com/api/files.upload', {
+  // Step 1: 업로드 URL 요청
+  const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
-    body: formData,
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      filename: file.name,
+      length: String(bytes.length),
+    }),
   });
-  return res.json();
+  const urlData = await urlRes.json();
+  if (!urlData.ok) return urlData;
+
+  // Step 2: 파일 바이너리 업로드
+  await fetch(urlData.upload_url, {
+    method: 'POST',
+    body: bytes,
+  });
+
+  // Step 3: 업로드 완료 + 채널에 공유
+  const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      files: [{ id: urlData.file_id, title: file.name }],
+      channel_id: channel,
+      thread_ts: threadTs || undefined,
+    }),
+  });
+  return completeRes.json();
 }
 
 serve(async (req) => {
