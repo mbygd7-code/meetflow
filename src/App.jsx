@@ -3,6 +3,8 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { useMeetingStore } from '@/stores/meetingStore';
+import { useTaskStore } from '@/stores/taskStore';
 
 import Layout from '@/components/layout/Layout';
 import LoginPage from '@/pages/LoginPage';
@@ -14,6 +16,7 @@ import SummariesPage from '@/pages/SummariesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
+import TeamAnalyticsPage from '@/pages/TeamAnalyticsPage';
 
 function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
@@ -38,11 +41,21 @@ function RouteGuard({ children, requireAdmin = false }) {
 export default function App() {
   const init = useAuthStore((s) => s.init);
   const initTheme = useThemeStore((s) => s.init);
+  const initMeetings = useMeetingStore((s) => s.init);
+  const initTasks = useTaskStore((s) => s.init);
+  const cleanupMeetings = useMeetingStore((s) => s.cleanup);
+  const cleanupTasks = useTaskStore((s) => s.cleanup);
 
   useEffect(() => {
     init();
     initTheme();
-  }, [init, initTheme]);
+    initMeetings();
+    initTasks();
+    return () => {
+      cleanupMeetings();
+      cleanupTasks();
+    };
+  }, [init, initTheme, initMeetings, initTasks, cleanupMeetings, cleanupTasks]);
 
   return (
     <Routes>
@@ -61,6 +74,7 @@ export default function App() {
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/analytics" element={<RouteGuard requireAdmin><TeamAnalyticsPage /></RouteGuard>} />
         <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
         <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />
       </Route>

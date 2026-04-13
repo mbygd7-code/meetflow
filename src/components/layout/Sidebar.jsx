@@ -6,6 +6,7 @@ import {
   FileText,
   Settings,
   Shield,
+  BarChart3,
   LogOut,
   X,
   Sparkles,
@@ -16,7 +17,10 @@ import { useAuthStore } from '@/stores/authStore';
 function getNavItems(isAdmin) {
   const items = [
     { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
-    ...(isAdmin ? [{ to: '/admin', label: '관리자', icon: Shield }] : []),
+    ...(isAdmin ? [
+      { to: '/admin', label: '관리자', icon: Shield },
+      { to: '/analytics', label: '팀 분석', icon: BarChart3 },
+    ] : []),
     { to: '/meetings', label: '회의', icon: MessageSquare },
     { to: '/tasks', label: '태스크', icon: CheckSquare },
     { to: '/summaries', label: '회의록', icon: FileText },

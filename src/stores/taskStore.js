@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
+
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 // 데모 태스크
 const MOCK_TASKS = [
@@ -130,13 +133,64 @@ const MOCK_TASKS = [
   },
 ];
 
+let realtimeChannel = null;
+
 export const useTaskStore = create((set, get) => ({
-  tasks: MOCK_TASKS,
+  tasks: SUPABASE_ENABLED ? [] : MOCK_TASKS,
   loading: false,
+
+  // ── 초기 로드 + Realtime 구독 ──
+  init: async () => {
+    if (!SUPABASE_ENABLED) return;
+
+    set({ loading: true });
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      set({ tasks: data || [], loading: false });
+    } catch (err) {
+      console.error('[taskStore] init error:', err);
+      set({ loading: false });
+    }
+
+    // Realtime 구독
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+    realtimeChannel = supabase
+      .channel('tasks-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tasks' }, (payload) => {
+        console.log('[taskStore] INSERT:', payload.new.id);
+        get().addTask(payload.new);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+        console.log('[taskStore] UPDATE:', payload.new.id);
+        get().updateTask(payload.new.id, payload.new);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
+        console.log('[taskStore] DELETE:', payload.old.id);
+        get().removeTask(payload.old.id);
+      })
+      .subscribe();
+  },
+
+  // ── 구독 해제 ──
+  cleanup: () => {
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  },
 
   setTasks: (tasks) => set({ tasks }),
 
-  addTask: (task) => set((state) => ({ tasks: [task, ...state.tasks] })),
+  addTask: (task) =>
+    set((state) => {
+      if (state.tasks.some((t) => t.id === task.id)) return state;
+      return { tasks: [task, ...state.tasks] };
+    }),
 
   updateTask: (id, patch) =>
     set((state) => ({
@@ -152,6 +206,5 @@ export const useTaskStore = create((set, get) => ({
   removeTask: (id) =>
     set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) })),
 
-  // 필터 / 셀렉터
   getById: (id) => get().tasks.find((t) => t.id === id),
 }));

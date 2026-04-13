@@ -13,6 +13,7 @@ const PAGE_TITLES = {
   '/summaries': '회의록',
   '/settings': '설정',
   '/admin': '관리자 대시보드',
+  '/analytics': '팀 분석',
 };
 
 // 모바일 사이드바 토글 컨텍스트

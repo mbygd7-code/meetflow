@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useAuthStore } from '@/stores/authStore';
+import { generateSummary } from '@/lib/claude';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -98,16 +99,93 @@ export function useMeeting() {
     [updateMeeting]
   );
 
-  // 회의 종료
+  // 회의 종료 + AI 요약 생성
   const endMeeting = useCallback(
-    async (id) => {
+    async (id, { messages = [], agendas = [] } = {}) => {
       const patch = { status: 'completed', ended_at: new Date().toISOString() };
       if (SUPABASE_ENABLED) {
         await supabase.from('meetings').update(patch).eq('id', id);
       }
       updateMeeting(id, patch);
+
+      // AI 요약 생성 시도
+      let summary = null;
+      try {
+        summary = await generateSummary({ meetingId: id, messages, agendas });
+        console.log('[endMeeting] AI 요약 생성 완료:', summary);
+      } catch (err) {
+        console.warn('[endMeeting] AI 요약 생성 실패 (데모 요약 사용):', err.message);
+      }
+
+      // DB 저장 (Supabase 활성화 시)
+      if (summary && SUPABASE_ENABLED) {
+        try {
+          await supabase.from('meeting_summaries').insert({
+            meeting_id: id,
+            decisions: summary.decisions || [],
+            discussions: summary.discussions || [],
+            deferred: summary.deferred || [],
+            action_items: summary.action_items || [],
+            milo_insights: summary.milo_insights || '',
+          });
+        } catch (err) {
+          console.error('[endMeeting] 요약 DB 저장 실패:', err);
+        }
+      }
+
+      // 데모 모드: localStorage에 저장
+      if (summary && !SUPABASE_ENABLED) {
+        try {
+          const stored = JSON.parse(localStorage.getItem('meetflow-summaries') || '{}');
+          stored[id] = { ...summary, meeting_id: id, created_at: new Date().toISOString() };
+          localStorage.setItem('meetflow-summaries', JSON.stringify(stored));
+        } catch {}
+      }
+
+      // Slack 종료 알림
+      if (SUPABASE_ENABLED) {
+        const meeting = useMeetingStore.getState().meetings.find((m) => m.id === id);
+        try {
+          await supabase.functions.invoke('slack-notify', {
+            body: {
+              event: 'meeting_ended',
+              payload: {
+                title: meeting?.title || '회의',
+                meeting_id: id,
+                ended_by: user?.name || '사용자',
+                summary_preview: summary?.milo_insights || '',
+                decisions_count: summary?.decisions?.length || 0,
+                action_items_count: summary?.action_items?.length || 0,
+              },
+            },
+          });
+        } catch (err) {
+          console.warn('[endMeeting] Slack 종료 알림 실패:', err);
+        }
+
+        // Notion 동기화 — 회의록 자동 아카이브
+        try {
+          await supabase.functions.invoke('notion-sync', {
+            body: {
+              meeting_id: id,
+              title: meeting?.title,
+              summary,
+            },
+          });
+          console.log('[endMeeting] Notion 동기화 완료');
+        } catch (err) {
+          console.warn('[endMeeting] Notion 동기화 실패:', err);
+        }
+      }
+
+      // 데모 모드: 콘솔 로그
+      if (!SUPABASE_ENABLED && summary) {
+        console.log('[데모] 회의 종료 — Slack 종료 알림 + Notion 동기화는 Supabase 연결 후 활성화됩니다.');
+      }
+
+      return summary;
     },
-    [updateMeeting]
+    [updateMeeting, user]
   );
 
   // 회의 요청 — Slack 통지 + Google Calendar 연동

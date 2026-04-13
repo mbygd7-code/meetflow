@@ -1,6 +1,7 @@
 import { Avatar, Badge } from '@/components/ui';
 import { Sparkles, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PollPanel from './PollPanel';
 
 // 기본 플레이스홀더 — PROMPT 6에서 실제 AI 요약으로 교체됩니다.
 const PLACEHOLDER_SECTIONS = [
@@ -24,7 +25,7 @@ const PLACEHOLDER_SECTIONS = [
   },
 ];
 
-export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTIONS }) {
+export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTIONS, polls, onCreatePoll, onVote }) {
   const hasContent = sections.some((s) => s.items.length > 0);
 
   return (
@@ -71,6 +72,13 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
           </div>
         ))}
       </div>
+
+      {/* 투표 섹션 */}
+      {(polls || onCreatePoll) && (
+        <div className="px-5 py-4 border-t border-border-divider">
+          <PollPanel polls={polls} onCreatePoll={onCreatePoll} onVote={onVote} />
+        </div>
+      )}
 
       {/* 하단 링크 */}
       <div className="px-5 py-4 border-t border-border-divider">

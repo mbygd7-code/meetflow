@@ -1,7 +1,7 @@
 import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
 import { Sparkles } from 'lucide-react';
-import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import MiloAvatar from '@/components/milo/MiloAvatar';
 
 export default function ChatBubble({ message, currentUserId }) {
   const isAi = message.is_ai;
@@ -9,10 +9,11 @@ export default function ChatBubble({ message, currentUserId }) {
   const senderName = isAi ? (message.user?.name || 'Milo') : (message.user?.name || '알 수 없음');
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';
   const time = formatTime(message.created_at);
-  const isMilo = isAi && (!message.ai_employee || message.ai_employee === 'drucker');
 
-  // AI 직원 사진 찾기
-  const aiEmployee = isAi ? AI_EMPLOYEES.find((e) => e.id === message.ai_employee) : null;
+  // AI 메시지: [이름] 접두사 제거
+  const displayContent = isAi
+    ? message.content?.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
+    : message.content;
 
   return (
     <div
@@ -20,23 +21,7 @@ export default function ChatBubble({ message, currentUserId }) {
     >
       {/* 아바타 */}
       {isAi ? (
-        isMilo ? (
-          <Avatar variant="ai" size="md" label="Mi" />
-        ) : aiEmployee?.avatar ? (
-          <Avatar
-            name={aiEmployee.nameKo}
-            src={aiEmployee.avatar}
-            color={aiEmployee.color}
-            size="md"
-          />
-        ) : (
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-            style={{ backgroundColor: senderColor }}
-          >
-            {senderName.slice(0, 2)}
-          </div>
-        )
+        <MiloAvatar employeeId={message.ai_employee} size="md" />
       ) : (
         <Avatar name={senderName} color={senderColor} size="md" />
       )}
@@ -75,9 +60,7 @@ export default function ChatBubble({ message, currentUserId }) {
                 : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm'
           }`}
         >
-          {isAi
-            ? message.content.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
-            : message.content}
+          {displayContent}
         </div>
       </div>
     </div>

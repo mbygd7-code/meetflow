@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
+
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 // 데모용 초기 목 데이터 (Supabase 미설정 시 사용)
 const MOCK_MEETINGS = [
@@ -66,17 +69,67 @@ const MOCK_MEETINGS = [
   },
 ];
 
+let realtimeChannel = null;
+
 export const useMeetingStore = create((set, get) => ({
-  meetings: MOCK_MEETINGS,
+  meetings: SUPABASE_ENABLED ? [] : MOCK_MEETINGS,
   loading: false,
   error: null,
+
+  // ── 초기 로드 + Realtime 구독 ──
+  init: async () => {
+    if (!SUPABASE_ENABLED) return;
+
+    set({ loading: true });
+    try {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*, agendas(*)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      set({ meetings: data || [], loading: false });
+    } catch (err) {
+      console.error('[meetingStore] init error:', err);
+      set({ error: err.message, loading: false });
+    }
+
+    // Realtime 구독
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+    realtimeChannel = supabase
+      .channel('meetings-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'meetings' }, (payload) => {
+        console.log('[meetingStore] INSERT:', payload.new.id);
+        get().addMeeting(payload.new);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'meetings' }, (payload) => {
+        console.log('[meetingStore] UPDATE:', payload.new.id);
+        get().updateMeeting(payload.new.id, payload.new);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'meetings' }, (payload) => {
+        console.log('[meetingStore] DELETE:', payload.old.id);
+        get().removeMeeting(payload.old.id);
+      })
+      .subscribe();
+  },
+
+  // ── 구독 해제 ──
+  cleanup: () => {
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  },
 
   setMeetings: (meetings) => set({ meetings }),
 
   getById: (id) => get().meetings.find((m) => m.id === id),
 
   addMeeting: (meeting) =>
-    set((state) => ({ meetings: [meeting, ...state.meetings] })),
+    set((state) => {
+      if (state.meetings.some((m) => m.id === meeting.id)) return state;
+      return { meetings: [meeting, ...state.meetings] };
+    }),
 
   updateMeeting: (id, patch) =>
     set((state) => ({

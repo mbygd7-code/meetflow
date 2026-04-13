@@ -9,6 +9,7 @@ import ParticipantList from './ParticipantList';
 import ChatArea from './ChatArea';
 import AISummaryPanel from './AISummaryPanel';
 import AgendaBar from './AgendaBar';
+import PollPanel from './PollPanel';
 
 export default function MeetingRoom() {
   const { id } = useParams();
@@ -18,6 +19,8 @@ export default function MeetingRoom() {
   const [activeAgendaId, setActiveAgendaId] = useState(null);
   const [mobilePanel, setMobilePanel] = useState(null); // 'participants' | 'summary' | null
   const [aiThinking, setAiThinking] = useState(null); // { active: bool, employeeId: string }
+  const [polls, setPolls] = useState([]);
+  const [ending, setEnding] = useState(false);
   const { messages, sendMessage } = useRealtimeMessages(id);
 
   const currentAgenda = useMemo(() => {
@@ -27,6 +30,36 @@ export default function MeetingRoom() {
         meeting?.agendas?.[0]?.id;
     return meeting?.agendas?.find((a) => a.id === targetId);
   }, [activeAgendaId, meeting]);
+
+  // ── Polls ──
+  const handleCreatePoll = useCallback(({ question, options }) => {
+    const newPoll = {
+      id: `poll-${Date.now()}`,
+      question,
+      options,
+      votes: {},
+      myVote: null,
+      created_at: new Date().toISOString(),
+    };
+    setPolls((prev) => [newPoll, ...prev]);
+    sendMessage(`📊 투표가 생성되었습니다: "${question}"`, {
+      agendaId: currentAgenda?.id,
+      isAi: true,
+      aiType: 'nudge',
+      aiEmployee: 'drucker',
+    });
+  }, [sendMessage, currentAgenda]);
+
+  const handleVote = useCallback((pollId, optionIndex) => {
+    setPolls((prev) =>
+      prev.map((p) => {
+        if (p.id !== pollId) return p;
+        const votes = { ...p.votes };
+        votes[optionIndex] = (votes[optionIndex] || 0) + 1;
+        return { ...p, votes, myVote: optionIndex };
+      })
+    );
+  }, []);
 
   // Milo AI hook — 새 메시지가 들어올 때마다 개입 판단
   const handleMiloRespond = useCallback(
@@ -70,7 +103,13 @@ export default function MeetingRoom() {
 
   const handleEnd = async () => {
     if (!confirm('회의를 종료하시겠습니까? 자동 요약이 생성됩니다.')) return;
-    await endMeeting(id);
+    setEnding(true);
+    try {
+      await endMeeting(id, { messages, agendas: meeting.agendas || [] });
+    } catch (err) {
+      console.error('[handleEnd]', err);
+    }
+    setEnding(false);
     navigate(`/summaries/${id}`);
   };
 
@@ -179,7 +218,12 @@ export default function MeetingRoom() {
             <ParticipantList participants={meeting.participants || []} />
           )}
           {mobilePanel === 'summary' && (
-            <AISummaryPanel meetingId={id} sections={summarySections} />
+            <div>
+              <AISummaryPanel meetingId={id} sections={summarySections} />
+              <div className="border-t border-border-divider p-4">
+                <PollPanel polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -196,7 +240,7 @@ export default function MeetingRoom() {
           aiThinking={aiThinking}
         />
         <div className="hidden md:block">
-          <AISummaryPanel meetingId={id} sections={summarySections} />
+          <AISummaryPanel meetingId={id} sections={summarySections} polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, AtSign } from 'lucide-react';
 import ChatBubble from './ChatBubble';
-import { Avatar } from '@/components/ui';
+import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
@@ -52,18 +52,9 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
         )}
 
         {/* AI 생각 중 표시 */}
-        {aiThinking?.active && (() => {
-          const emp = AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId);
-          return (
+        {aiThinking?.active && (
           <div className="flex gap-3 fade-in">
-            <Avatar
-              variant={emp?.avatar ? 'default' : 'ai'}
-              size="md"
-              label={emp?.initials || 'Mi'}
-              src={emp?.avatar}
-              color={emp?.color}
-              name={emp?.nameKo}
-            />
+            <MiloAvatar employeeId={aiThinking.employeeId} size="md" />
             <div className="flex flex-col items-start">
               <span className="text-xs font-medium text-brand-purple mb-1">
                 {AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId)?.nameKo || 'Milo'}
@@ -75,8 +66,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
               </div>
             </div>
           </div>
-          );
-        })()}
+        )}
       </div>
 
       {/* 입력창 */}
