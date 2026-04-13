@@ -123,7 +123,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   const recentTimes = getRecentTimes();
   const defaultTimes = ['09:00', '10:00', '14:00', '15:00', '16:00'];
   const timeSuggestions = recentTimes.length > 0 ? recentTimes : defaultTimes;
-  const { requestMeeting } = useMeeting();
+  const { requestMeeting, createMeeting, startMeeting } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
 
@@ -255,6 +255,29 @@ export default function CreateMeetingModal({ open, onClose }) {
     }
   };
 
+  // 즉시 시작 — 회의 생성 + 시작 + 회의방 이동
+  const handleStartNow = async () => {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      const cleaned = agendas.filter((a) => a.title.trim());
+      const meeting = await createMeeting({
+        title: title.trim(),
+        team_id: selectedTeams[0] || null,
+        agendas: cleaned,
+      });
+      await startMeeting(meeting.id);
+      clearDraft();
+      onClose();
+      navigate(`/meetings/${meeting.id}`);
+    } catch (err) {
+      console.error('[handleStartNow]', err);
+      addToast(`회의 시작 실패: ${err.message || '알 수 없는 오류'}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Modal
       open={open}
@@ -266,6 +289,14 @@ export default function CreateMeetingModal({ open, onClose }) {
           <Button variant="secondary" onClick={handleSaveDraft} disabled={busy}>
             임시저장
           </Button>
+          <button
+            type="button"
+            onClick={handleStartNow}
+            disabled={!title.trim() || busy}
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-brand-orange to-brand-purple rounded-md hover:opacity-90 disabled:opacity-40 transition-opacity"
+          >
+            <Zap size={14} /> 즉시 시작
+          </button>
           <Button
             variant="gradient"
             onClick={handleRequest}
@@ -384,38 +415,19 @@ export default function CreateMeetingModal({ open, onClose }) {
           </label>
 
           <div className="bg-bg-tertiary border border-border-subtle rounded-md p-1.5 max-h-56 overflow-y-auto">
-            {/* AI 팀원 */}
-            {AI_EMPLOYEES.map((emp) => {
-              const selected = selectedAiEmployees.includes(emp.id);
-              return (
-                <button
-                  key={emp.id}
-                  type="button"
-                  onClick={() => {
-                    if (emp.isDefault) return; // Milo는 항상 참여
-                    setSelectedAiEmployees((prev) =>
-                      prev.includes(emp.id) ? prev.filter((id) => id !== emp.id) : [...prev, emp.id]
-                    );
-                  }}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border ${
-                    selected
-                      ? 'bg-brand-purple/10 border-brand-purple/20'
-                      : 'hover:bg-bg-secondary border-transparent'
-                  }`}
-                >
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
-                    style={{ backgroundColor: emp.color }}
-                  >
-                    {emp.initials}
-                  </div>
-                  <p className="text-sm font-medium text-txt-primary flex-1">{emp.name}</p>
-                  <span className="text-[11px] text-txt-muted">{emp.role.split('/')[0].trim()}</span>
-                  {selected && <Check size={13} className="text-brand-purple shrink-0 ml-1" />}
-                  {emp.isDefault && <span className="text-[9px] text-brand-purple font-semibold">기본</span>}
-                </button>
-              );
-            })}
+            {/* AI Crew — 전체 AI 팀 토글 */}
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border bg-brand-purple/10 border-brand-purple/20"
+            >
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-orange via-brand-purple to-brand-purple flex items-center justify-center shrink-0">
+                <Sparkles size={11} className="text-white" />
+              </div>
+              <p className="text-sm font-medium text-txt-primary flex-1">AI Crew</p>
+              <span className="text-[11px] text-txt-muted">7명의 AI 전문가</span>
+              <Check size={13} className="text-brand-purple shrink-0 ml-1" />
+              <span className="text-[9px] text-brand-purple font-semibold">기본</span>
+            </button>
 
             <div className="border-t border-border-divider my-1" />
 
@@ -478,24 +490,11 @@ export default function CreateMeetingModal({ open, onClose }) {
 
           {(allParticipants.length > 0 || true) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {/* AI 참석자 뱃지 */}
-              {selectedAiEmployees.map((empId) => {
-                const emp = AI_EMPLOYEES.find((e) => e.id === empId);
-                if (!emp) return null;
-                return (
-                  <span key={empId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gradient-to-r from-brand-orange/20 to-brand-purple/20 text-brand-purple">
-                    <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white" style={{ backgroundColor: emp.color }}>
-                      {emp.initials}
-                    </span>
-                    {emp.name}
-                    {!emp.isDefault && (
-                      <button type="button" onClick={() => setSelectedAiEmployees((p) => p.filter((id) => id !== empId))} className="hover:text-status-error ml-0.5">
-                        <X size={10} />
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
+              {/* AI Crew 뱃지 */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gradient-to-r from-brand-orange/20 to-brand-purple/20 text-brand-purple">
+                <Sparkles size={10} />
+                AI Crew
+              </span>
               {selectedTeams.map((tid) => {
                 const t = TEAMS.find((team) => team.id === tid);
                 return (
@@ -527,26 +526,16 @@ export default function CreateMeetingModal({ open, onClose }) {
                     </span>
                   );
                 })}
-              <span className="text-[11px] text-txt-muted ml-1">총 {allParticipants.length + selectedAiEmployees.length}명</span>
+              <span className="text-[11px] text-txt-muted ml-1">총 {allParticipants.length + 7}명</span>
             </div>
           )}
         </div>
 
         {/* 회의 시간 — Apple-style */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium text-txt-secondary uppercase tracking-wider">
-              회의 시간
-            </label>
-            <button
-              type="button"
-              onClick={() => handleSubmit(true)}
-              disabled={!title.trim()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-brand-orange to-brand-purple rounded-full hover:opacity-90 disabled:opacity-40 transition-opacity"
-            >
-              <Zap size={12} /> 지금 즉시 시작
-            </button>
-          </div>
+          <label className="block text-xs font-medium text-txt-secondary mb-2 uppercase tracking-wider">
+            회의 시간
+          </label>
           <div className="flex gap-2.5">
             <div className="flex-1 relative">
               <label className="block text-[11px] text-txt-muted mb-1">날짜</label>
