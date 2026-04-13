@@ -52,11 +52,18 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
         )}
 
         {/* AI 생각 중 표시 */}
-        {aiThinking?.active && (
+        {aiThinking?.active && (() => {
+          const emp = AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId);
+          return (
           <div className="flex gap-3 fade-in">
-            <Avatar variant="ai" size="md" label={
-              AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId)?.initials || 'Mi'
-            } />
+            <Avatar
+              variant={emp?.avatar ? 'default' : 'ai'}
+              size="md"
+              label={emp?.initials || 'Mi'}
+              src={emp?.avatar}
+              color={emp?.color}
+              name={emp?.nameKo}
+            />
             <div className="flex flex-col items-start">
               <span className="text-xs font-medium text-brand-purple mb-1">
                 {AI_EMPLOYEES.find((e) => e.id === aiThinking.employeeId)?.nameKo || 'Milo'}
@@ -68,7 +75,8 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* 입력창 */}

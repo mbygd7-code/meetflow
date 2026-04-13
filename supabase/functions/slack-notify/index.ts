@@ -11,7 +11,7 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 async function postSlack(channel: string, payload: any) {
@@ -23,6 +23,50 @@ async function postSlack(channel: string, payload: any) {
     },
     body: JSON.stringify({ channel, ...payload }),
   });
+}
+
+async function uploadFileToSlack(channel: string, file: any, threadTs?: string) {
+  // base64 → binary
+  const binaryStr = atob(file.base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  // Step 1: 업로드 URL 요청
+  const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      filename: file.name,
+      length: String(bytes.length),
+    }),
+  });
+  const urlData = await urlRes.json();
+  if (!urlData.ok) return urlData;
+
+  // Step 2: 파일 바이너리 업로드
+  await fetch(urlData.upload_url, {
+    method: 'POST',
+    body: bytes,
+  });
+
+  // Step 3: 업로드 완료 + 채널에 공유
+  const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      files: [{ id: urlData.file_id, title: file.name }],
+      channel_id: channel,
+    }),
+  });
+  return completeRes.json();
 }
 
 serve(async (req) => {
@@ -141,7 +185,10 @@ serve(async (req) => {
           ? `📅 ${payload.scheduled_date} ${payload.scheduled_time} (${payload.duration || 30}분)`
           : '📅 시간 미정';
 
-        await postSlack(reqTeam.slack_channel_id, {
+        const fileCount = (payload.files || []).length;
+        const fileNotice = fileCount > 0 ? `\n📎 첨부 파일 ${fileCount}개` : '';
+
+        const msgRes = await postSlack(reqTeam.slack_channel_id, {
           text: `📋 *${payload.requested_by}*님이 새 회의를 요청했어요`,
           blocks: [
             {
@@ -150,11 +197,11 @@ serve(async (req) => {
             },
             {
               type: 'section',
-              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}` },
+              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}${fileNotice}` },
             },
             ...(reqAgendas ? [{
-              type: 'section' as const,
-              text: { type: 'mrkdwn' as const, text: `*어젠다*\n${reqAgendas}` },
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*어젠다*\n${reqAgendas}` },
             }] : []),
             {
               type: 'context',
@@ -164,6 +211,29 @@ serve(async (req) => {
             },
           ],
         });
+
+        // 첨부 파일 업로드
+        if (fileCount > 0 && Array.isArray(payload.files)) {
+          // postSlack 응답에서 thread_ts 추출
+          let threadTs = null;
+          try {
+            const msgJson = await msgRes.json();
+            threadTs = msgJson?.ts || null;
+            console.log('[slack-notify] thread_ts:', threadTs, 'msg ok:', msgJson?.ok);
+          } catch (e) {
+            console.error('[slack-notify] msgRes.json() 실패:', e);
+          }
+
+          for (const file of payload.files) {
+            console.log('[slack-notify] 파일 업로드 시작:', file.name, 'size:', file.size, 'base64 len:', file.base64?.length || 0);
+            try {
+              const result = await uploadFileToSlack(reqTeam.slack_channel_id, file, threadTs);
+              console.log('[slack-notify] 업로드 결과:', JSON.stringify(result));
+            } catch (fileErr) {
+              console.error('[slack-notify] 파일 업로드 에러:', file.name, String(fileErr));
+            }
+          }
+        }
         break;
       }
 

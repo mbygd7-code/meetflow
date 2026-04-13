@@ -112,14 +112,15 @@ export function useMeeting() {
 
   // 회의 요청 — Slack 통지 + Google Calendar 연동
   const requestMeeting = useCallback(
-    async ({ title, team_id, agendas = [], participants = [], scheduledDate, scheduledTime, duration }) => {
+    async ({ title, team_id, agendas = [], participants = [], files = [], scheduledDate, scheduledTime, duration }) => {
       // 1. 회의 생성
       const meeting = await createMeeting({ title, team_id, agendas, participants });
 
       // 2. Slack 통지 (Edge Function 호출)
       if (SUPABASE_ENABLED && team_id) {
         try {
-          await supabase.functions.invoke('slack-notify', {
+          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id, '파일 수:', files.length, '파일명:', files.map(f => f.name));
+          const { data: slackRes, error: slackErr } = await supabase.functions.invoke('slack-notify', {
             body: {
               event: 'meeting_request',
               payload: {
@@ -132,11 +133,17 @@ export function useMeeting() {
                 scheduled_time: scheduledTime,
                 duration,
                 requested_by: user?.name || '사용자',
+                files: files.slice(0, 5),
               },
             },
           });
+          if (slackErr) {
+            console.error('[requestMeeting] Slack Edge Function 에러:', slackErr);
+          } else {
+            console.log('[requestMeeting] Slack 통지 응답:', slackRes);
+          }
         } catch (err) {
-          console.warn('[requestMeeting] Slack 통지 실패:', err);
+          console.error('[requestMeeting] Slack 통지 실패:', err);
         }
       }
 

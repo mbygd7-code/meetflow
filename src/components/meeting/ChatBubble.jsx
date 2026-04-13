@@ -1,6 +1,7 @@
 import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
 import { Sparkles } from 'lucide-react';
+import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 export default function ChatBubble({ message, currentUserId }) {
   const isAi = message.is_ai;
@@ -10,6 +11,9 @@ export default function ChatBubble({ message, currentUserId }) {
   const time = formatTime(message.created_at);
   const isMilo = isAi && (!message.ai_employee || message.ai_employee === 'drucker');
 
+  // AI 직원 사진 찾기
+  const aiEmployee = isAi ? AI_EMPLOYEES.find((e) => e.id === message.ai_employee) : null;
+
   return (
     <div
       className={`flex gap-3 fade-in ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
@@ -18,6 +22,13 @@ export default function ChatBubble({ message, currentUserId }) {
       {isAi ? (
         isMilo ? (
           <Avatar variant="ai" size="md" label="Mi" />
+        ) : aiEmployee?.avatar ? (
+          <Avatar
+            name={aiEmployee.nameKo}
+            src={aiEmployee.avatar}
+            color={aiEmployee.color}
+            size="md"
+          />
         ) : (
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"

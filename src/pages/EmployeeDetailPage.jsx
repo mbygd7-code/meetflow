@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, CheckCircle2, MessageSquare,
@@ -24,23 +24,63 @@ function calcParticipationScore(msgCount, meetingCount) {
 }
 
 // ── 평가 항목 바 ──
-function RatingBar({ label, icon: Icon, value, max = 100 }) {
+function RatingBar({ label, icon: Icon, value, max = 100, delay = 0 }) {
   const pct = Math.min((value / max) * 100, 100);
   const color = pct >= 70 ? 'from-brand-purple to-brand-orange' :
     pct >= 40 ? 'from-brand-orange to-brand-yellow' : 'from-status-error to-brand-orange';
+
+  const [animated, setAnimated] = useState(false);
+  const [displayValue, setDisplayValue] = useState(0);
+  const barRef = useRef(null);
+
+  useEffect(() => {
+    // IntersectionObserver로 뷰포트에 보일 때 애니메이션 시작
+    const el = barRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !animated) {
+          const timer = setTimeout(() => {
+            setAnimated(true);
+            // 숫자 카운트업 애니메이션
+            const duration = 800;
+            const start = performance.now();
+            const target = Math.round(value);
+            const step = (now) => {
+              const elapsed = now - start;
+              const progress = Math.min(elapsed / duration, 1);
+              // easeOutCubic
+              const eased = 1 - Math.pow(1 - progress, 3);
+              setDisplayValue(Math.round(target * eased));
+              if (progress < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+          }, delay);
+          return () => clearTimeout(timer);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [value, delay, animated]);
+
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" ref={barRef}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-txt-secondary">
           <Icon size={13} />
           <span>{label}</span>
         </div>
-        <span className="text-xs font-semibold text-txt-primary">{Math.round(value)}점</span>
+        <span className="text-xs font-semibold text-txt-primary">{displayValue}점</span>
       </div>
       <div className="h-2 bg-bg-primary rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-500`}
-          style={{ width: `${pct}%` }}
+          className={`h-full rounded-full bg-gradient-to-r ${color}`}
+          style={{
+            width: animated ? `${pct}%` : '0%',
+            transition: `width 0.8s cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms`,
+          }}
         />
       </div>
     </div>
@@ -377,11 +417,11 @@ export default function EmployeeDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* 평가 바 차트 (5개) */}
             <div className="bg-bg-tertiary rounded-[7px] p-5 space-y-4">
-              <RatingBar label="참여도 (회의 참석 + 발언)" icon={User} value={stats.participationScore} />
-              <RatingBar label="태스크 완수율" icon={Target} value={stats.completionScore} />
-              <RatingBar label="리더십 (기여도)" icon={Award} value={stats.leadershipScore} />
-              <RatingBar label="적극성 (발언 빈도)" icon={TrendingUp} value={stats.proactiveScore} />
-              <RatingBar label="발언 태도 (건설성·전문성·기여도)" icon={MessageCircle} value={stats.speechAttitudeScore} />
+              <RatingBar label="참여도 (회의 참석 + 발언)" icon={User} value={stats.participationScore} delay={0} />
+              <RatingBar label="태스크 완수율" icon={Target} value={stats.completionScore} delay={120} />
+              <RatingBar label="리더십 (기여도)" icon={Award} value={stats.leadershipScore} delay={240} />
+              <RatingBar label="적극성 (발언 빈도)" icon={TrendingUp} value={stats.proactiveScore} delay={360} />
+              <RatingBar label="발언 태도 (건설성·전문성·기여도)" icon={MessageCircle} value={stats.speechAttitudeScore} delay={480} />
             </div>
 
             {/* 태스크 현황 */}
