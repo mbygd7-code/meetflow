@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { getInitials, pickColor } from '@/utils/formatters';
 
 const SIZES = {
@@ -15,37 +16,54 @@ export default function Avatar({
   online = false,
   className = '',
   label,
+  src,
 }) {
+  const [imgError, setImgError] = useState(false);
   const initials = label || getInitials(name);
   const bg = color || pickColor(name);
   const sz = SIZES[size];
 
   const baseClasses = `${sz.box} ${sz.text} rounded-full flex items-center justify-center font-semibold text-white relative shrink-0`;
 
+  const onlineDot = online && (
+    <span
+      className={`absolute ${sz.dot} rounded-full bg-status-success border-2 border-bg-primary`}
+    />
+  );
+
+  // AI variant (Milo gradient)
   if (variant === 'ai') {
     return (
       <div className={`${baseClasses} bg-gradient-brand shadow-glow ${className}`}>
         {initials || 'M'}
-        {online && (
-          <span
-            className={`absolute ${sz.dot} rounded-full bg-status-success border-2 border-bg-primary`}
-          />
-        )}
+        {onlineDot}
       </div>
     );
   }
 
+  // Photo avatar
+  if (src && !imgError) {
+    return (
+      <div className={`${baseClasses} ${className}`} style={{ backgroundColor: bg }}>
+        <img
+          src={src}
+          alt={name || initials}
+          onError={() => setImgError(true)}
+          className="w-full h-full rounded-full object-cover"
+        />
+        {onlineDot}
+      </div>
+    );
+  }
+
+  // Default initials avatar
   return (
     <div
       className={`${baseClasses} ${className}`}
       style={{ backgroundColor: bg }}
     >
       {initials}
-      {online && (
-        <span
-          className={`absolute ${sz.dot} rounded-full bg-status-success border-2 border-bg-primary`}
-        />
-      )}
+      {onlineDot}
     </div>
   );
 }

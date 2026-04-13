@@ -1,16 +1,20 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
   Slack, FileText, Bell, Check, Sun, Moon, Monitor,
   Bot, Shield, Upload, X, Plus, Sparkles,
   BarChart3, Zap, RotateCcw, ChevronDown, ChevronUp,
-  Users, Settings,
+  Users, Settings, CalendarDays, ExternalLink, RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { Card, Input, Button, Badge, SectionPanel } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { supabase } from '@/lib/supabase';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import { useAiTeamStore, AI_EMPLOYEES, MEETING_PRESETS, LLM_MODELS } from '@/stores/aiTeamStore';
+
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 // ── Toggle 컴포넌트 ──
 function Toggle({ checked, onChange, label, description }) {
@@ -39,11 +43,29 @@ function Toggle({ checked, onChange, label, description }) {
 
 // ── AI 직원 아바타 ──
 function AiAvatar({ employee, size = 'md' }) {
+  const [imgErr, setImgErr] = useState(false);
   const sizeClasses = {
     sm: 'w-8 h-8 text-[11px]',
     md: 'w-10 h-10 text-sm',
     lg: 'w-12 h-12 text-base',
   };
+
+  if (employee.avatar && !imgErr) {
+    return (
+      <div
+        className={`${sizeClasses[size]} rounded-full overflow-hidden shrink-0 ring-2 ring-white/10`}
+        style={{ backgroundColor: employee.color }}
+      >
+        <img
+          src={employee.avatar}
+          alt={employee.nameKo}
+          onError={() => setImgErr(true)}
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white shrink-0`}
@@ -232,16 +254,34 @@ function ExpandedEmployeePanel({ employee }) {
 }
 
 export default function SettingsPage() {
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, user } = useAuthStore();
+
+  // ── 팀 & 연동 상태 ──
+  const [teamId, setTeamId] = useState(null);
   const [slackChannel, setSlackChannel] = useState('');
   const [notionApiKey, setNotionApiKey] = useState('');
   const [notionDbId, setNotionDbId] = useState('');
+  const [gcalConnected, setGcalConnected] = useState(false);
+  const [gcalSync, setGcalSync] = useState({
+    autoCreate: true,
+    autoUpdate: true,
+    reminderBefore: true,
+    syncAttendees: true,
+  });
   const [notif, setNotif] = useState({
     meetingStart: true,
     meetingEnd: true,
     taskAssigned: true,
     miloSummary: false,
   });
+
+  // ── 연결 상태 ──
+  const [slackStatus, setSlackStatus] = useState('loading'); // loading | connected | disconnected
+  const [notionStatus, setNotionStatus] = useState('loading');
+  const [gcalStatus, setGcalStatus] = useState('loading');
+  const [saving, setSaving] = useState({ slack: false, notion: false, gcal: false });
+  const [saveResult, setSaveResult] = useState({ slack: null, notion: null, gcal: null });
+
   const [expandedEmployee, setExpandedEmployee] = useState(null);
 
   const { theme, setTheme } = useThemeStore();
@@ -249,6 +289,163 @@ export default function SettingsPage() {
 
   // AI Team Store
   const aiTeam = useAiTeamStore();
+
+  // ── 팀 데이터 로드 ──
+  useEffect(() => {
+    async function loadTeamSettings() {
+      if (!SUPABASE_ENABLED || !user?.id) {
+        // 데모 모드: localStorage 에서 복원
+        const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+        setSlackChannel(saved.slackChannel || '');
+        setNotionApiKey(saved.notionApiKey || '');
+        setNotionDbId(saved.notionDbId || '');
+        setGcalConnected(saved.gcalConnected || false);
+        if (saved.gcalSync) setGcalSync(saved.gcalSync);
+        if (saved.notif) setNotif(saved.notif);
+        setSlackStatus(saved.slackChannel ? 'connected' : 'disconnected');
+        setNotionStatus(saved.notionDbId ? 'connected' : 'disconnected');
+        setGcalStatus(saved.gcalConnected ? 'connected' : 'disconnected');
+        return;
+      }
+
+      try {
+        // 유저가 속한 팀 찾기
+        const { data: membership } = await supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+
+        if (!membership) {
+          setSlackStatus('disconnected');
+          setNotionStatus('disconnected');
+          setGcalStatus('disconnected');
+          return;
+        }
+
+        setTeamId(membership.team_id);
+
+        // 팀 정보 조회
+        const { data: team } = await supabase
+          .from('teams')
+          .select('slack_channel_id, notion_database_id')
+          .eq('id', membership.team_id)
+          .single();
+
+        if (team) {
+          setSlackChannel(team.slack_channel_id || '');
+          setNotionDbId(team.notion_database_id || '');
+          setSlackStatus(team.slack_channel_id ? 'connected' : 'disconnected');
+          setNotionStatus(team.notion_database_id ? 'connected' : 'disconnected');
+        } else {
+          setSlackStatus('disconnected');
+          setNotionStatus('disconnected');
+        }
+      } catch (err) {
+        console.error('[SettingsPage] 팀 설정 로드 실패:', err);
+        setSlackStatus('disconnected');
+        setNotionStatus('disconnected');
+      }
+      setGcalStatus('disconnected'); // Google Calendar은 별도 OAuth 필요
+    }
+
+    loadTeamSettings();
+  }, [user?.id]);
+
+  // ── Slack 저장 핸들러 ──
+  const handleSlackSave = useCallback(async () => {
+    setSaving((s) => ({ ...s, slack: true }));
+    setSaveResult((s) => ({ ...s, slack: null }));
+    try {
+      if (SUPABASE_ENABLED && teamId) {
+        const { error } = await supabase
+          .from('teams')
+          .update({ slack_channel_id: slackChannel || null })
+          .eq('id', teamId);
+        if (error) throw error;
+      }
+      // localStorage 백업
+      const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+      localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, slackChannel, notif }));
+
+      setSlackStatus(slackChannel ? 'connected' : 'disconnected');
+      setSaveResult((s) => ({ ...s, slack: 'success' }));
+    } catch (err) {
+      console.error('[Slack 저장]', err);
+      setSaveResult((s) => ({ ...s, slack: 'error' }));
+    } finally {
+      setSaving((s) => ({ ...s, slack: false }));
+      setTimeout(() => setSaveResult((s) => ({ ...s, slack: null })), 2500);
+    }
+  }, [slackChannel, notif, teamId]);
+
+  // ── Notion 저장 핸들러 ──
+  const handleNotionSave = useCallback(async () => {
+    setSaving((s) => ({ ...s, notion: true }));
+    setSaveResult((s) => ({ ...s, notion: null }));
+    try {
+      if (SUPABASE_ENABLED && teamId) {
+        const { error } = await supabase
+          .from('teams')
+          .update({ notion_database_id: notionDbId || null })
+          .eq('id', teamId);
+        if (error) throw error;
+      }
+      const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+      localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, notionApiKey, notionDbId }));
+
+      setNotionStatus(notionDbId ? 'connected' : 'disconnected');
+      setSaveResult((s) => ({ ...s, notion: 'success' }));
+    } catch (err) {
+      console.error('[Notion 저장]', err);
+      setSaveResult((s) => ({ ...s, notion: 'error' }));
+    } finally {
+      setSaving((s) => ({ ...s, notion: false }));
+      setTimeout(() => setSaveResult((s) => ({ ...s, notion: null })), 2500);
+    }
+  }, [notionApiKey, notionDbId, teamId]);
+
+  // ── Google Calendar 저장 핸들러 ──
+  const handleGcalSave = useCallback(async () => {
+    setSaving((s) => ({ ...s, gcal: true }));
+    setSaveResult((s) => ({ ...s, gcal: null }));
+    try {
+      const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+      localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, gcalConnected, gcalSync }));
+      setSaveResult((s) => ({ ...s, gcal: 'success' }));
+    } catch (err) {
+      console.error('[GCal 저장]', err);
+      setSaveResult((s) => ({ ...s, gcal: 'error' }));
+    } finally {
+      setSaving((s) => ({ ...s, gcal: false }));
+      setTimeout(() => setSaveResult((s) => ({ ...s, gcal: null })), 2500);
+    }
+  }, [gcalConnected, gcalSync]);
+
+  // ── 연결 상태 Badge 렌더 헬퍼 ──
+  const renderStatusBadge = (status) => {
+    if (status === 'loading') return <Badge variant="outline"><Loader2 size={10} className="animate-spin mr-1" />확인 중</Badge>;
+    if (status === 'connected') return <Badge variant="success">연결됨</Badge>;
+    return <Badge variant="outline">미연결</Badge>;
+  };
+
+  // ── 저장 버튼 렌더 헬퍼 ──
+  const renderSaveButton = (key, onClick) => {
+    const isSaving = saving[key];
+    const result = saveResult[key];
+    if (result === 'success') {
+      return <Button variant="primary" size="sm" icon={Check} disabled>저장됨</Button>;
+    }
+    if (result === 'error') {
+      return <Button variant="danger" size="sm" disabled>실패</Button>;
+    }
+    return (
+      <Button variant="primary" size="sm" icon={isSaving ? Loader2 : Check} onClick={onClick} disabled={isSaving}>
+        {isSaving ? '저장 중...' : '저장'}
+      </Button>
+    );
+  };
 
   return (
     <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3 lg:mb-0 flex flex-col lg:h-[calc(100%-32px)] lg:overflow-hidden">
@@ -282,16 +479,11 @@ export default function SettingsPage() {
           {AI_EMPLOYEES.map((emp) => {
             const isActive = aiTeam.activeEmployees.includes(emp.id);
             return (
-              <div
+              <AiAvatar
                 key={emp.id}
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white transition-opacity ${
-                  isActive ? '' : 'opacity-30'
-                }`}
-                style={{ backgroundColor: emp.color }}
-                title={`${emp.name} (${emp.nameKo}) — ${emp.role}`}
-              >
-                {emp.initials}
-              </div>
+                employee={emp}
+                size="sm"
+              />
             );
           })}
           <span className="text-xs text-txt-muted ml-2">
@@ -396,8 +588,15 @@ export default function SettingsPage() {
                 <p className="text-[10px] text-txt-secondary">양방향 동기화</p>
               </div>
             </div>
-            <Badge variant="outline">미연결</Badge>
+            {renderStatusBadge(slackStatus)}
           </div>
+
+          {slackStatus === 'connected' && slackChannel && (
+            <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
+              <Check size={12} />
+              <span className="text-[11px] font-medium">채널 {slackChannel} 연결됨</span>
+            </div>
+          )}
 
           <Input
             label="Slack 채널 ID"
@@ -418,7 +617,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-3 flex justify-end">
-            <Button variant="primary" size="sm" icon={Check}>저장</Button>
+            {renderSaveButton('slack', handleSlackSave)}
           </div>
         </div>
 
@@ -432,8 +631,15 @@ export default function SettingsPage() {
                 <p className="text-[10px] text-txt-secondary">회의록 자동 아카이브</p>
               </div>
             </div>
-            <Badge variant="outline">미연결</Badge>
+            {renderStatusBadge(notionStatus)}
           </div>
+
+          {notionStatus === 'connected' && notionDbId && (
+            <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
+              <Check size={12} />
+              <span className="text-[11px] font-medium">DB {notionDbId.slice(0, 8)}... 연결됨</span>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Input label="API Key" type="password" placeholder="secret_..." value={notionApiKey} onChange={(e) => setNotionApiKey(e.target.value)} />
@@ -442,8 +648,96 @@ export default function SettingsPage() {
 
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" size="sm">테스트</Button>
-            <Button variant="primary" size="sm" icon={Check}>저장</Button>
+            {renderSaveButton('notion', handleNotionSave)}
           </div>
+        </div>
+
+        {/* Google Calendar */}
+        <div className="bg-bg-tertiary rounded-[7px] p-4 mt-3">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={14} className="text-status-success" />
+              <div>
+                <h3 className="text-xs font-semibold text-txt-primary">Google Calendar</h3>
+                <p className="text-[10px] text-txt-secondary">회의 일정 자동 동기화</p>
+              </div>
+            </div>
+            {renderStatusBadge(gcalStatus)}
+          </div>
+
+          {gcalStatus !== 'connected' ? (
+            <div className="space-y-3">
+              <p className="text-[11px] text-txt-muted leading-relaxed">
+                Google 계정을 연결하면 회의 요청 시 캘린더에 자동으로 일정이 생성됩니다.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={ExternalLink}
+                className="w-full"
+                onClick={() => {
+                  setGcalConnected(true);
+                  setGcalStatus('connected');
+                  const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+                  localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, gcalConnected: true }));
+                }}
+              >
+                Google 계정 연결
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
+                <Check size={12} />
+                <span className="text-[11px] font-medium">{user?.email || 'Google 계정'} 연결됨</span>
+              </div>
+
+              <div className="pt-2 border-t border-border-divider">
+                <p className="text-[10px] font-medium text-txt-muted uppercase tracking-wider mb-1.5">동기화 설정</p>
+                <div className="space-y-0.5 divide-y divide-border-divider-faint">
+                  <Toggle
+                    label="회의 요청 시 자동 생성"
+                    description="회의를 요청하면 캘린더에 일정 추가"
+                    checked={gcalSync.autoCreate}
+                    onChange={(v) => setGcalSync({ ...gcalSync, autoCreate: v })}
+                  />
+                  <Toggle
+                    label="일정 변경 자동 반영"
+                    description="시간/참석자 변경 시 캘린더 업데이트"
+                    checked={gcalSync.autoUpdate}
+                    onChange={(v) => setGcalSync({ ...gcalSync, autoUpdate: v })}
+                  />
+                  <Toggle
+                    label="10분 전 리마인더"
+                    description="회의 시작 10분 전 알림"
+                    checked={gcalSync.reminderBefore}
+                    onChange={(v) => setGcalSync({ ...gcalSync, reminderBefore: v })}
+                  />
+                  <Toggle
+                    label="참석자 자동 초대"
+                    description="참석자에게 캘린더 초대 발송"
+                    checked={gcalSync.syncAttendees}
+                    onChange={(v) => setGcalSync({ ...gcalSync, syncAttendees: v })}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex justify-between items-center">
+                <button
+                  onClick={() => {
+                    setGcalConnected(false);
+                    setGcalStatus('disconnected');
+                    const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+                    localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, gcalConnected: false }));
+                  }}
+                  className="text-[11px] text-status-error hover:underline"
+                >
+                  연결 해제
+                </button>
+                {renderSaveButton('gcal', handleGcalSave)}
+              </div>
+            </>
+          )}
         </div>
       </SectionPanel>
 
