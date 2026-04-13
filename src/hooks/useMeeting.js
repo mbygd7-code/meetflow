@@ -11,9 +11,13 @@ export function useMeeting() {
     useMeetingStore();
   const { user } = useAuthStore();
 
+  // 데모 사용자(mockSignIn)인 경우 Supabase DB 사용 안 함
+  const isDemo = user?.id?.startsWith('mock-');
+  const useDB = SUPABASE_ENABLED && !isDemo;
+
   // 회의 목록 로드
   const fetchMeetings = useCallback(async () => {
-    if (!SUPABASE_ENABLED) return meetings; // 목 데이터 그대로 사용
+    if (!useDB) return meetings; // 목 데이터 그대로 사용
     const { data, error } = await supabase
       .from('meetings')
       .select('*, agendas(*)')
@@ -29,7 +33,7 @@ export function useMeeting() {
   // 회의 생성
   const createMeeting = useCallback(
     async ({ title, team_id, agendas = [] }) => {
-      if (!SUPABASE_ENABLED) {
+      if (!useDB) {
         // 데모 모드 — 로컬 스토어에만 추가
         const newMeeting = {
           id: `mtg-${Date.now()}`,
@@ -91,7 +95,7 @@ export function useMeeting() {
   const startMeeting = useCallback(
     async (id) => {
       const patch = { status: 'active', started_at: new Date().toISOString() };
-      if (SUPABASE_ENABLED) {
+      if (useDB) {
         await supabase.from('meetings').update(patch).eq('id', id);
       }
       updateMeeting(id, patch);
@@ -103,7 +107,7 @@ export function useMeeting() {
   const endMeeting = useCallback(
     async (id, { messages = [], agendas = [] } = {}) => {
       const patch = { status: 'completed', ended_at: new Date().toISOString() };
-      if (SUPABASE_ENABLED) {
+      if (useDB) {
         await supabase.from('meetings').update(patch).eq('id', id);
       }
       updateMeeting(id, patch);
@@ -118,7 +122,7 @@ export function useMeeting() {
       }
 
       // DB 저장 (Supabase 활성화 시)
-      if (summary && SUPABASE_ENABLED) {
+      if (summary && useDB) {
         try {
           await supabase.from('meeting_summaries').insert({
             meeting_id: id,
@@ -134,7 +138,7 @@ export function useMeeting() {
       }
 
       // 데모 모드: localStorage에 저장
-      if (summary && !SUPABASE_ENABLED) {
+      if (summary && !useDB) {
         try {
           const stored = JSON.parse(localStorage.getItem('meetflow-summaries') || '{}');
           stored[id] = { ...summary, meeting_id: id, created_at: new Date().toISOString() };
@@ -143,7 +147,7 @@ export function useMeeting() {
       }
 
       // Slack 종료 알림
-      if (SUPABASE_ENABLED) {
+      if (useDB) {
         const meeting = useMeetingStore.getState().meetings.find((m) => m.id === id);
         try {
           await supabase.functions.invoke('slack-notify', {
@@ -179,7 +183,7 @@ export function useMeeting() {
       }
 
       // 데모 모드: 콘솔 로그
-      if (!SUPABASE_ENABLED && summary) {
+      if (!useDB && summary) {
         console.log('[데모] 회의 종료 — Slack 종료 알림 + Notion 동기화는 Supabase 연결 후 활성화됩니다.');
       }
 
@@ -195,7 +199,7 @@ export function useMeeting() {
       const meeting = await createMeeting({ title, team_id, agendas, participants });
 
       // 2. Slack 통지 (Edge Function 호출)
-      if (SUPABASE_ENABLED && team_id) {
+      if (useDB && team_id) {
         try {
           console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id, '파일 수:', files.length, '파일명:', files.map(f => f.name));
           const { data: slackRes, error: slackErr } = await supabase.functions.invoke('slack-notify', {
@@ -226,7 +230,7 @@ export function useMeeting() {
       }
 
       // 3. Google Calendar 이벤트 생성 (Edge Function 호출)
-      if (SUPABASE_ENABLED && scheduledDate && scheduledTime) {
+      if (useDB && scheduledDate && scheduledTime) {
         try {
           await supabase.functions.invoke('gcal-create-event', {
             body: {
@@ -244,7 +248,7 @@ export function useMeeting() {
       }
 
       // 데모 모드에서도 시각적 피드백을 위해 콘솔 로그
-      if (!SUPABASE_ENABLED) {
+      if (!useDB) {
         console.log('[데모] 회의 요청 완료 — Slack/Calendar 연동은 Supabase 연결 후 활성화됩니다.');
         console.log('[데모] Slack 통지 대상:', participants.map((p) => p.name).join(', '));
         console.log('[데모] Calendar 일정:', `${scheduledDate} ${scheduledTime} (${duration}분)`);
@@ -258,7 +262,7 @@ export function useMeeting() {
   // 회의 삭제
   const deleteMeeting = useCallback(
     async (id) => {
-      if (SUPABASE_ENABLED) {
+      if (useDB) {
         await supabase.from('meetings').delete().eq('id', id);
       }
       removeMeeting(id);

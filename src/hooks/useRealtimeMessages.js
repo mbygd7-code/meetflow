@@ -5,11 +5,13 @@ import { AI_EMPLOYEE_MAP } from '@/lib/constants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
-// mock 회의 ID인지 확인 — Supabase 비활성 시에만 mock으로 처리
-const isMockMeetingId = (id) => {
-  if (SUPABASE_ENABLED) return false; // Supabase 연결 시 모든 ID를 실제로 처리
-  return !id || typeof id !== 'string' || id.startsWith('mtg-');
-};
+// 데모 사용자인지 + mock 회의 ID인지 확인
+function isDemoMode(userId, meetingId) {
+  const isDemo = userId?.startsWith('mock-');
+  if (isDemo) return true; // 데모 사용자는 항상 로컬 모드
+  if (!SUPABASE_ENABLED) return true;
+  return !meetingId || meetingId.startsWith('mtg-');
+}
 
 // 데모 초기 메시지 생성기
 function makeMockSeed(meetingId) {
@@ -73,7 +75,7 @@ export function useRealtimeMessages(meetingId) {
 
     async function load() {
       setLoading(true);
-      if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) {
+      if (isDemoMode(user?.id, meetingId)) {
         const seed = makeMockSeed(meetingId);
         if (!cancelled) {
           setMessages(seed);
@@ -96,7 +98,7 @@ export function useRealtimeMessages(meetingId) {
     }
     load();
 
-    if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) return () => (cancelled = true);
+    if (isDemoMode(user?.id, meetingId)) return () => (cancelled = true);
 
     // Realtime 구독
     const channel = supabase
@@ -151,7 +153,7 @@ export function useRealtimeMessages(meetingId) {
         source,
       };
 
-      if (!SUPABASE_ENABLED || isMockMeetingId(meetingId)) {
+      if (isDemoMode(user?.id, meetingId)) {
         // AI 직원 정보 조회
         let aiUser = { id: 'milo', name: 'Milo', color: '#723CEB' };
         if (isAi && aiEmployee) {
