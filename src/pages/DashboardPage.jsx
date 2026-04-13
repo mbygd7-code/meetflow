@@ -54,8 +54,15 @@ export default function DashboardPage() {
   ];
 
   const myTasks = useMemo(() => {
-    return tasks.filter((t) => t.status !== 'done');
-  }, [tasks]);
+    const userId = user?.id;
+    const userName = user?.name;
+    return tasks.filter((t) => {
+      if (t.status === 'done') return false;
+      if (t.assignee_id === userId) return true;
+      if (t.assignee?.name === userName || t.assignee_name === userName) return true;
+      return false;
+    });
+  }, [tasks, user]);
 
   return (
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
