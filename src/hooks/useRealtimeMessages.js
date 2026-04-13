@@ -5,8 +5,11 @@ import { AI_EMPLOYEE_MAP } from '@/lib/constants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
-// mock 회의 ID인지 확인 (UUID가 아닌 'mtg-' 패턴)
-const isMockMeetingId = (id) => !id || typeof id !== 'string' || id.startsWith('mtg-');
+// mock 회의 ID인지 확인 — Supabase 비활성 시에만 mock으로 처리
+const isMockMeetingId = (id) => {
+  if (SUPABASE_ENABLED) return false; // Supabase 연결 시 모든 ID를 실제로 처리
+  return !id || typeof id !== 'string' || id.startsWith('mtg-');
+};
 
 // 데모 초기 메시지 생성기
 function makeMockSeed(meetingId) {
