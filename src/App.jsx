@@ -47,10 +47,13 @@ export default function App() {
   const cleanupTasks = useTaskStore((s) => s.cleanup);
 
   useEffect(() => {
-    init();
-    initTheme();
-    initMeetings();
-    initTasks();
+    async function bootstrap() {
+      await init(); // auth 완료를 기다린 후
+      initTheme();
+      initMeetings(); // auth 상태를 반영하여 데모/실서비스 분기
+      initTasks();
+    }
+    bootstrap();
     return () => {
       cleanupMeetings();
       cleanupTasks();

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -78,12 +79,14 @@ export const useMeetingStore = create((set, get) => ({
 
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
-    if (!SUPABASE_ENABLED) {
-      // 데모 모드: 목 데이터 유지
+    // 데모 사용자 또는 Supabase 미연결 시 목 데이터 사용
+    const user = useAuthStore.getState().user;
+    const isDemo = !user || user.id?.startsWith('mock-');
+    if (!SUPABASE_ENABLED || isDemo) {
       set({ meetings: MOCK_MEETINGS });
       return;
     }
-    // Supabase 모드: 실제 데이터 로드 (목 데이터 제거)
+    // Supabase 모드: 실제 데이터 로드
 
     set({ loading: true });
     try {

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -262,7 +263,9 @@ export const useTaskStore = create((set, get) => ({
 
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
-    if (!SUPABASE_ENABLED) {
+    const user = useAuthStore.getState().user;
+    const isDemo = !user || user.id?.startsWith('mock-');
+    if (!SUPABASE_ENABLED || isDemo) {
       set({ tasks: MOCK_TASKS });
       return;
     }
