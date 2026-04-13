@@ -72,13 +72,18 @@ const MOCK_MEETINGS = [
 let realtimeChannel = null;
 
 export const useMeetingStore = create((set, get) => ({
-  meetings: SUPABASE_ENABLED ? [] : MOCK_MEETINGS,
+  meetings: MOCK_MEETINGS, // init()에서 Supabase 데이터로 교체됨
   loading: false,
   error: null,
 
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
-    if (!SUPABASE_ENABLED) return;
+    if (!SUPABASE_ENABLED) {
+      // 데모 모드: 목 데이터 유지
+      set({ meetings: MOCK_MEETINGS });
+      return;
+    }
+    // Supabase 모드: 실제 데이터 로드 (목 데이터 제거)
 
     set({ loading: true });
     try {

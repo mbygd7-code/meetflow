@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File } from 'lucide-react';
+import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkles, Zap } from 'lucide-react';
 import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
+import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 const TEAMS = [
   { id: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7', name: '프로덕트 팀' },
@@ -94,6 +95,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   }, [modalReady, showSuggestions]);
   const [selectedTeams, setSelectedTeams] = useState(draft.current?.selectedTeams || []);
   const [selectedMembers, setSelectedMembers] = useState(draft.current?.selectedMembers || []);
+  const [selectedAiEmployees, setSelectedAiEmployees] = useState(['drucker']); // Milo는 기본 선택
   const [agendas, setAgendas] = useState(
     draft.current?.agendas?.length ? draft.current.agendas : [{ title: '', duration_minutes: 10 }]
   );
@@ -215,7 +217,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   // 회의 요청 — Slack + Calendar 연동
   const handleRequest = async () => {
     if (!title.trim()) return;
-    if (allParticipants.length === 0) return;
+    if ((allParticipants.length === 0 && selectedAiEmployees.length <= 1)) return;
     setBusy(true);
     try {
       const cleaned = agendas.filter((a) => a.title.trim());
@@ -268,7 +270,7 @@ export default function CreateMeetingModal({ open, onClose }) {
             variant="gradient"
             onClick={handleRequest}
             loading={busy}
-            disabled={!title.trim() || allParticipants.length === 0}
+            disabled={!title.trim() || (allParticipants.length === 0 && selectedAiEmployees.length <= 1)}
           >
             회의 요청
           </Button>
@@ -382,6 +384,41 @@ export default function CreateMeetingModal({ open, onClose }) {
           </label>
 
           <div className="bg-bg-tertiary border border-border-subtle rounded-md p-1.5 max-h-56 overflow-y-auto">
+            {/* AI 팀원 */}
+            {AI_EMPLOYEES.map((emp) => {
+              const selected = selectedAiEmployees.includes(emp.id);
+              return (
+                <button
+                  key={emp.id}
+                  type="button"
+                  onClick={() => {
+                    if (emp.isDefault) return; // Milo는 항상 참여
+                    setSelectedAiEmployees((prev) =>
+                      prev.includes(emp.id) ? prev.filter((id) => id !== emp.id) : [...prev, emp.id]
+                    );
+                  }}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border ${
+                    selected
+                      ? 'bg-brand-purple/10 border-brand-purple/20'
+                      : 'hover:bg-bg-secondary border-transparent'
+                  }`}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                    style={{ backgroundColor: emp.color }}
+                  >
+                    {emp.initials}
+                  </div>
+                  <p className="text-sm font-medium text-txt-primary flex-1">{emp.name}</p>
+                  <span className="text-[11px] text-txt-muted">{emp.role.split('/')[0].trim()}</span>
+                  {selected && <Check size={13} className="text-brand-purple shrink-0 ml-1" />}
+                  {emp.isDefault && <span className="text-[9px] text-brand-purple font-semibold">기본</span>}
+                </button>
+              );
+            })}
+
+            <div className="border-t border-border-divider my-1" />
+
             {/* 팀 목록 */}
             {TEAMS.map((team) => {
               const selected = selectedTeams.includes(team.id);
@@ -441,11 +478,24 @@ export default function CreateMeetingModal({ open, onClose }) {
 
           {(allParticipants.length > 0 || true) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {/* Milo AI — 항상 기본 참여 */}
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gradient-to-r from-brand-orange/20 to-brand-purple/20 text-brand-purple">
-                <span className="w-4 h-4 rounded-full bg-brand-purple flex items-center justify-center text-[7px] font-bold text-white">Mi</span>
-                Milo
-              </span>
+              {/* AI 참석자 뱃지 */}
+              {selectedAiEmployees.map((empId) => {
+                const emp = AI_EMPLOYEES.find((e) => e.id === empId);
+                if (!emp) return null;
+                return (
+                  <span key={empId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gradient-to-r from-brand-orange/20 to-brand-purple/20 text-brand-purple">
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white" style={{ backgroundColor: emp.color }}>
+                      {emp.initials}
+                    </span>
+                    {emp.name}
+                    {!emp.isDefault && (
+                      <button type="button" onClick={() => setSelectedAiEmployees((p) => p.filter((id) => id !== empId))} className="hover:text-status-error ml-0.5">
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
               {selectedTeams.map((tid) => {
                 const t = TEAMS.find((team) => team.id === tid);
                 return (
@@ -477,16 +527,26 @@ export default function CreateMeetingModal({ open, onClose }) {
                     </span>
                   );
                 })}
-              <span className="text-[11px] text-txt-muted ml-1">총 {allParticipants.length + 1}명</span>
+              <span className="text-[11px] text-txt-muted ml-1">총 {allParticipants.length + selectedAiEmployees.length}명</span>
             </div>
           )}
         </div>
 
         {/* 회의 시간 — Apple-style */}
         <div>
-          <label className="block text-xs font-medium text-txt-secondary mb-2 uppercase tracking-wider">
-            회의 시간
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-txt-secondary uppercase tracking-wider">
+              회의 시간
+            </label>
+            <button
+              type="button"
+              onClick={() => handleSubmit(true)}
+              disabled={!title.trim()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-brand-orange to-brand-purple rounded-full hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              <Zap size={12} /> 지금 즉시 시작
+            </button>
+          </div>
           <div className="flex gap-2.5">
             <div className="flex-1 relative">
               <label className="block text-[11px] text-txt-muted mb-1">날짜</label>

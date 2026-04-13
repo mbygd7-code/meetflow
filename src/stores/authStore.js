@@ -53,6 +53,7 @@ export const useAuthStore = create((set, get) => ({
 
   // computed
   isAdmin: () => get().user?.role === 'admin',
+  isDemo: () => get().user?.id?.startsWith('mock-'),
 
   init: async () => {
     set({ loading: true });

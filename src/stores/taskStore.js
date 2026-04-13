@@ -257,12 +257,15 @@ const MOCK_TASKS = [
 let realtimeChannel = null;
 
 export const useTaskStore = create((set, get) => ({
-  tasks: SUPABASE_ENABLED ? [] : MOCK_TASKS,
+  tasks: MOCK_TASKS, // init()에서 Supabase 데이터로 교체됨
   loading: false,
 
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
-    if (!SUPABASE_ENABLED) return;
+    if (!SUPABASE_ENABLED) {
+      set({ tasks: MOCK_TASKS });
+      return;
+    }
 
     set({ loading: true });
     try {
