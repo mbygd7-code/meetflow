@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { X, Square, Users, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -84,6 +84,28 @@ export default function MeetingRoom() {
     onRespond: handleMiloRespond,
     onThinking: handleThinking,
   });
+
+  // AI 인사 — 회의 입장 시 메시지가 없으면 Milo가 먼저 인사
+  const greetedRef = useRef(false);
+  useEffect(() => {
+    if (greetedRef.current || !meeting || messages.length > 0) return;
+    greetedRef.current = true;
+
+    const agendaList = (meeting.agendas || []).map((a) => a.title).join(', ');
+    const greeting = agendaList
+      ? `안녕하세요! 오늘 회의 어젠다는 "${agendaList}" 입니다. 준비되시면 시작해주세요.`
+      : '안녕하세요! 회의가 시작되었습니다. 무엇을 논의해볼까요?';
+
+    const timer = setTimeout(() => {
+      sendMessage(greeting, {
+        agendaId: meeting?.agendas?.[0]?.id,
+        isAi: true,
+        aiType: 'nudge',
+        aiEmployee: 'drucker',
+      });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [meeting, messages.length, sendMessage]);
 
   if (!meeting) {
     return (
