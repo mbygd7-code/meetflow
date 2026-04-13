@@ -156,11 +156,19 @@ export const useAuthStore = create((set, get) => ({
   },
 
   mockSignIn: (email, role = 'member') => {
+    // localStorage 관리자 목록에서 role 자동 감지
+    let finalRole = role;
+    if (finalRole === 'member') {
+      try {
+        const admins = JSON.parse(localStorage.getItem('meetflow-admin-users') || '[]');
+        if (admins.some((a) => a.email === email)) finalRole = 'admin';
+      } catch {}
+    }
     const mockUser = {
       id: 'mock-' + Date.now(),
       email,
       name: email?.split('@')[0] || 'Demo User',
-      role,
+      role: finalRole,
     };
     set({ user: mockUser, session: { user: mockUser }, loading: false });
   },

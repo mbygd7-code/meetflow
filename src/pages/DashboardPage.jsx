@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import {
   Calendar,
@@ -20,9 +20,11 @@ import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
 import TaskCard from '@/components/task/TaskCard';
 import WeeklyChart from '@/components/ui/WeeklyChart';
+import TaskSlidePanel from '@/components/task/TaskSlidePanel';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
+  const [selectedTask, setSelectedTask] = useState(null);
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
   const { tasks } = useTaskStore();
@@ -181,7 +183,8 @@ export default function DashboardPage() {
       </div>
 
       {/* My Task 사이드바 */}
-      <aside className="hidden lg:block w-[300px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3">
+      <aside className="hidden lg:block w-[300px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 relative">
+        <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold text-txt-primary">My Tasks</h2>
           <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -204,7 +207,12 @@ export default function DashboardPage() {
               return (
                 <div
                   key={t.id}
-                  className="bg-[var(--card-bg)] rounded-[6px] border border-border-subtle p-3.5 hover:border-border-hover-strong transition-all cursor-pointer"
+                  onClick={() => setSelectedTask(selectedTask?.id === t.id ? null : t)}
+                  className={`bg-[var(--card-bg)] rounded-[6px] border p-3.5 transition-all cursor-pointer ${
+                    selectedTask?.id === t.id
+                      ? 'border-brand-purple bg-brand-purple/5'
+                      : 'border-border-subtle hover:border-border-hover-strong'
+                  }`}
                 >
                   <div className="flex items-start gap-2.5">
                     {t.status === 'in_progress' ? (

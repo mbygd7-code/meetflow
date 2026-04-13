@@ -19,10 +19,33 @@ export default function AdminDashboardPage() {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+
   useEffect(() => {
     async function fetchAdminData() {
       setLoading(true);
       try {
+        if (!SUPABASE_ENABLED) {
+          // 데모 모드: 목 데이터
+          setEmployees([
+            { user_id: 'u1', user_name: '김지우', email: 'jiwoo@meetflow.ai', avatar_color: '#FF902F', role: 'member', team: '프로덕트 팀', done_tasks: 5, total_tasks: 8, meeting_count: 12, completion_rate: 63 },
+            { user_id: 'u2', user_name: '박서연', email: 'seoyeon@meetflow.ai', avatar_color: '#34D399', role: 'member', team: '프로덕트 팀', done_tasks: 3, total_tasks: 6, meeting_count: 9, completion_rate: 50 },
+            { user_id: 'u3', user_name: '이도윤', email: 'doyun@meetflow.ai', avatar_color: '#38BDF8', role: 'member', team: '프로덕트 팀', done_tasks: 7, total_tasks: 10, meeting_count: 15, completion_rate: 70 },
+            { user_id: 'u4', user_name: '최하린', email: 'harin@meetflow.ai', avatar_color: '#F472B6', role: 'member', team: '디자인 팀', done_tasks: 4, total_tasks: 5, meeting_count: 8, completion_rate: 80 },
+            { user_id: 'u5', user_name: '정민수', email: 'minsu@meetflow.ai', avatar_color: '#A78BFA', role: 'member', team: '디자인 팀', done_tasks: 2, total_tasks: 4, meeting_count: 6, completion_rate: 50 },
+            { user_id: 'u6', user_name: '한소율', email: 'soyul@meetflow.ai', avatar_color: '#FBBF24', role: 'member', team: '엔지니어링 팀', done_tasks: 6, total_tasks: 7, meeting_count: 11, completion_rate: 86 },
+            { user_id: 'u7', user_name: '오재현', email: 'jaehyun@meetflow.ai', avatar_color: '#F87171', role: 'member', team: '엔지니어링 팀', done_tasks: 8, total_tasks: 9, meeting_count: 14, completion_rate: 89 },
+            { user_id: 'u8', user_name: '윤서아', email: 'seoa@meetflow.ai', avatar_color: '#2DD4BF', role: 'member', team: '엔지니어링 팀', done_tasks: 1, total_tasks: 3, meeting_count: 5, completion_rate: 33 },
+          ]);
+          setTeams([
+            { id: 'team-1', name: '프로덕트 팀', member_count: 3, active_meetings: 1, completed_meetings: 5 },
+            { id: 'team-2', name: '디자인 팀', member_count: 2, active_meetings: 0, completed_meetings: 3 },
+            { id: 'team-3', name: '엔지니어링 팀', member_count: 3, active_meetings: 1, completed_meetings: 4 },
+          ]);
+          setLoading(false);
+          return;
+        }
+
         // 직원 통계 (RPC)
         const { data: empData } = await supabase.rpc('get_employee_stats');
         setEmployees(empData || []);
@@ -68,8 +91,8 @@ export default function AdminDashboardPage() {
   const recentSummaries = meetings.filter((m) => m.status === 'completed').slice(0, 5);
 
   return (
-    <div className="p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full">
-      <div className="bg-[var(--bg-content)] rounded-[12px] p-2 md:p-3 lg:p-4 space-y-3">
+    <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3 min-h-full">
+      <div className="space-y-3">
 
         {/* 헤더 */}
         <div className="flex items-center gap-3">

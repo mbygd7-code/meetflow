@@ -10,6 +10,7 @@ import EvaluationReportModal from '@/components/admin/EvaluationReportModal';
 import { getOverallGrade, gradeToStyle } from '@/utils/gradeUtils';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import TaskSlidePanel from '@/components/task/TaskSlidePanel';
 
 // ── 참여도 점수 계산 ──
 function calcParticipationScore(msgCount, meetingCount) {
@@ -60,7 +61,22 @@ export default function EmployeeDetailPage() {
   const [evaluation, setEvaluation] = useState(null);
   const [evalHistory, setEvalHistory] = useState([]);
   const [reportOpen, setReportOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+
+  const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+
+  // 데모 직원 데이터
+  const MOCK_EMPLOYEES = {
+    u1: { name: '김지우', email: 'jiwoo@meetflow.ai', avatar_color: '#FF902F', role: 'member', team: '프로덕트 팀' },
+    u2: { name: '박서연', email: 'seoyeon@meetflow.ai', avatar_color: '#34D399', role: 'member', team: '프로덕트 팀' },
+    u3: { name: '이도윤', email: 'doyun@meetflow.ai', avatar_color: '#38BDF8', role: 'member', team: '프로덕트 팀' },
+    u4: { name: '최하린', email: 'harin@meetflow.ai', avatar_color: '#F472B6', role: 'member', team: '디자인 팀' },
+    u5: { name: '정민수', email: 'minsu@meetflow.ai', avatar_color: '#A78BFA', role: 'member', team: '디자인 팀' },
+    u6: { name: '한소율', email: 'soyul@meetflow.ai', avatar_color: '#FBBF24', role: 'member', team: '엔지니어링 팀' },
+    u7: { name: '오재현', email: 'jaehyun@meetflow.ai', avatar_color: '#F87171', role: 'member', team: '엔지니어링 팀' },
+    u8: { name: '윤서아', email: 'seoa@meetflow.ai', avatar_color: '#2DD4BF', role: 'member', team: '엔지니어링 팀' },
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -68,6 +84,55 @@ export default function EmployeeDetailPage() {
     async function fetchAll() {
       setLoading(true);
       try {
+        if (!SUPABASE_ENABLED) {
+          // 데모 모드
+          const mock = MOCK_EMPLOYEES[id];
+          if (mock) {
+            setProfile({ id, ...mock, created_at: '2025-01-15T00:00:00Z' });
+            setMeetings([
+              { id: 'm1', title: '주간 프로덕트 스탠드업', status: 'completed', created_at: '2026-04-07T09:00:00Z' },
+              { id: 'm2', title: '디자인 시스템 리뷰', status: 'completed', created_at: '2026-04-09T14:00:00Z' },
+              { id: 'm3', title: 'Q2 로드맵 킥오프', status: 'completed', created_at: '2026-04-10T10:00:00Z' },
+            ]);
+            setTasks([
+              {
+                id: 't1', title: '온보딩 A/B 와이어프레임 작성', status: 'in_progress', priority: 'high',
+                due_date: '2026-04-14', created_at: '2026-04-08T00:00:00Z',
+                description: '3단계(팀 초대) 플로우에서 이탈률이 34%로 높은 상황.\n개선안 A: 초대 스킵 허용\n개선안 B: 초대 단계를 2-step으로 분리',
+                assignee_name: mock.name, meeting_title: '주간 프로덕트 스탠드업',
+                service_name: '킨더보드', page_name: '온보딩 플로우', feature_name: '팀 초대 (3단계)',
+                tags: ['UX', 'A/B테스트', '이탈률개선'],
+                subtasks: [
+                  { title: '현재 이탈 데이터 분석', done: true },
+                  { title: '와이어프레임 A안 작성', done: false },
+                  { title: '와이어프레임 B안 작성', done: false },
+                ],
+              },
+              {
+                id: 't2', title: '성공 지표 대시보드 구성', status: 'todo', priority: 'medium',
+                due_date: '2026-04-18', created_at: '2026-04-09T00:00:00Z',
+                description: '온보딩 완료율, 7일 리텐션, DAU/MAU 비율 대시보드 설계.',
+                assignee_name: mock.name, meeting_title: '주간 프로덕트 스탠드업',
+                service_name: '킨더보드', page_name: '관리자 대시보드', feature_name: 'KPI 지표 패널',
+                tags: ['데이터', 'KPI'],
+              },
+              {
+                id: 't3', title: '사용자 인터뷰 정리', status: 'done', priority: 'medium',
+                due_date: '2026-04-06', created_at: '2026-04-01T00:00:00Z',
+                description: '원장/교사 10명 인터뷰 녹취록 정리 및 인사이트 추출.',
+                assignee_name: mock.name, meeting_title: 'Q2 로드맵 킥오프',
+                service_name: '킨더보드', page_name: '-', feature_name: '사용자 리서치',
+                tags: ['리서치', '인터뷰'],
+              },
+            ]);
+            setMessages(Array.from({ length: 25 }, (_, i) => ({
+              id: `msg-${i}`, meeting_id: `m${(i % 3) + 1}`, content: '발언 내용', created_at: new Date().toISOString(),
+            })));
+          }
+          setLoading(false);
+          return;
+        }
+
         // 1) 프로필
         const { data: userData } = await supabase
           .from('users')
@@ -241,8 +306,9 @@ export default function EmployeeDetailPage() {
   }
 
   return (
-    <div className="p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full">
-      <div className="bg-[var(--bg-content)] rounded-[12px] p-2 md:p-3 lg:p-4 space-y-3">
+    <div className="flex gap-3 p-2 md:p-3 lg:p-4 mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
+      {/* 메인 콘텐츠 */}
+      <div className="flex-1 min-w-0 bg-[var(--bg-content)] rounded-[12px] p-3 md:p-4 lg:p-4 lg:overflow-y-auto scrollbar-hide space-y-3">
 
         {/* ── 헤더: 뒤로가기 + 프로필 ── */}
         <div className="flex items-center gap-4">
@@ -429,7 +495,6 @@ export default function EmployeeDetailPage() {
           )}
         </SectionPanel>
 
-        {/* ═══ 섹션 5: 배정 태스크 목록 ═══ */}
         <SectionPanel title="배정 태스크" subtitle={`총 ${stats.totalTasks}건 · 완료 ${stats.doneTasks}건`}>
           {tasks.length === 0 ? (
             <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
@@ -491,6 +556,72 @@ export default function EmployeeDetailPage() {
         </SectionPanel>
 
       </div>
+      {/* 메인 콘텐츠 끝 */}
+
+      {/* ═══ 오른쪽 사이드바: 태스크 리스트 ═══ */}
+      <aside className="hidden lg:block w-[300px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 lg:overflow-y-auto lg:max-h-[calc(100vh-120px)] scrollbar-hide relative">
+        {/* 태스크 상세 슬라이드 패널 */}
+        <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
+
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-txt-primary">{profile?.name}의 태스크</h2>
+          <span className="text-xs text-txt-muted">{stats.doneTasks}/{stats.totalTasks} 완료</span>
+        </div>
+        <div className="space-y-2.5">
+          {tasks.length === 0 ? (
+            <p className="text-sm text-txt-muted text-center py-6">배정된 태스크가 없습니다</p>
+          ) : (
+            tasks.map((task) => {
+              const isOverdue = task.due_date && task.status !== 'done' &&
+                differenceInDays(new Date(), parseISO(task.due_date)) > 0;
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
+                  className={`bg-[var(--card-bg)] rounded-[6px] border p-3 transition-all cursor-pointer ${
+                    selectedTask?.id === task.id
+                      ? 'border-brand-purple bg-brand-purple/5'
+                      : 'border-border-subtle hover:border-border-hover-strong'
+                  }`}>
+                  <div className="flex items-start gap-2">
+                    <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
+                      task.status === 'done'
+                        ? 'border-status-success bg-status-success'
+                        : task.status === 'in_progress'
+                          ? 'border-brand-purple'
+                          : 'border-txt-muted'
+                    }`}>
+                      {task.status === 'done' && <CheckCircle2 size={10} className="text-white" />}
+                      {task.status === 'in_progress' && <div className="w-1.5 h-1.5 rounded-full bg-brand-purple" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium leading-snug line-clamp-2 ${
+                        task.status === 'done' ? 'text-txt-muted line-through' : 'text-txt-primary'
+                      }`}>{task.title}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {task.due_date && (
+                          <span className={`text-[11px] ${isOverdue ? 'text-status-error font-semibold' : 'text-txt-muted'}`}>
+                            {isOverdue ? 'D+' + differenceInDays(new Date(), parseISO(task.due_date)) : format(parseISO(task.due_date), 'MM/dd')}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-medium ${
+                          task.priority === 'urgent' ? 'text-status-error' :
+                          task.priority === 'high' ? 'text-brand-orange' :
+                          'text-txt-muted'
+                        }`}>
+                          {task.priority === 'urgent' ? '긴급' :
+                           task.priority === 'high' ? '높음' :
+                           task.priority === 'medium' ? '보통' : '낮음'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </aside>
 
       {/* ── AI 리포트 모달 ── */}
       <EvaluationReportModal

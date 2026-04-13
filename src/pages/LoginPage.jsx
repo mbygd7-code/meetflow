@@ -149,7 +149,7 @@ export default function LoginPage() {
   };
 
   const handleDemo = () => {
-    mockSignIn('demo@meetflow.ai');
+    mockSignIn('demo@meetflow.ai', 'admin');
     navigate('/');
   };
 
