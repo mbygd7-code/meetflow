@@ -47,18 +47,22 @@ export default function App() {
   const cleanupTasks = useTaskStore((s) => s.cleanup);
 
   useEffect(() => {
-    async function bootstrap() {
-      await init(); // auth 완료를 기다린 후
-      initTheme();
-      initMeetings(); // auth 상태를 반영하여 데모/실서비스 분기
+    init();
+    initTheme();
+  }, [init, initTheme]);
+
+  // auth 로딩 완료 후에 meetings/tasks 초기화 (user 상태를 반영)
+  const loading = useAuthStore((s) => s.loading);
+  useEffect(() => {
+    if (!loading) {
+      initMeetings();
       initTasks();
     }
-    bootstrap();
     return () => {
       cleanupMeetings();
       cleanupTasks();
     };
-  }, [init, initTheme, initMeetings, initTasks, cleanupMeetings, cleanupTasks]);
+  }, [loading, initMeetings, initTasks, cleanupMeetings, cleanupTasks]);
 
   return (
     <Routes>
