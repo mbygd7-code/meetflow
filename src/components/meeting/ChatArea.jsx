@@ -14,9 +14,17 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   const { user } = useAuthStore();
 
   const handleReact = (messageId, key) => {
+    const userName = user?.name || '나';
     setReactions((prev) => {
       const msg = { ...(prev[messageId] || {}) };
-      msg[key] = (msg[key] || 0) + 1;
+      const existing = msg[key] || { count: 0, users: [] };
+      // 이미 반응한 경우 토글 (제거)
+      if (existing.users.includes(userName)) {
+        msg[key] = { count: existing.count - 1, users: existing.users.filter((u) => u !== userName) };
+        if (msg[key].count <= 0) delete msg[key];
+      } else {
+        msg[key] = { count: existing.count + 1, users: [...existing.users, userName] };
+      }
       return { ...prev, [messageId]: msg };
     });
   };

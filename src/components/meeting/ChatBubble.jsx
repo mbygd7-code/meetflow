@@ -68,7 +68,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
 
   // 이 메시지의 리액션 집계
   const msgReactions = reactions[message.id] || {};
-  const hasReactions = Object.values(msgReactions).some((v) => v > 0);
+  const hasReactions = Object.values(msgReactions).some((v) => v?.count > 0);
 
   return (
     <div
@@ -103,17 +103,21 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
         <div className="relative">
           {/* 리액션 표시 — 말풍선 상단 */}
           {hasReactions && (
-            <div className={`flex gap-1 mb-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
+            <div className={`flex gap-1.5 mb-1.5 ${isMine ? 'justify-start' : 'justify-end'}`}>
               {REACTIONS.map(({ key, icon: Icon }) => {
-                const count = msgReactions[key] || 0;
-                if (!count) return null;
+                const data = msgReactions[key];
+                if (!data?.count) return null;
                 return (
                   <span
                     key={key}
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary"
+                    className="group/react relative inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary cursor-default"
                   >
-                    <Icon size={11} />
-                    {count}
+                    <Icon size={14} />
+                    {data.count}
+                    {/* 호버 시 리액션한 직원 이름 */}
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] whitespace-nowrap bg-bg-primary border border-border-subtle shadow-md opacity-0 pointer-events-none group-hover/react:opacity-100 transition-opacity z-10">
+                      {data.users.join(', ')}
+                    </span>
                   </span>
                 );
               })}
