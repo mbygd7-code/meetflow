@@ -46,9 +46,15 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';
   const time = formatTime(message.created_at);
 
-  const displayContent = isAi
+  const rawContent = isAi
     ? message.content?.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
     : message.content;
+
+  // 인용문 파싱: "> 이름: 내용...\n\n본문" 구조 분리
+  const quoteMatch = rawContent?.match(/^>\s*(.+?):\s*(.+?)(?:\n\n)([\s\S]*)$/);
+  const quotedSender = quoteMatch?.[1];
+  const quotedText = quoteMatch?.[2];
+  const displayContent = quoteMatch ? quoteMatch[3] : rawContent;
 
   const handleCopy = (e) => {
     e.stopPropagation();
@@ -134,6 +140,17 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
                   : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default'
             } transition-all`}
           >
+            {/* 인용 블록 */}
+            {quotedSender && (
+              <div className={`mb-2 pl-3 py-1.5 text-xs leading-relaxed rounded-md ${
+                isMine
+                  ? 'border-l-2 border-white/40 bg-white/10'
+                  : 'border-l-2 border-brand-purple/40 bg-brand-purple/5'
+              }`}>
+                <span className="font-semibold">{quotedSender}</span>
+                <p className="mt-0.5 opacity-80 line-clamp-2">{quotedText}</p>
+              </div>
+            )}
             {displayContent}
           </div>
 
