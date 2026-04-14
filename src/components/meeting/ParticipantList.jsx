@@ -9,7 +9,7 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
   const uniqueAiIds = [...new Set(aiIds)];
 
   return (
-    <aside className="w-[52px] lg:w-[200px] shrink-0 border-r border-border-subtle bg-bg-primary flex flex-col transition-all duration-200">
+    <aside className="w-[52px] lg:w-[200px] shrink-0 border-r border-border-subtle bg-bg-primary flex flex-col transition-all duration-200 overflow-visible">
       {/* 헤더: 태블릿에서는 숫자만 */}
       <div className="px-2 lg:px-4 py-4 border-b border-border-divider">
         <h3 className="text-[11px] font-semibold text-txt-muted uppercase tracking-wider text-center lg:text-left">
@@ -18,7 +18,7 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
         </h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1.5 lg:px-3 py-3 space-y-1">
+      <div className="flex-1 overflow-visible lg:overflow-y-auto px-1.5 lg:px-3 py-3 space-y-1">
         {/* AI 직원 목록 */}
         {uniqueAiIds.map((id) => {
           const emp = AI_EMPLOYEES.find((e) => e.id === id);

@@ -92,7 +92,15 @@ export default function Sidebar({ mobile = false, onClose }) {
       className="h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] lg:w-48 transition-all duration-200"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      <nav className="flex flex-col gap-0.5 flex-1 mt-2">
+      {/* 서비스 심볼 */}
+      <div className="flex items-center justify-center lg:justify-start gap-2 px-0 lg:px-2 pb-2 mb-1" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+        <div className="w-8 h-8 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
+          <Sparkles size={16} className="text-white" strokeWidth={2.5} />
+        </div>
+        <span className="hidden lg:inline text-sm font-bold" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
+      </div>
+
+      <nav className="flex flex-col gap-0.5 flex-1 mt-1">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
