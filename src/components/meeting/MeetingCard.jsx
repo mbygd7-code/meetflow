@@ -1,9 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, ListChecks } from 'lucide-react';
+import { Clock, ListChecks, XCircle } from 'lucide-react';
 import { Card, Avatar, Badge } from '@/components/ui';
 import { formatRelative, formatDate } from '@/utils/formatters';
 
-export default function MeetingCard({ meeting, onClick }) {
+export default function MeetingCard({ meeting, onClick, onCancel }) {
   const navigate = useNavigate();
   const isActive = meeting.status === 'active';
   const isScheduled = meeting.status === 'scheduled';
@@ -37,10 +37,21 @@ export default function MeetingCard({ meeting, onClick }) {
   return (
     <Card
       onClick={handleClick}
-      className="relative cursor-pointer hover:border-border-hover-strong hover:-translate-y-0.5"
+      className="group/card relative cursor-pointer hover:border-border-hover-strong hover:-translate-y-0.5"
     >
       {isActive && (
         <span className="absolute left-0 top-6 bottom-6 w-0.5 rounded-r bg-status-success" />
+      )}
+
+      {/* 예정 회의: 호버 시 취소 버튼 */}
+      {isScheduled && onCancel && (
+        <button
+          onClick={onCancel}
+          className="absolute top-3 right-3 p-1.5 rounded-md text-txt-muted opacity-0 group-hover/card:opacity-100 hover:text-status-error hover:bg-status-error/10 transition-all z-10"
+          title="회의 취소"
+        >
+          <XCircle size={16} />
+        </button>
       )}
 
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -62,7 +73,6 @@ export default function MeetingCard({ meeting, onClick }) {
       </div>
 
       <div className="flex items-center justify-between">
-        {/* 참여자 아바타 스택 */}
         <div className="flex -space-x-2">
           <Avatar variant="ai" size="sm" label="M" />
           {meeting.participants?.slice(0, 4).map((p) => (
