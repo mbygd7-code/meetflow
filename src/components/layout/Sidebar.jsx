@@ -36,6 +36,7 @@ export default function Sidebar({ mobile = false, onClose }) {
   const { pathname } = useLocation();
   const navItems = getNavItems(isAdmin());
   const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
+  const isMeetingPage = pathname.startsWith('/meetings/');
 
   const handleLogout = async () => {
     await signOut();
@@ -92,9 +93,18 @@ export default function Sidebar({ mobile = false, onClose }) {
   // ── 데스크톱: lg+ 넓은 / md~lg(태블릿) 아이콘 전용, 호버 시 펼쳐짐 ──
   return (
     <aside
-      className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle"
+      className={`group/sidebar h-full flex flex-col shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle ${isMeetingPage ? 'pt-0' : 'pt-2'} pb-2 px-2 lg:p-3`}
       style={{ background: 'var(--sidebar-bg)' }}
     >
+      {/* 회의 페이지: TopBar가 숨겨지므로 사이드바 상단에 로고 표시 */}
+      {isMeetingPage && (
+        <div className="hidden md:flex lg:hidden items-center justify-center h-14 shrink-0">
+          <div className="w-10 h-10 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
+            <Sparkles size={20} className="text-white" strokeWidth={2.5} />
+          </div>
+        </div>
+      )}
+
       <nav className="flex flex-col gap-0.5 flex-1 mt-2">
         {navItems.map(({ to, label, icon: Icon, end }) => {
           // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
