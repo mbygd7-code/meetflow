@@ -140,27 +140,34 @@ export default function MeetingRoom() {
     return [...ids];
   }, [messages]);
 
-  // AI 인사 — 회의 입장 시 메시지가 없으면 Milo가 먼저 인사
+  // AI 인사 — 회의 입장 시 AI 메시지가 없으면 Milo가 먼저 인사
   const greetedRef = useRef(false);
   useEffect(() => {
-    if (greetedRef.current || !meeting || messages.length > 0) return;
-    greetedRef.current = true;
+    if (greetedRef.current || !meeting || meeting.status !== 'active') return;
+    // AI 메시지가 이미 있으면 인사 생략
+    const hasAiMessage = messages.some((m) => m.is_ai);
+    if (hasAiMessage) { greetedRef.current = true; return; }
+    // 메시지 로딩 중이면 대기 (빈 배열일 때 바로 인사하지 않도록)
+    if (messages.length === 0 && !greetedRef.current) {
+      // 약간 대기 후 재확인 (Supabase 로딩 완료 대기)
+      const checkTimer = setTimeout(() => {
+        greetedRef.current = true;
+        const agendaList = (meeting.agendas || []).map((a) => a.title).join(', ');
+        const userName = meeting.participants?.[0]?.name || '여러분';
+        const greeting = agendaList
+          ? `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다. 오늘 회의 주제나 논의하고 싶은 안건이 있으시면 알려주세요. 효율적인 회의 진행을 도와드리겠습니다.`
+          : '안녕하세요! 회의가 시작되었습니다. 무엇을 논의해볼까요?';
 
-    const agendaList = (meeting.agendas || []).map((a) => a.title).join(', ');
-    const greeting = agendaList
-      ? `안녕하세요! 오늘 회의 어젠다는 "${agendaList}" 입니다. 준비되시면 시작해주세요.`
-      : '안녕하세요! 회의가 시작되었습니다. 무엇을 논의해볼까요?';
-
-    const timer = setTimeout(() => {
-      sendMessage(greeting, {
-        agendaId: meeting?.agendas?.[0]?.id,
-        isAi: true,
-        aiType: 'nudge',
-        aiEmployee: 'drucker',
-      });
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [meeting, messages.length, sendMessage]);
+        sendMessage(greeting, {
+          agendaId: meeting?.agendas?.[0]?.id,
+          isAi: true,
+          aiType: 'nudge',
+          aiEmployee: 'drucker',
+        });
+      }, 2000);
+      return () => clearTimeout(checkTimer);
+    }
+  }, [meeting, messages, sendMessage]);
 
   if (!meeting) {
     return (
