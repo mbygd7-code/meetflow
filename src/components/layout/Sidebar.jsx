@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
+import { useMeetingStore } from '@/stores/meetingStore';
 
 function getNavItems(isAdmin) {
   const items = [
@@ -33,6 +34,7 @@ export default function Sidebar({ mobile = false, onClose }) {
   const { user, signOut, isAdmin } = useAuthStore();
   const navigate = useNavigate();
   const navItems = getNavItems(isAdmin());
+  const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
 
   const handleLogout = async () => {
     await signOut();
@@ -101,40 +103,52 @@ export default function Sidebar({ mobile = false, onClose }) {
       </div>
 
       <nav className="flex flex-col gap-0.5 flex-1 mt-1">
-        {navItems.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={handleNavClick}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
-                isActive ? 'font-medium' : ''
-              }`
-            }
-            style={({ isActive }) => ({
-              color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
-              background: isActive ? 'var(--sidebar-active-bg)' : undefined,
-            })}
-            onMouseEnter={(e) => {
-              const active = e.currentTarget.getAttribute('aria-current') === 'page';
-              if (!active) {
-                e.currentTarget.style.background = 'var(--sidebar-hover)';
-                e.currentTarget.style.color = 'var(--sidebar-text)';
+        {navItems.map(({ to, label, icon: Icon, end }) => {
+          // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
+          const isMeetingNav = to === '/meetings';
+          const hasActiveMeeting = isMeetingNav && activeMeetingId;
+          const targetTo = hasActiveMeeting ? `/meetings/${activeMeetingId}` : to;
+
+          return (
+            <NavLink
+              key={to}
+              to={targetTo}
+              end={end && !hasActiveMeeting}
+              onClick={handleNavClick}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
+                  isActive ? 'font-medium' : ''
+                }`
               }
-            }}
-            onMouseLeave={(e) => {
-              const active = e.currentTarget.getAttribute('aria-current') === 'page';
-              if (!active) {
-                e.currentTarget.style.background = '';
-                e.currentTarget.style.color = 'var(--sidebar-text-muted)';
-              }
-            }}
-          >
-            <Icon size={18} strokeWidth={2} className="shrink-0" />
-            <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">{label}</span>
-          </NavLink>
-        ))}
+              style={({ isActive }) => ({
+                color: isActive ? 'var(--sidebar-text)' : hasActiveMeeting ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
+                background: isActive ? 'var(--sidebar-active-bg)' : undefined,
+              })}
+              onMouseEnter={(e) => {
+                const active = e.currentTarget.getAttribute('aria-current') === 'page';
+                if (!active) {
+                  e.currentTarget.style.background = 'var(--sidebar-hover)';
+                  e.currentTarget.style.color = 'var(--sidebar-text)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                const active = e.currentTarget.getAttribute('aria-current') === 'page';
+                if (!active) {
+                  e.currentTarget.style.background = '';
+                  e.currentTarget.style.color = hasActiveMeeting ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)';
+                }
+              }}
+            >
+              <span className={`relative shrink-0 ${hasActiveMeeting ? 'text-status-error' : ''}`}>
+                <Icon size={18} strokeWidth={2} />
+                {hasActiveMeeting && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-status-error pulse-dot" />
+                )}
+              </span>
+              <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">{label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* 하단 유저 */}
