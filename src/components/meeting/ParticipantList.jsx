@@ -1,5 +1,5 @@
 import { Avatar } from '@/components/ui';
-import { Slack, Globe } from 'lucide-react';
+import { Slack, Globe, Sparkles } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
@@ -10,6 +10,12 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
 
   return (
     <aside className="w-[52px] lg:w-[200px] shrink-0 border-r border-border-subtle bg-bg-primary flex flex-col transition-all duration-200 overflow-visible">
+      {/* 태블릿: 서비스 심볼 */}
+      <div className="hidden md:flex lg:hidden items-center justify-center py-4 border-b border-border-divider">
+        <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 sidebar-symbol">
+          <Sparkles size={14} className="text-white" strokeWidth={2.5} />
+        </div>
+      </div>
       {/* 헤더: 태블릿에서는 숫자만 */}
       <div className="px-2 lg:px-4 py-4 border-b border-border-divider">
         <h3 className="text-[11px] font-semibold text-txt-muted uppercase tracking-wider text-center lg:text-left">
