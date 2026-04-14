@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, ListChecks } from 'lucide-react';
+import { Clock, ListChecks, Bell } from 'lucide-react';
 import { Card, Avatar, Badge } from '@/components/ui';
 import { formatRelative, formatDate } from '@/utils/formatters';
+import { useToastStore } from '@/stores/toastStore';
 
 export default function MeetingCard({ meeting, onClick, onCancel }) {
   const navigate = useNavigate();
+  const addToast = useToastStore((s) => s.addToast);
   const isActive = meeting.status === 'active';
   const isScheduled = meeting.status === 'scheduled';
   const isCompleted = meeting.status === 'completed';
@@ -21,6 +23,16 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
     return '';
   };
 
+  // 진행 중 회의: 미참석 직원 (online !== true인 참여자)
+  const absentParticipants = isActive
+    ? (meeting.participants || []).filter((p) => p.online === false)
+    : [];
+
+  const handleRemind = (e, participant) => {
+    e.stopPropagation();
+    addToast(`${participant.name}님에게 Slack 리마인드를 전송했습니다.`, 'success');
+  };
+
   return (
     <Card
       onClick={handleClick}
@@ -35,7 +47,6 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
           {meeting.title}
         </h3>
 
-        {/* 상태 배지 — 예정 카드: 호버 시 "예정"→"취소" 전환 */}
         {isActive && (
           <Badge variant="success">
             <span className="w-1.5 h-1.5 rounded-full bg-status-success pulse-dot mr-1" />
@@ -45,10 +56,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         {isScheduled && onCancel ? (
           <>
             <Badge variant="purple" className="group-hover/card:hidden">예정</Badge>
-            <button
-              onClick={onCancel}
-              className="hidden group-hover/card:inline-flex"
-            >
+            <button onClick={onCancel} className="hidden group-hover/card:inline-flex">
               <Badge variant="danger">취소</Badge>
             </button>
           </>
@@ -88,6 +96,26 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
           )}
         </div>
       </div>
+
+      {/* 진행 중: 미참석 직원 표시 + 리마인드 */}
+      {isActive && absentParticipants.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border-divider">
+          <p className="text-[10px] text-txt-muted mb-2">미참석</p>
+          <div className="flex flex-wrap gap-1.5">
+            {absentParticipants.map((p) => (
+              <button
+                key={p.id}
+                onClick={(e) => handleRemind(e, p)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-status-warning bg-status-warning/10 hover:bg-status-warning/20 transition-colors"
+                title={`${p.name}님에게 리마인드 전송`}
+              >
+                <Bell size={10} />
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
