@@ -32,7 +32,14 @@ export function useMeeting() {
 
   // 회의 생성
   const createMeeting = useCallback(
-    async ({ title, team_id, agendas = [] }) => {
+    async ({ title, team_id, agendas = [], participants: meetingParticipants, scheduledDate, scheduledTime }) => {
+      // scheduled_at 계산: 날짜+시간이 있으면 조합, 없으면 현재 시간
+      const scheduledAt = scheduledDate && scheduledTime
+        ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+        : scheduledDate
+          ? new Date(`${scheduledDate}T09:00`).toISOString()
+          : new Date().toISOString();
+
       if (!canUseDB) {
         // 데모 모드 — 로컬 스토어에만 추가
         const newMeeting = {
@@ -41,7 +48,7 @@ export function useMeeting() {
           status: 'scheduled',
           team_id: team_id || 'team-1',
           created_by: user?.id || 'mock-1',
-          scheduled_at: new Date().toISOString(),
+          scheduled_at: scheduledAt,
           started_at: null,
           ended_at: null,
           created_at: new Date().toISOString(),
@@ -182,8 +189,8 @@ export function useMeeting() {
   // 회의 요청 — Slack 통지 + Google Calendar 연동
   const requestMeeting = useCallback(
     async ({ title, team_id, agendas = [], participants = [], files = [], scheduledDate, scheduledTime, duration }) => {
-      // 1. 회의 생성
-      const meeting = await createMeeting({ title, team_id, agendas, participants });
+      // 1. 회의 생성 (날짜/시간 포함)
+      const meeting = await createMeeting({ title, team_id, agendas, participants, scheduledDate, scheduledTime });
 
       // 2. Slack 통지 (Edge Function 호출)
       if (canUseDB && team_id) {
