@@ -69,6 +69,12 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
   return { should_respond: false };
 }
 
+// AI 응답 타이밍 (ms)
+const MILO_DELAYS = {
+  THINKING: { base: 1200, jitter: 800 },     // 밀로 초기 응답 대기
+  SPECIALIST: { base: 800, jitter: 600 },     // 전문가 간 응답 간격
+};
+
 // 후속 대화 감지 — 이전 AI 직원과 이어서 대화하는지 판단
 const FOLLOW_UP_PATTERNS = /^(더\s*자세히|계속|좀\s*더|구체적으로|예를\s*들어|그래서|그러면|그럼|응|네|맞아|좋아|알겠어|오케이|ok|ㅇㅇ|ㄱㄱ|어떻게|왜|뭐가|어떤|그거|그건|이어서|추가로|또|다른|그렇구나|설명해|알려줘|해줘|부탁|말해봐)/i;
 
@@ -219,7 +225,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
           // 2단계: 라우팅된 전문가 AI 순차 호출 (최대 2명)
           for (const specId of specialists.slice(0, 2)) {
             // 전문가 호출 전 로딩 표시
-            await new Promise((r) => setTimeout(r, 800 + Math.random() * 600));
+            await new Promise((r) => setTimeout(r, MILO_DELAYS.SPECIALIST.base + Math.random() * MILO_DELAYS.SPECIALIST.jitter));
             onThinking?.(true, specId);
 
             try {
@@ -287,7 +293,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
     };
 
     // 살짝 지연시켜 사람처럼 보이게
-    const timer = setTimeout(run, 1200 + Math.random() * 800);
+    const timer = setTimeout(run, MILO_DELAYS.THINKING.base + Math.random() * MILO_DELAYS.THINKING.jitter);
     return () => clearTimeout(timer);
   }, [messages, agenda, preset, onRespond, getSnapshot, routeByKeywords, buildPromptFor, getEmployeeModelId, alwaysRespond]);
 
