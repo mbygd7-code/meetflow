@@ -230,8 +230,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
             }
           }
 
-          // 2단계: 라우팅된 전문가 AI 순차 호출 (최대 2명)
-          for (const specId of specialists.slice(0, 2)) {
+          // 2단계: 라우팅된 전문가 AI 순차 호출 (최대 3명, 동적 추가 지원)
+          const calledSpecs = new Set();
+          let specIdx = 0;
+          while (specIdx < specialists.length && calledSpecs.size < 3) {
+            const specId = specialists[specIdx++];
+            if (calledSpecs.has(specId)) continue;
+            calledSpecs.add(specId);
             // 전문가 호출 전 로딩 표시
             await new Promise((r) => setTimeout(r, MILO_DELAYS.SPECIALIST.base + Math.random() * MILO_DELAYS.SPECIALIST.jitter));
             onThinking?.(true, specId);
