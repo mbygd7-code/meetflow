@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { useAiTeamStore } from '@/stores/aiTeamStore';
 
 import Layout from '@/components/layout/Layout';
 import LoginPage from '@/pages/LoginPage';
@@ -43,6 +44,7 @@ export default function App() {
   const initTheme = useThemeStore((s) => s.init);
   const initMeetings = useMeetingStore((s) => s.init);
   const initTasks = useTaskStore((s) => s.init);
+  const loadKnowledgeFiles = useAiTeamStore((s) => s.loadKnowledgeFiles);
   const cleanupMeetings = useMeetingStore((s) => s.cleanup);
   const cleanupTasks = useTaskStore((s) => s.cleanup);
 
@@ -57,12 +59,13 @@ export default function App() {
     if (!loading) {
       initMeetings();
       initTasks();
+      loadKnowledgeFiles();
     }
     return () => {
       cleanupMeetings();
       cleanupTasks();
     };
-  }, [loading, initMeetings, initTasks, cleanupMeetings, cleanupTasks]);
+  }, [loading, initMeetings, initTasks, loadKnowledgeFiles, cleanupMeetings, cleanupTasks]);
 
   return (
     <Routes>

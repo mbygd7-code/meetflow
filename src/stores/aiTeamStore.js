@@ -1,7 +1,9 @@
 // AI 팀원 스토어 — Kinderboard x MeetFlow AI 직원 시스템
 import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
 
 const STORAGE_KEY = 'meetflow-ai-team';
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 // ═══ 7명의 AI 직원 정의 ═══
 export const AI_EMPLOYEES = [
@@ -426,23 +428,71 @@ export const useAiTeamStore = create((set, get) => ({
     saveToStorage(get());
   },
 
-  // 특정 AI에게 지식 파일 추가
-  addKnowledgeFile: (employeeId, file) => {
+  // 특정 AI에게 지식 파일 추가 (localStorage + Supabase)
+  addKnowledgeFile: async (employeeId, file) => {
     const overrides = { ...get().employeeOverrides };
     const existing = overrides[employeeId] || {};
     const files = [...(existing.knowledgeFiles || []), file];
     overrides[employeeId] = { ...existing, knowledgeFiles: files };
     set({ employeeOverrides: overrides });
     saveToStorage(get());
+
+    if (SUPABASE_ENABLED) {
+      try {
+        await supabase.from('ai_knowledge_files').insert({
+          id: file.id,
+          employee_id: employeeId,
+          name: file.name,
+          content: file.content,
+          size: file.size,
+        });
+      } catch (err) {
+        console.error('[aiTeamStore] DB save failed:', err);
+      }
+    }
   },
 
-  removeKnowledgeFile: (employeeId, fileId) => {
+  removeKnowledgeFile: async (employeeId, fileId) => {
     const overrides = { ...get().employeeOverrides };
     const existing = overrides[employeeId] || {};
     const files = (existing.knowledgeFiles || []).filter((f) => f.id !== fileId);
     overrides[employeeId] = { ...existing, knowledgeFiles: files };
     set({ employeeOverrides: overrides });
     saveToStorage(get());
+
+    if (SUPABASE_ENABLED) {
+      try {
+        await supabase.from('ai_knowledge_files').delete().eq('id', fileId);
+      } catch (err) {
+        console.error('[aiTeamStore] DB delete failed:', err);
+      }
+    }
+  },
+
+  // DB에서 지식 문서 로드
+  loadKnowledgeFiles: async () => {
+    if (!SUPABASE_ENABLED) return;
+    try {
+      const { data, error } = await supabase
+        .from('ai_knowledge_files')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error || !data?.length) return;
+
+      const overrides = { ...get().employeeOverrides };
+      data.forEach((f) => {
+        const emp = overrides[f.employee_id] || {};
+        const files = emp.knowledgeFiles || [];
+        if (!files.some((x) => x.id === f.id)) {
+          files.push({ id: f.id, name: f.name, content: f.content, size: f.size, addedAt: f.created_at });
+        }
+        overrides[f.employee_id] = { ...emp, knowledgeFiles: files };
+      });
+      set({ employeeOverrides: overrides });
+      saveToStorage(get());
+    } catch (err) {
+      console.error('[aiTeamStore] DB load failed:', err);
+    }
   },
 
   // 키워드 기반 AI 라우팅
