@@ -4,16 +4,37 @@ import { Sparkles } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
+// 메시지 [이름] 접두사에서 AI 직원 ID 감지 (DB 새로고침 후 ai_employee 없을 때 폴백)
+const NAME_TO_ID = {};
+AI_EMPLOYEES.forEach((e) => {
+  NAME_TO_ID[e.nameKo] = e.id;
+  NAME_TO_ID[e.name.toLowerCase()] = e.id;
+});
+
+function detectAiEmployee(message) {
+  // 1. ai_employee 필드가 있으면 그대로 사용
+  if (message.ai_employee) return message.ai_employee;
+  // 2. 메시지 내용의 [이름] 접두사에서 감지
+  const match = message.content?.match(/^\[([\u3131-\uD79D\w]+)\]/);
+  if (match) {
+    const name = match[1];
+    const id = NAME_TO_ID[name] || NAME_TO_ID[name.toLowerCase()];
+    if (id) return id;
+  }
+  // 3. 기본값: drucker (Milo)
+  return 'drucker';
+}
+
 export default function ChatBubble({ message, currentUserId }) {
   const isAi = message.is_ai;
   const isMine = !isAi && message.user_id === currentUserId;
 
-  // AI 메시지: ai_employee 기반으로 이름 결정
+  // AI 직원 감지: ai_employee 필드 → [이름] 접두사 → 기본 Milo
+  const employeeId = isAi ? detectAiEmployee(message) : null;
+  const emp = employeeId ? AI_EMPLOYEES.find((e) => e.id === employeeId) : null;
+
   let senderName;
   if (isAi) {
-    const emp = message.ai_employee
-      ? AI_EMPLOYEES.find((e) => e.id === message.ai_employee)
-      : null;
     senderName = emp?.nameKo || emp?.name || message.user?.name || 'Milo';
   } else {
     senderName = message.user?.name || '알 수 없음';
@@ -33,7 +54,7 @@ export default function ChatBubble({ message, currentUserId }) {
     >
       {/* 아바타 */}
       {isAi ? (
-        <MiloAvatar employeeId={message.ai_employee} size="md" />
+        <MiloAvatar employeeId={employeeId} size="md" />
       ) : (
         <Avatar name={senderName} color={senderColor} size="md" />
       )}
