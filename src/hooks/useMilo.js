@@ -69,10 +69,14 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
   return { should_respond: false };
 }
 
+// 후속 대화 감지 — 이전 AI 직원과 이어서 대화하는지 판단
+const FOLLOW_UP_PATTERNS = /^(더\s*자세히|계속|좀\s*더|구체적으로|예를\s*들어|그래서|그러면|그럼|응|네|맞아|좋아|알겠어|오케이|ok|ㅇㅇ|ㄱㄱ|어떻게|왜|뭐가|어떤|그거|그건|이어서|추가로|또|다른|그렇구나|설명해|알려줘|해줘|부탁|말해봐)/i;
+
 export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond = false }) {
   const lastInterventionRef = useRef(0);
   const interventionCountRef = useRef(0);
   const lastProcessedIdRef = useRef(null);
+  const lastRespondingEmployeeRef = useRef(null); // 마지막 응답한 AI 직원 추적
 
   // miloStore에서 설정 읽기
   const preset = useMiloStore((s) => s.preset);
@@ -152,12 +156,26 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
           }
         }
 
+        // ── 후속 대화 감지: 이전에 응답한 AI 직원과 이어서 대화 ──
+        const isFollowUp = !mentioned && !directEmployeeMention
+          && lastRespondingEmployeeRef.current
+          && lastRespondingEmployeeRef.current !== 'drucker'
+          && (FOLLOW_UP_PATTERNS.test(lastMsg.content) || specialists.length === 0);
+
+        if (isFollowUp) {
+          // 이전 전문가가 직접 이어서 응답 (밀로 단계 스킵)
+          directSpecialist = lastRespondingEmployeeRef.current;
+          if (!specialists.includes(directSpecialist)) {
+            specialists = [directSpecialist, ...specialists];
+          }
+        }
+
         // 로딩 표시 시작
-        onThinking?.(true, directSpecialist || 'drucker');
+        onThinking?.(true, directSpecialist || specialists[0] || 'drucker');
 
         let result;
 
-        // 직접 전문가 멘션인 경우 밀로 단계 스킵
+        // 직접 전문가 멘션 또는 후속 대화인 경우 밀로 단계 스킵
         if (directSpecialist) {
           result = { should_respond: false };
           onThinking?.(false, null);
@@ -191,6 +209,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         if (result?.should_respond) {
           lastInterventionRef.current = Date.now();
           interventionCountRef.current += 1;
+          lastRespondingEmployeeRef.current = result.ai_employee || 'drucker';
           onRespond?.(result);
         }
 
@@ -252,6 +271,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
                   specResult.response_text = `[${emp.nameKo}] ${specResult.response_text}`;
                 }
                 specResult.ai_employee = specId;
+                lastRespondingEmployeeRef.current = specId; // 후속 대화를 위해 기록
                 onRespond?.(specResult);
               }
             } catch (specErr) {
