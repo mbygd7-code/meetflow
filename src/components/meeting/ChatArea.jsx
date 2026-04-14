@@ -77,7 +77,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="의견을 입력하세요... (@Milo로 AI에게 질문)"
+            placeholder="의견을 입력하세요..."
             rows={1}
             disabled={disabled}
             className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"

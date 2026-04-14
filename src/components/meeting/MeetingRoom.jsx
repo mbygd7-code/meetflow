@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useMilo } from '@/hooks/useMilo';
+import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import ParticipantList from './ParticipantList';
 import ChatArea from './ChatArea';
 import AISummaryPanel from './AISummaryPanel';
@@ -30,6 +31,15 @@ export default function MeetingRoom() {
         meeting?.agendas?.[0]?.id;
     return meeting?.agendas?.find((a) => a.id === targetId);
   }, [activeAgendaId, meeting]);
+
+  // AI-only 회의 감지: 인간 참여자가 나 혼자면 모든 메시지에 AI 자동 응답
+  const isAiOnlyMeeting = useMemo(() => {
+    const aiIds = AI_EMPLOYEES.map((e) => e.id);
+    const humanParticipants = (meeting?.participants || []).filter(
+      (p) => p.id !== 'milo' && !aiIds.includes(p.id)
+    );
+    return humanParticipants.length <= 1;
+  }, [meeting]);
 
   // ── Polls ──
   const handleCreatePoll = useCallback(({ question, options }) => {
@@ -83,7 +93,17 @@ export default function MeetingRoom() {
     agenda: currentAgenda,
     onRespond: handleMiloRespond,
     onThinking: handleThinking,
+    alwaysRespond: isAiOnlyMeeting,
   });
+
+  // 응답한 AI 직원 추출 (참여자 리스트에 표시)
+  const activeAiEmployees = useMemo(() => {
+    const ids = new Set();
+    messages.forEach((m) => {
+      if (m.is_ai && m.ai_employee) ids.add(m.ai_employee);
+    });
+    return [...ids];
+  }, [messages]);
 
   // AI 인사 — 회의 입장 시 메시지가 없으면 Milo가 먼저 인사
   const greetedRef = useRef(false);
@@ -237,7 +257,7 @@ export default function MeetingRoom() {
       {mobilePanel && (
         <div className="md:hidden border-b border-border-divider max-h-48 overflow-y-auto">
           {mobilePanel === 'participants' && (
-            <ParticipantList participants={meeting.participants || []} />
+            <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} />
           )}
           {mobilePanel === 'summary' && (
             <div>
@@ -253,7 +273,7 @@ export default function MeetingRoom() {
       {/* 데스크톱: 3컬럼 / 모바일: 채팅만 */}
       <div className="flex flex-1 overflow-hidden">
         <div className="hidden md:block">
-          <ParticipantList participants={meeting.participants || []} />
+          <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} />
         </div>
         <ChatArea
           messages={messages}

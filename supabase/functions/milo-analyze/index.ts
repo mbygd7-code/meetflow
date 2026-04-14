@@ -40,7 +40,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agenda, preset, context } = await req.json();
+    const { messages, agenda, preset, context, miloSettings } = await req.json();
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
@@ -71,10 +71,16 @@ ${preset || 'default'}
 @Milo 직접 호출이 있다면 반드시 응답 (5~8문장).
 응답이 필요 없다면 should_respond=false.`;
 
+    // miloSettings에서 커스텀 시스템 프롬프트 / 모델 지원
+    const systemPrompt = miloSettings?.systemPromptOverride || MILO_SYSTEM_PROMPT;
+    const model = miloSettings?.apiModelId || 'claude-sonnet-4-20250514';
+
+    const JSON_FORMAT_INSTRUCTION = `\n\n## 응답 형식 (반드시 준수)\n반드시 순수 JSON만 응답하세요. 마크다운이나 설명 텍스트를 포함하지 마세요.\nresponse_text에는 회의 참가자에게 보여줄 깔끔한 메시지만 작성하세요.\n{\n  "should_respond": boolean,\n  "response_text": "회의 참가자에게 보여줄 깔끔한 응답 메시지",\n  "ai_type": "data" | "insight" | "question" | "summary" | "nudge"\n}`;
+
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model,
       max_tokens: 600,
-      system: MILO_SYSTEM_PROMPT,
+      system: systemPrompt + JSON_FORMAT_INSTRUCTION,
       messages: [{ role: 'user', content: userPrompt }],
     });
 

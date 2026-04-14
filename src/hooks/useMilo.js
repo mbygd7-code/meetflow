@@ -5,10 +5,11 @@ import { MILO_PRESETS, EMPLOYEE_NAME_MAP } from '@/lib/constants';
 import { useMiloStore } from '@/stores/miloStore';
 import { useAiTeamStore, AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-const CLAUDE_API_ENABLED = !!import.meta.env.VITE_ANTHROPIC_API_KEY;
+// Supabase Edge Function으로 Claude API 호출 (VITE_SUPABASE_URL이 있으면 활성화)
+const CLAUDE_API_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 // 데모 모드 — Claude API 없이도 동작하는 규칙 기반 AI 팀
-function mockMiloResponse(messages, agenda, routedEmployees) {
+function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = false) {
   const lastUserMsg = [...messages].reverse().find((m) => !m.is_ai);
   if (!lastUserMsg) return null;
 
@@ -52,10 +53,23 @@ function mockMiloResponse(messages, agenda, routedEmployees) {
       ],
     };
   }
+  // alwaysRespond 모드: 트리거 없어도 항상 응답 (AI-only 1:1 회의)
+  if (alwaysRespond) {
+    const responder = specialists[0] || AI_EMPLOYEES[0];
+    return {
+      should_respond: true,
+      response_text: specialists.length > 0
+        ? `[${(AI_EMPLOYEES.find((e) => e.id === responder.id) || responder).nameKo}] 말씀하신 내용에 대해 ${responder.role} 관점에서 검토해보겠습니다. 좀 더 구체적인 방향이 있으시면 알려주세요.`
+        : `[밀로] 네, 말씀 잘 들었습니다. "${agenda?.title || '논의 주제'}"와 관련해서 정리해드리면, 현재까지의 논의를 바탕으로 구체적인 액션 아이템을 도출해볼 수 있을 것 같습니다. 어떤 부분을 더 깊이 논의해볼까요?`,
+      ai_type: 'insight',
+      ai_employee: specialists.length > 0 ? responder.id : 'drucker',
+    };
+  }
+
   return { should_respond: false };
 }
 
-export function useMilo({ messages, agenda, onRespond, onThinking }) {
+export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond = false }) {
   const lastInterventionRef = useRef(0);
   const interventionCountRef = useRef(0);
   const lastProcessedIdRef = useRef(null);
@@ -90,24 +104,26 @@ export function useMilo({ messages, agenda, onRespond, onThinking }) {
     const directEmployeeMention = MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION?.test(lastMsg.content);
 
     if (!mentioned && !directEmployeeMention) {
-      // 개입 횟수 제한
-      if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) return;
+      if (!alwaysRespond) {
+        // 기존 로직: 개입 횟수/쿨다운/최소 턴 체크
+        if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) return;
 
-      // 쿨다운 체크
-      const sinceLastMs = Date.now() - lastInterventionRef.current;
-      if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) return;
+        const sinceLastMs = Date.now() - lastInterventionRef.current;
+        if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) return;
 
-      // 최소 턴 수 체크 (Milo 마지막 발언 이후 사람 발언 수)
-      let humanTurnsSinceMilo = 0;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].is_ai) break;
-        humanTurnsSinceMilo++;
+        let humanTurnsSinceMilo = 0;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].is_ai) break;
+          humanTurnsSinceMilo++;
+        }
+        if (humanTurnsSinceMilo < cfg.minTurnsBefore) return;
       }
-      if (humanTurnsSinceMilo < cfg.minTurnsBefore) return;
+      // alwaysRespond 모드: 위 제한을 모두 스킵
     }
 
     // 트리거 조건 체크 (개입할 만한 내용인지)
     const shouldConsider =
+      alwaysRespond ||
       mentioned ||
       directEmployeeMention ||
       MILO_INTERVENTION_TRIGGERS.GUESS.test(lastMsg.content) ||
@@ -147,7 +163,10 @@ export function useMilo({ messages, agenda, onRespond, onThinking }) {
           onThinking?.(false, null);
         } else if (CLAUDE_API_ENABLED) {
           // 1단계: 밀로(드러커)가 먼저 응답
-          const miloPrompt = buildPromptFor('drucker');
+          let miloPrompt = buildPromptFor('drucker');
+          if (alwaysRespond) {
+            miloPrompt += '\n\n## 중요: 1:1 회의 모드입니다. 사용자의 모든 메시지에 반드시 should_respond: true로 응답하세요. 짧은 인사나 간단한 질문에도 친절하게 응답합니다.';
+          }
           const miloModelId = getEmployeeModelId('drucker');
           const miloSettings = {
             ...getSnapshot(),
@@ -165,7 +184,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking }) {
           if (result) result.ai_employee = 'drucker';
           onThinking?.(false, null);
         } else {
-          result = mockMiloResponse(messages, agenda, routedEmployees);
+          result = mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond);
           onThinking?.(false, null);
         }
 
@@ -250,7 +269,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking }) {
     // 살짝 지연시켜 사람처럼 보이게
     const timer = setTimeout(run, 1200 + Math.random() * 800);
     return () => clearTimeout(timer);
-  }, [messages, agenda, preset, onRespond, getSnapshot, routeByKeywords, buildPromptFor, getEmployeeModelId]);
+  }, [messages, agenda, preset, onRespond, getSnapshot, routeByKeywords, buildPromptFor, getEmployeeModelId, alwaysRespond]);
 
   // 어젠다 변경 시 개입 카운트 리셋
   useEffect(() => {

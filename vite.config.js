@@ -12,12 +12,5 @@ export default defineConfig({
   server: {
     port: Number(process.env.PORT) || 5180,
     host: true,
-    proxy: {
-      '/api/claude': {
-        target: 'https://api.anthropic.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/claude/, ''),
-      },
-    },
   },
 });

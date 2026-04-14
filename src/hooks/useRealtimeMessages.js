@@ -142,16 +142,6 @@ export function useRealtimeMessages(meetingId) {
   const sendMessage = useCallback(
     async (content, { agendaId, isAi = false, aiType, aiEmployee, source = 'web' } = {}) => {
       if (!content?.trim()) return;
-      const messagePayload = {
-        meeting_id: meetingId,
-        agenda_id: agendaId,
-        user_id: isAi ? null : user?.id,
-        content: content.trim(),
-        is_ai: isAi,
-        ai_type: aiType,
-        ai_employee: aiEmployee,
-        source,
-      };
 
       if (isDemoMode(user?.id, meetingId)) {
         // AI 직원 정보 조회
@@ -163,7 +153,14 @@ export function useRealtimeMessages(meetingId) {
         // 로컬 데모: 직접 state 업데이트
         const newMsg = {
           id: `m-local-${Date.now()}`,
-          ...messagePayload,
+          meeting_id: meetingId,
+          agenda_id: agendaId,
+          user_id: isAi ? null : user?.id,
+          content: content.trim(),
+          is_ai: isAi,
+          ai_type: aiType,
+          ai_employee: isAi ? (aiEmployee || 'drucker') : undefined,
+          source,
           user: isAi ? aiUser : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
           created_at: new Date().toISOString(),
         };
@@ -171,12 +168,34 @@ export function useRealtimeMessages(meetingId) {
         return newMsg;
       }
 
+      // Supabase INSERT — ai_employee 컬럼이 DB에 없으므로 제외
       const { data, error } = await supabase
         .from('messages')
-        .insert(messagePayload)
+        .insert({
+          meeting_id: meetingId,
+          agenda_id: agendaId,
+          user_id: isAi ? null : user?.id,
+          content: content.trim(),
+          is_ai: isAi,
+          ai_type: aiType,
+          source,
+        })
         .select('*, user:users(id,name,avatar_color)')
         .single();
-      if (error) console.error('[sendMessage]', error);
+      if (error) {
+        console.error('[sendMessage]', error);
+        return null;
+      }
+      // Realtime이 지연되거나 미작동할 수 있으므로 즉시 로컬 state에 추가
+      // ai_employee는 DB에 없으므로 로컬에서 보강
+      if (data) {
+        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'drucker' } : data;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === enriched.id)) return prev;
+          return [...prev, enriched];
+        });
+        return enriched;
+      }
       return data;
     },
     [meetingId, user]

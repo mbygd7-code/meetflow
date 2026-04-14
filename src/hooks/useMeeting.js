@@ -121,21 +121,8 @@ export function useMeeting() {
         console.warn('[endMeeting] AI 요약 생성 실패 (데모 요약 사용):', err.message);
       }
 
-      // DB 저장 (Supabase 활성화 시)
-      if (summary && canUseDB) {
-        try {
-          await supabase.from('meeting_summaries').insert({
-            meeting_id: id,
-            decisions: summary.decisions || [],
-            discussions: summary.discussions || [],
-            deferred: summary.deferred || [],
-            action_items: summary.action_items || [],
-            milo_insights: summary.milo_insights || '',
-          });
-        } catch (err) {
-          console.error('[endMeeting] 요약 DB 저장 실패:', err);
-        }
-      }
+      // DB 저장은 Edge Function(generate-summary)에서 자동 처리됨
+      // canUseDB일 때 프론트엔드에서 별도 저장하지 않음
 
       // 데모 모드: localStorage에 저장
       if (summary && !canUseDB) {
