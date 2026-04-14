@@ -98,10 +98,11 @@ export default function Sidebar({ mobile = false, onClose }) {
     >
       {/* 회의 페이지: TopBar가 숨겨지므로 사이드바 상단에 로고 표시 */}
       {isMeetingPage && (
-        <div className="hidden md:flex lg:hidden items-center justify-center h-14 shrink-0">
+        <div className="hidden md:flex lg:hidden items-center gap-3 px-1 h-14 shrink-0">
           <div className="w-10 h-10 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
             <Sparkles size={20} className="text-white" strokeWidth={2.5} />
           </div>
+          <span className="hidden group-hover/sidebar:inline text-lg font-bold tracking-tight whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
         </div>
       )}
 
