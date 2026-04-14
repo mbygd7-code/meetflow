@@ -21,6 +21,7 @@ export default function MeetingRoom() {
   const [mobilePanel, setMobilePanel] = useState(null); // 'participants' | 'summary' | null
   const [aiThinking, setAiThinking] = useState(null); // { active: bool, employeeId: string }
   const [polls, setPolls] = useState([]);
+  const [summaryExpanded, setSummaryExpanded] = useState(false); // 태블릿 AI 요약 패널
   const [ending, setEnding] = useState(false);
   const { messages, sendMessage } = useRealtimeMessages(id);
 
@@ -271,7 +272,7 @@ export default function MeetingRoom() {
       )}
 
       {/* 데스크톱: 3컬럼 / 모바일: 채팅만 */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         <div className="hidden md:block">
           <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} />
         </div>
@@ -281,9 +282,32 @@ export default function MeetingRoom() {
           disabled={meeting.status === 'completed'}
           aiThinking={aiThinking}
         />
-        <div className="hidden md:block">
+        {/* 오른쪽: AI 요약 — lg+ 인라인, 태블릿 플로팅 토글 */}
+        {/* lg+: 항상 보이는 인라인 패널 */}
+        <div className="hidden lg:block">
           <AISummaryPanel meetingId={id} sections={summarySections} polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
         </div>
+        {/* md~lg: 토글 버튼 + 오버레이 패널 */}
+        <button
+          className="hidden md:flex lg:hidden items-center justify-center w-10 shrink-0 border-l border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors"
+          onClick={() => setSummaryExpanded(!summaryExpanded)}
+          title="AI 요약"
+        >
+          <Sparkles size={16} className="text-brand-purple" />
+        </button>
+        {summaryExpanded && (
+          <div className="lg:hidden absolute right-0 top-0 bottom-0 w-80 z-40 bg-bg-primary border-l border-border-subtle shadow-lg flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
+              <span className="text-sm font-semibold text-txt-primary">AI 요약</span>
+              <button onClick={() => setSummaryExpanded(false)} className="p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <AISummaryPanel meetingId={id} sections={summarySections} polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

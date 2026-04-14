@@ -86,17 +86,18 @@ export default function Sidebar({ mobile = false, onClose }) {
     );
   }
 
-  // ── 데스크톱: lg+ 넓은 사이드바 / md~lg(태블릿) 아이콘 전용 + 호버 툴팁 ──
+  // ── 데스크톱: lg+ 넓은 / md~lg(태블릿) 아이콘 전용, 호버 시 펼쳐짐 ──
   return (
     <aside
-      className="h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] lg:w-48 transition-all duration-200"
+      className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 서비스 심볼 — 태블릿에서만 표시, lg+에서는 TopBar 로고 사용 */}
-      <div className="flex items-center justify-center gap-2 px-0 py-3 lg:hidden" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+      {/* 서비스 심볼 — 태블릿에서만 표시 */}
+      <div className="flex items-center gap-2 px-2 py-3 lg:hidden" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
         <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 sidebar-symbol">
           <Sparkles size={16} className="text-white" strokeWidth={2.5} />
         </div>
+        <span className="hidden group-hover/sidebar:inline lg:hidden text-sm font-bold whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
       </div>
 
       <nav className="flex flex-col gap-0.5 flex-1 mt-1">
@@ -107,7 +108,7 @@ export default function Sidebar({ mobile = false, onClose }) {
             end={end}
             onClick={handleNavClick}
             className={({ isActive }) =>
-              `group relative flex items-center gap-3 px-0 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 justify-center lg:justify-start ${
+              `flex items-center gap-3 px-3 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
                 isActive ? 'font-medium' : ''
               }`
             }
@@ -129,31 +130,24 @@ export default function Sidebar({ mobile = false, onClose }) {
                 e.currentTarget.style.color = 'var(--sidebar-text-muted)';
               }
             }}
-            title={label}
           >
             <Icon size={18} strokeWidth={2} className="shrink-0" />
-            <span className="hidden lg:inline">{label}</span>
-            {/* 태블릿: 호버 시 툴팁 */}
-            <span className="lg:hidden absolute left-full ml-2 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-50 shadow-md"
-              style={{ background: 'var(--sidebar-text)', color: 'var(--sidebar-bg)' }}
-            >
-              {label}
-            </span>
+            <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">{label}</span>
           </NavLink>
         ))}
       </nav>
 
       {/* 하단 유저 */}
       <div className="pt-3 mt-3" style={{ borderTop: '1px solid var(--sidebar-divider)' }}>
-        <div className="flex items-center gap-3 px-0 lg:px-2 py-2 rounded-md justify-center lg:justify-start">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-md">
           <Avatar name={user?.name || 'U'} size="sm" />
-          <div className="flex-1 min-w-0 hidden lg:block">
-            <p className="text-sm font-medium truncate" style={{ color: 'var(--sidebar-text)' }}>{user?.name || '사용자'}</p>
-            <p className="text-[11px] truncate" style={{ color: 'var(--sidebar-text-dim)' }}>{user?.email}</p>
+          <div className="flex-1 min-w-0 hidden group-hover/sidebar:block lg:block">
+            <p className="text-sm font-medium truncate whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>{user?.name || '사용자'}</p>
+            <p className="text-[11px] truncate whitespace-nowrap" style={{ color: 'var(--sidebar-text-dim)' }}>{user?.email}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="p-1.5 rounded transition-colors hidden lg:block"
+            className="p-1.5 rounded transition-colors hidden group-hover/sidebar:block lg:block"
             style={{ color: 'var(--sidebar-text-dim)' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--sidebar-text)'; e.currentTarget.style.background = 'var(--sidebar-hover)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--sidebar-text-dim)'; e.currentTarget.style.background = ''; }}
