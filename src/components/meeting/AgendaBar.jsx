@@ -1,6 +1,8 @@
 import { Check, Clock } from 'lucide-react';
 
 export default function AgendaBar({ agendas = [], activeId, onSelect }) {
+  if (!agendas.length) return null;
+
   return (
     <div className="flex items-center gap-1 px-6 py-3 border-b border-border-divider bg-bg-primary overflow-x-auto">
       {agendas.map((a, i) => {

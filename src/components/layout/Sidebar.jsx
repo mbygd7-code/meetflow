@@ -92,8 +92,8 @@ export default function Sidebar({ mobile = false, onClose }) {
       className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 서비스 심볼 — 태블릿에서만 표시 */}
-      <div className="flex items-center gap-2 px-2 py-3 lg:hidden" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+      {/* 서비스 심볼 — 태블릿에서만 표시, 높이를 오른쪽 헤더(py-4)와 일치 */}
+      <div className="flex items-center gap-2 px-2 py-4 lg:hidden" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
         <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 sidebar-symbol">
           <Sparkles size={16} className="text-white" strokeWidth={2.5} />
         </div>
