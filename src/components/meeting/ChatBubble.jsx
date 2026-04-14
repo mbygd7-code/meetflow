@@ -107,20 +107,20 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
           </div>
 
           {/* 호버 액션: 복사 + 인용 */}
-          <div className={`absolute top-1 ${isMine ? 'left-1' : 'right-1'} flex gap-0.5 opacity-0 group-hover/bubble:opacity-100 transition-opacity`}>
+          <div className={`absolute -top-3 ${isMine ? 'left-1' : 'right-1'} flex gap-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity`}>
             <button
               onClick={handleCopy}
-              className="p-1 rounded bg-bg-secondary/80 backdrop-blur-sm border border-border-subtle text-txt-muted hover:text-txt-primary transition-colors"
+              className="p-1.5 rounded-md bg-bg-secondary border border-border-subtle text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors shadow-sm"
               title="복사"
             >
-              {copied ? <Check size={12} className="text-status-success" /> : <Copy size={12} />}
+              {copied ? <Check size={15} className="text-status-success" /> : <Copy size={15} />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleQuote(); }}
-              className="p-1 rounded bg-bg-secondary/80 backdrop-blur-sm border border-border-subtle text-txt-muted hover:text-txt-primary transition-colors"
+              className="p-1.5 rounded-md bg-bg-secondary border border-border-subtle text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors shadow-sm"
               title="인용 답글"
             >
-              <Reply size={12} />
+              <Reply size={15} />
             </button>
           </div>
         </div>
