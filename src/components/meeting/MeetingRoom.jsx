@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useBlocker } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { X, Square, Users, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui';
@@ -47,11 +47,17 @@ export default function MeetingRoom() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [meeting?.status, ending]);
 
-  // React Router 이탈 방지
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
-    return meeting?.status === 'active' && !ending && !leavingConfirmed
-      && currentLocation.pathname !== nextLocation.pathname;
-  });
+  // X 버튼 / 사이드바 네비게이션 이탈 가드
+  const safeNavigate = useCallback((to) => {
+    if (meeting?.status === 'active' && !ending && !leavingConfirmed) {
+      if (window.confirm('회의가 진행 중입니다. 나가시겠습니까?\n(회의는 유지됩니다)')) {
+        setLeavingConfirmed(true);
+        navigate(to);
+      }
+      return;
+    }
+    navigate(to);
+  }, [meeting?.status, ending, leavingConfirmed, navigate]);
 
   const currentAgenda = useMemo(() => {
     const targetId = activeAgendaId
@@ -221,30 +227,6 @@ export default function MeetingRoom() {
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      {/* 이탈 확인 다이얼로그 */}
-      {blocker.state === 'blocked' && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-bg-secondary border border-border-subtle rounded-xl p-6 max-w-sm mx-4 shadow-lg">
-            <h3 className="text-base font-semibold text-txt-primary mb-2">회의가 진행 중입니다</h3>
-            <p className="text-sm text-txt-secondary mb-5">회의를 종료하지 않고 나가시겠습니까?</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => blocker.reset()}
-                className="flex-1 px-4 py-2 rounded-md bg-brand-purple text-white text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                회의 계속
-              </button>
-              <button
-                onClick={() => { setLeavingConfirmed(true); blocker.proceed(); }}
-                className="flex-1 px-4 py-2 rounded-md border border-border-default text-txt-secondary text-sm font-medium hover:bg-bg-tertiary transition-colors"
-              >
-                나가기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 회의 종료 로딩 오버레이 */}
       {ending && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
@@ -267,7 +249,7 @@ export default function MeetingRoom() {
       <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button
-            onClick={() => navigate('/meetings')}
+            onClick={() => safeNavigate('/meetings')}
             className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
           >
             <X size={16} />
