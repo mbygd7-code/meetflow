@@ -89,7 +89,7 @@ export default function Sidebar({ mobile = false, onClose }) {
   // ── 데스크톱: lg+ 넓은 / md~lg(태블릿) 아이콘 전용, 호버 시 펼쳐짐 ──
   return (
     <aside
-      className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative"
+      className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle"
       style={{ background: 'var(--sidebar-bg)' }}
     >
       {/* 서비스 심볼 — 태블릿에서만 표시 */}

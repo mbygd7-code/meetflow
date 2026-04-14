@@ -289,11 +289,12 @@ export default function MeetingRoom() {
         </div>
         {/* md~lg: 토글 버튼 + 오버레이 패널 */}
         <button
-          className="hidden md:flex lg:hidden items-center justify-center w-10 shrink-0 border-l border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors"
+          className="hidden md:flex lg:hidden flex-col items-center justify-start gap-1.5 w-10 shrink-0 pt-4 border-l border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors"
           onClick={() => setSummaryExpanded(!summaryExpanded)}
           title="AI 요약"
         >
           <Sparkles size={16} className="text-brand-purple" />
+          <span className="text-[9px] text-txt-muted font-medium">요약</span>
         </button>
         {summaryExpanded && (
           <div className="lg:hidden absolute right-0 top-0 bottom-0 w-80 z-40 bg-bg-primary border-l border-border-subtle shadow-lg flex flex-col">
