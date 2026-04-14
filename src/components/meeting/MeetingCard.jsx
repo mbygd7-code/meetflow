@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Clock, ListChecks, XCircle } from 'lucide-react';
+import { Clock, ListChecks } from 'lucide-react';
 import { Card, Avatar, Badge } from '@/components/ui';
 import { formatRelative, formatDate } from '@/utils/formatters';
 
@@ -12,19 +12,6 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
   const handleClick = () => {
     if (onClick) return onClick(meeting);
     navigate(`/meetings/${meeting.id}`);
-  };
-
-  const statusBadge = () => {
-    if (isActive)
-      return (
-        <Badge variant="success">
-          <span className="w-1.5 h-1.5 rounded-full bg-status-success pulse-dot mr-1" />
-          진행 중
-        </Badge>
-      );
-    if (isScheduled) return <Badge variant="purple">예정</Badge>;
-    if (isCompleted) return <Badge variant="outline">완료</Badge>;
-    return null;
   };
 
   const timeLabel = () => {
@@ -43,22 +30,32 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         <span className="absolute left-0 top-6 bottom-6 w-0.5 rounded-r bg-status-success" />
       )}
 
-      {/* 예정 회의: 호버 시 취소 버튼 */}
-      {isScheduled && onCancel && (
-        <button
-          onClick={onCancel}
-          className="absolute top-3 right-3 p-1.5 rounded-md text-txt-muted opacity-0 group-hover/card:opacity-100 hover:text-status-error hover:bg-status-error/10 transition-all z-10"
-          title="회의 취소"
-        >
-          <XCircle size={16} />
-        </button>
-      )}
-
       <div className="flex items-start justify-between gap-3 mb-4">
         <h3 className="text-base font-semibold text-txt-primary leading-snug line-clamp-2">
           {meeting.title}
         </h3>
-        {statusBadge()}
+
+        {/* 상태 배지 — 예정 카드: 호버 시 "예정"→"취소" 전환 */}
+        {isActive && (
+          <Badge variant="success">
+            <span className="w-1.5 h-1.5 rounded-full bg-status-success pulse-dot mr-1" />
+            진행 중
+          </Badge>
+        )}
+        {isScheduled && onCancel ? (
+          <>
+            <Badge variant="purple" className="group-hover/card:hidden">예정</Badge>
+            <button
+              onClick={onCancel}
+              className="hidden group-hover/card:inline-flex"
+            >
+              <Badge variant="danger">취소</Badge>
+            </button>
+          </>
+        ) : isScheduled ? (
+          <Badge variant="purple">예정</Badge>
+        ) : null}
+        {isCompleted && <Badge variant="outline">완료</Badge>}
       </div>
 
       <div className="flex items-center gap-4 text-xs text-txt-secondary mb-4">
