@@ -92,8 +92,8 @@ export default function Sidebar({ mobile = false, onClose }) {
       className="h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] lg:w-48 transition-all duration-200"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 서비스 심볼 */}
-      <div className="flex items-center justify-center lg:justify-start gap-2 px-0 lg:px-2 pb-2 mb-1" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+      {/* 서비스 심볼 — 높이를 오른쪽 헤더와 정렬 */}
+      <div className="flex items-center justify-center lg:justify-start gap-2 px-0 lg:px-2 py-3 lg:py-3" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
         <div className="w-8 h-8 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
           <Sparkles size={16} className="text-white" strokeWidth={2.5} />
         </div>

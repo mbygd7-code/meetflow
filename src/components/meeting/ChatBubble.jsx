@@ -2,11 +2,23 @@ import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
 import { Sparkles } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
+import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 export default function ChatBubble({ message, currentUserId }) {
   const isAi = message.is_ai;
   const isMine = !isAi && message.user_id === currentUserId;
-  const senderName = isAi ? (message.user?.name || 'Milo') : (message.user?.name || '알 수 없음');
+
+  // AI 메시지: ai_employee 기반으로 이름 결정
+  let senderName;
+  if (isAi) {
+    const emp = message.ai_employee
+      ? AI_EMPLOYEES.find((e) => e.id === message.ai_employee)
+      : null;
+    senderName = emp?.nameKo || emp?.name || message.user?.name || 'Milo';
+  } else {
+    senderName = message.user?.name || '알 수 없음';
+  }
+
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';
   const time = formatTime(message.created_at);
 
