@@ -98,7 +98,7 @@ export default function Sidebar({ mobile = false, onClose }) {
     >
       {/* 태블릿 회의 페이지: LNB 상단에 서비스 심볼 + 호버 시 로고 */}
       {isMeetingPage && (
-        <div className="hidden md:flex lg:hidden items-center gap-3 px-1 pt-1 pb-3" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+        <div className="hidden md:flex lg:hidden items-center gap-3 px-1 py-2 mb-1" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
           <div className="w-10 h-10 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
             <Sparkles size={20} className="text-white" strokeWidth={2.5} />
           </div>
@@ -106,7 +106,7 @@ export default function Sidebar({ mobile = false, onClose }) {
         </div>
       )}
 
-      <nav className="flex flex-col gap-0.5 flex-1 mt-2">
+      <nav className={`flex flex-col gap-0.5 flex-1 ${isMeetingPage ? 'mt-0' : 'mt-2'}`}>
         {navItems.map(({ to, label, icon: Icon, end }) => {
           // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
           const isMeetingNav = to === '/meetings';
