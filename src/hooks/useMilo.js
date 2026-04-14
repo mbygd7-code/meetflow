@@ -285,8 +285,17 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
                   specResult.response_text = `[${emp.nameKo}] ${specResult.response_text}`;
                 }
                 specResult.ai_employee = specId;
-                lastRespondingEmployeeRef.current = specId; // 후속 대화를 위해 기록
+                lastRespondingEmployeeRef.current = specId;
                 onRespond?.(specResult);
+
+                // 전문가 응답에서 다른 전문가 멘션 → 추가 호출 대상에 추가
+                if (specResult.response_text) {
+                  for (const [name, id] of Object.entries(EMPLOYEE_NAME_MAP)) {
+                    if (specResult.response_text.includes(name) && !specialists.includes(id) && id !== specId) {
+                      specialists.push(id);
+                    }
+                  }
+                }
               }
             } catch (specErr) {
               console.error(`[useMilo] Specialist ${specId} error:`, specErr);
