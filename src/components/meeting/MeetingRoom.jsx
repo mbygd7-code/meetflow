@@ -291,6 +291,7 @@ export default function MeetingRoom() {
         <button
           className="hidden md:flex lg:hidden flex-col items-center justify-start gap-1.5 w-10 shrink-0 pt-4 border-l border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors"
           onClick={() => setSummaryExpanded(!summaryExpanded)}
+          onMouseEnter={() => setSummaryExpanded(true)}
           title="AI 요약"
         >
           <Sparkles size={16} className="text-brand-purple" />
