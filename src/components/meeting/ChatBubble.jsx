@@ -4,6 +4,7 @@ import { formatTime } from '@/utils/formatters';
 import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import RichText from './RichText';
 
 const NAME_TO_ID = {};
 AI_EMPLOYEES.forEach((e) => {
@@ -85,16 +86,16 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
     >
       {/* 아바타 */}
       {isAi ? (
-        <MiloAvatar employeeId={employeeId} size="md" />
+        <MiloAvatar employeeId={employeeId} size="md" showTooltip />
       ) : (
         <Avatar name={senderName} color={senderColor} size="md" />
       )}
 
       {/* 메시지 컨테이너 */}
       <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
-        {/* 발신자 정보 */}
-        <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-          <span className={`font-medium ${isAi ? 'text-brand-purple' : 'text-txt-secondary'}`}>
+        {/* 발신자 정보 — 리액션 있으면 리액션 행에 통합되므로 숨김 */}
+        <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'hidden' : ''}`}>
+          <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
             {senderName}
           </span>
           {isAi && (
@@ -110,37 +111,47 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
 
         {/* 말풍선 */}
         <div className="relative">
-          {/* 리액션 표시 — 말풍선 상단 */}
+          {/* 리액션 표시 — 이름+AI+시간 + 리액션 한 줄 */}
           {hasReactions && (
-            <div className={`flex gap-1.5 mb-1.5 ${isMine ? 'justify-start' : 'justify-end'}`}>
-              {REACTIONS.map(({ key, icon: Icon }) => {
-                const data = msgReactions[key];
-                if (!data?.count) return null;
-                return (
-                  <span
-                    key={key}
-                    className="group/react relative inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary cursor-default"
-                  >
-                    <Icon size={14} />
-                    {data.count}
-                    {/* 호버 시 리액션한 직원 이름 */}
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] whitespace-nowrap bg-bg-primary border border-border-subtle shadow-md opacity-0 pointer-events-none group-hover/react:opacity-100 transition-opacity z-10">
-                      {data.users.join(', ')}
+            <div className={`flex items-center gap-2 mb-1.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+              <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
+                {senderName}
+              </span>
+              {isAi && (
+                <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
+                  <Sparkles size={10} strokeWidth={2.4} /> AI
+                </Badge>
+              )}
+              <span className="text-txt-muted text-xs">{time}</span>
+              <div className={`flex gap-1.5 ${isMine ? 'mr-auto' : 'ml-auto'}`}>
+                {REACTIONS.map(({ key, icon: Icon }) => {
+                  const data = msgReactions[key];
+                  if (!data?.count) return null;
+                  return (
+                    <span
+                      key={key}
+                      className="group/react relative inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary cursor-default"
+                    >
+                      <Icon size={14} />
+                      {data.count}
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] whitespace-nowrap bg-bg-primary border border-border-subtle shadow-md opacity-0 pointer-events-none group-hover/react:opacity-100 transition-opacity z-10">
+                        {data.users.join(', ')}
+                      </span>
                     </span>
-                  </span>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
 
           <div
             onClick={handleQuote}
-            className={`px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap cursor-pointer ${
+            className={`px-4 py-3 text-sm leading-relaxed cursor-pointer ${
               isAi
                 ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-xl rounded-tl-sm hover:border-brand-purple/40'
                 : isMine
-                  ? 'bg-brand-purple text-white rounded-xl rounded-tr-sm hover:opacity-90'
-                  : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default'
+                  ? 'bg-brand-purple text-white rounded-xl rounded-tr-sm hover:opacity-90 whitespace-pre-wrap'
+                  : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default whitespace-pre-wrap'
             } transition-all`}
           >
             {/* 인용 블록 */}
@@ -154,7 +165,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
                 <p className="mt-0.5 opacity-80 line-clamp-2">{quotedText}</p>
               </div>
             )}
-            {displayContent}
+            {isAi ? <RichText content={displayContent} /> : displayContent}
           </div>
 
           {/* 호버 액션 */}
