@@ -36,7 +36,6 @@ export default function Sidebar({ mobile = false, onClose }) {
   const { pathname } = useLocation();
   const navItems = getNavItems(isAdmin());
   const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
-  const isMeetingPage = pathname.startsWith('/meetings/');
 
   const handleLogout = async () => {
     await signOut();
@@ -96,16 +95,6 @@ export default function Sidebar({ mobile = false, onClose }) {
       className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle"
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 태블릿 회의 페이지: LNB 상단에 서비스 심볼 + 호버 시 로고 */}
-      {isMeetingPage && (
-        <div className="hidden md:flex lg:hidden items-center gap-3 px-1 py-2" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
-          <div className="w-10 h-10 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
-            <Sparkles size={20} className="text-white" strokeWidth={2.5} />
-          </div>
-          <span className="hidden group-hover/sidebar:inline text-lg font-bold tracking-tight whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
-        </div>
-      )}
-
       <nav className="flex flex-col gap-0.5 flex-1 mt-2">
         {navItems.map(({ to, label, icon: Icon, end }) => {
           // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
