@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useMeetingStore } from '@/stores/meetingStore';
+import { useNavigate } from 'react-router-dom';
 import { useTaskStore } from '@/stores/taskStore';
 import { useSidebar } from './Layout';
 import { format } from 'date-fns';
@@ -49,7 +50,10 @@ export default function TopBar() {
   const { pathname } = useLocation();
   const { user, isAdmin } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
-  const { meetings } = useMeetingStore();
+  const { meetings, activeMeetingId } = useMeetingStore();
+  const navigate = useNavigate();
+  const activeMeeting = activeMeetingId ? meetings.find((m) => m.id === activeMeetingId) : null;
+  const showActiveMeetingBar = activeMeeting?.status === 'active' && !pathname.startsWith('/meetings/');
   const { tasks } = useTaskStore();
   const { setSidebarOpen } = useSidebar();
   const [editOpen, setEditOpen] = useState(false);
@@ -144,24 +148,47 @@ export default function TopBar() {
 
       {/* 티커 + 액션 — 대시보드 레이아웃과 너비 동기화 */}
       <div className="flex items-center gap-2 md:gap-3 p-1 md:p-2 lg:p-4 mr-1 md:mr-2 lg:mr-3 flex-1 min-w-0">
-        {/* 티커 — 모바일에서 숨김, flex-1은 대시보드 메인 콘텐츠와 동일 */}
+        {/* 티커 또는 활성 회의 바 */}
         <div className="hidden md:flex flex-1 min-w-0 overflow-hidden items-center gap-1.5">
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <MarqueeTicker segments={tickerSegments} />
-          </div>
-          {isAdmin() && (
+          {showActiveMeetingBar ? (
             <button
-              onClick={handleOpenEdit}
-              className="p-1.5 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors shrink-0"
-              title="티커 메시지 편집"
+              onClick={() => navigate(`/meetings/${activeMeetingId}`)}
+              className="flex-1 min-w-0 flex items-center gap-3 rounded-[6px] bg-status-error/10 border border-status-error/30 h-10 px-4 hover:bg-status-error/15 transition-colors cursor-pointer"
             >
-              <Pencil size={14} />
+              <span className="w-3 h-3 rounded-full bg-status-error pulse-dot shrink-0" />
+              <span className="text-sm font-medium text-txt-primary truncate">{activeMeeting.title}</span>
+              <span className="text-xs text-status-error font-semibold shrink-0">진행 중</span>
             </button>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <MarqueeTicker segments={tickerSegments} />
+              </div>
+              {isAdmin() && (
+                <button
+                  onClick={handleOpenEdit}
+                  className="p-1.5 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors shrink-0"
+                  title="티커 메시지 편집"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </>
           )}
         </div>
 
-        {/* 모바일: 빈 공간 채우기 */}
-        <div className="flex-1 md:hidden" />
+        {/* 모바일: 활성 회의 바 또는 빈 공간 */}
+        {showActiveMeetingBar ? (
+          <button
+            onClick={() => navigate(`/meetings/${activeMeetingId}`)}
+            className="flex-1 md:hidden flex items-center gap-2 rounded-md bg-status-error/10 border border-status-error/30 h-9 px-3"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-status-error pulse-dot shrink-0" />
+            <span className="text-xs font-medium text-txt-primary truncate">{activeMeeting.title}</span>
+          </button>
+        ) : (
+          <div className="flex-1 md:hidden" />
+        )}
 
         {/* 우측 액션 — lg에서 My Tasks(300px)와 동일 너비 */}
         <div className="flex items-center gap-1 md:gap-1.5 shrink-0 lg:w-[300px] lg:justify-end">

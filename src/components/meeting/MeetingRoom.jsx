@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { X, Square, Users, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui';
@@ -6,6 +6,7 @@ import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useMilo } from '@/hooks/useMilo';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import { useMeetingStore } from '@/stores/meetingStore';
 import ParticipantList from './ParticipantList';
 import ChatArea from './ChatArea';
 import AISummaryPanel from './AISummaryPanel';
@@ -16,6 +17,7 @@ export default function MeetingRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { getById, endMeeting } = useMeeting();
+  const setActiveMeetingId = useMeetingStore((s) => s.setActiveMeetingId);
   const meeting = getById(id);
   const [activeAgendaId, setActiveAgendaId] = useState(null);
   const [mobilePanel, setMobilePanel] = useState(null); // 'participants' | 'summary' | null
@@ -23,7 +25,33 @@ export default function MeetingRoom() {
   const [polls, setPolls] = useState([]);
   const [summaryExpanded, setSummaryExpanded] = useState(false); // 태블릿 AI 요약 패널
   const [ending, setEnding] = useState(false);
+  const [leavingConfirmed, setLeavingConfirmed] = useState(false);
   const { messages, sendMessage } = useRealtimeMessages(id);
+
+  // 활성 회의 등록 — 회의방 입장 시
+  useEffect(() => {
+    if (meeting?.status === 'active') {
+      setActiveMeetingId(id);
+    }
+    return () => {
+      // 종료 시에만 해제 (이탈 시에는 유지)
+      if (ending) setActiveMeetingId(null);
+    };
+  }, [id, meeting?.status, ending, setActiveMeetingId]);
+
+  // 브라우저 탭 닫기/새로고침 방지
+  useEffect(() => {
+    if (meeting?.status !== 'active' || ending) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [meeting?.status, ending]);
+
+  // React Router 이탈 방지
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    return meeting?.status === 'active' && !ending && !leavingConfirmed
+      && currentLocation.pathname !== nextLocation.pathname;
+  });
 
   const currentAgenda = useMemo(() => {
     const targetId = activeAgendaId
@@ -147,12 +175,14 @@ export default function MeetingRoom() {
   const handleEnd = async () => {
     if (!confirm('회의를 종료하시겠습니까? 자동 요약이 생성됩니다.')) return;
     setEnding(true);
+    setActiveMeetingId(null);
     try {
       await endMeeting(id, { messages, agendas: meeting.agendas || [] });
     } catch (err) {
       console.error('[handleEnd]', err);
     }
     setEnding(false);
+    setLeavingConfirmed(true);
     navigate(`/summaries/${id}`);
   };
 
@@ -191,6 +221,30 @@ export default function MeetingRoom() {
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
+      {/* 이탈 확인 다이얼로그 */}
+      {blocker.state === 'blocked' && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-bg-secondary border border-border-subtle rounded-xl p-6 max-w-sm mx-4 shadow-lg">
+            <h3 className="text-base font-semibold text-txt-primary mb-2">회의가 진행 중입니다</h3>
+            <p className="text-sm text-txt-secondary mb-5">회의를 종료하지 않고 나가시겠습니까?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => blocker.reset()}
+                className="flex-1 px-4 py-2 rounded-md bg-brand-purple text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                회의 계속
+              </button>
+              <button
+                onClick={() => { setLeavingConfirmed(true); blocker.proceed(); }}
+                className="flex-1 px-4 py-2 rounded-md border border-border-default text-txt-secondary text-sm font-medium hover:bg-bg-tertiary transition-colors"
+              >
+                나가기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 회의 종료 로딩 오버레이 */}
       {ending && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">

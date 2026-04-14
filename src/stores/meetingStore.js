@@ -77,6 +77,10 @@ export const useMeetingStore = create((set, get) => ({
   loading: false,
   error: null,
 
+  // 현재 참여 중인 활성 회의 (페이지 이탈 후에도 표시)
+  activeMeetingId: null,
+  setActiveMeetingId: (id) => set({ activeMeetingId: id }),
+
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
     // 데모 사용자 또는 Supabase 미연결 시 목 데이터 사용
