@@ -61,7 +61,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
 
   const handleCopy = (e) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(displayContent || '');
+    navigator.clipboard.writeText(displayContent || '').catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

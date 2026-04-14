@@ -35,7 +35,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
       top: scrollRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [messages.length, aiThinking]);
+  }, [messages, aiThinking]);
 
   const handleSend = async () => {
     if (!input.trim() || disabled) return;

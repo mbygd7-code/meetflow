@@ -60,7 +60,7 @@ export default function TopBar() {
   const [editMessages, setEditMessages] = useState([]);
   const [editShowGreeting, setEditShowGreeting] = useState(true);
 
-  const customTicker = loadCustomTicker();
+  const customTicker = useMemo(() => loadCustomTicker(), [editOpen]);
 
   const tickerSegments = useMemo(() => {
     const name = user?.name || '사용자';

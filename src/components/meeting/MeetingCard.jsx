@@ -25,7 +25,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
 
   // 진행 중 회의: 미참석 직원 (online !== true인 참여자)
   const absentParticipants = isActive
-    ? (meeting.participants || []).filter((p) => p.online === false)
+    ? (meeting.participants || []).filter((p) => p.online !== true)
     : [];
 
   const handleRemind = (e, participant) => {
