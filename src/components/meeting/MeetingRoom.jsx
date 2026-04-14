@@ -204,7 +204,7 @@ export default function MeetingRoom() {
           </h1>
           {meeting.status === 'active' && (
             <Badge variant="success">
-              <span className="w-1.5 h-1.5 rounded-full bg-status-success pulse-dot mr-1" />
+              <span className="w-1.5 h-1.5 rounded-full bg-status-error pulse-dot mr-1" />
               <span className="hidden md:inline">진행 중</span>
             </Badge>
           )}
