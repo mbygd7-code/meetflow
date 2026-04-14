@@ -221,6 +221,14 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
 
         // 밀로가 응답했든 직접 호출이든 — 전문가 순차 호출
         {
+          // 밀로 응답에서 전문가 멘션 감지 → specialists에 추가
+          if (result?.response_text) {
+            for (const [name, id] of Object.entries(EMPLOYEE_NAME_MAP)) {
+              if (result.response_text.includes(name) && !specialists.includes(id)) {
+                specialists.push(id);
+              }
+            }
+          }
 
           // 2단계: 라우팅된 전문가 AI 순차 호출 (최대 2명)
           for (const specId of specialists.slice(0, 2)) {
