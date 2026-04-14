@@ -297,17 +297,24 @@ export default function MeetingRoom() {
           <span className="text-[9px] text-txt-muted font-medium">요약</span>
         </button>
         {summaryExpanded && (
-          <div className="lg:hidden absolute right-0 top-0 bottom-0 w-80 z-40 bg-bg-primary border-l border-border-subtle shadow-lg flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
-              <span className="text-sm font-semibold text-txt-primary">AI 요약</span>
-              <button onClick={() => setSummaryExpanded(false)} className="p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors">
-                <X size={14} />
-              </button>
+          <>
+            {/* 백드롭 — 바깥 클릭 시 패널 닫힘 */}
+            <div
+              className="lg:hidden fixed inset-0 z-30"
+              onClick={() => setSummaryExpanded(false)}
+            />
+            <div className="lg:hidden absolute right-0 top-0 bottom-0 w-80 z-40 bg-bg-primary border-l border-border-subtle shadow-lg flex flex-col">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
+                <span className="text-sm font-semibold text-txt-primary">AI 요약</span>
+                <button onClick={() => setSummaryExpanded(false)} className="p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <AISummaryPanel meetingId={id} sections={summarySections} polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <AISummaryPanel meetingId={id} sections={summarySections} polls={polls} onCreatePoll={handleCreatePoll} onVote={handleVote} />
-            </div>
-          </div>
+          </>
         )}
       </div>
     </div>
