@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
-import { Sparkles, Copy, Check, Reply } from 'lucide-react';
+import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-// 메시지 [이름] 접두사에서 AI 직원 ID 감지
 const NAME_TO_ID = {};
 AI_EMPLOYEES.forEach((e) => {
   NAME_TO_ID[e.nameKo] = e.id;
@@ -16,15 +15,21 @@ function detectAiEmployee(message) {
   if (message.ai_employee) return message.ai_employee;
   const match = message.content?.match(/^\[([\u3131-\uD79D\w]+)\]/);
   if (match) {
-    const name = match[1];
-    const id = NAME_TO_ID[name] || NAME_TO_ID[name.toLowerCase()];
+    const id = NAME_TO_ID[match[1]] || NAME_TO_ID[match[1].toLowerCase()];
     if (id) return id;
   }
   return 'drucker';
 }
 
-export default function ChatBubble({ message, currentUserId, onQuote }) {
+const REACTIONS = [
+  { key: 'like', icon: ThumbsUp, label: '좋아요' },
+  { key: 'dislike', icon: ThumbsDown, label: '별로예요' },
+  { key: 'heart', icon: Heart, label: '하트' },
+];
+
+export default function ChatBubble({ message, currentUserId, onQuote, onReact, reactions = {} }) {
   const [copied, setCopied] = useState(false);
+  const [reactOpen, setReactOpen] = useState(false);
   const isAi = message.is_ai;
   const isMine = !isAi && message.user_id === currentUserId;
 
@@ -56,6 +61,15 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
     onQuote?.({ senderName, content: displayContent, messageId: message.id });
   };
 
+  const handleReact = (key) => {
+    onReact?.(message.id, key);
+    setReactOpen(false);
+  };
+
+  // 이 메시지의 리액션 집계
+  const msgReactions = reactions[message.id] || {};
+  const hasReactions = Object.values(msgReactions).some((v) => v > 0);
+
   return (
     <div
       className={`group/bubble flex gap-3 fade-in ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
@@ -70,11 +84,7 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
       {/* 메시지 컨테이너 */}
       <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
         {/* 발신자 정보 */}
-        <div
-          className={`flex items-center gap-2 mb-1 text-xs ${
-            isMine ? 'flex-row-reverse' : 'flex-row'
-          }`}
-        >
+        <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
           <span className={`font-medium ${isAi ? 'text-brand-purple' : 'text-txt-secondary'}`}>
             {senderName}
           </span>
@@ -84,15 +94,32 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
             </Badge>
           )}
           {message.source === 'slack' && (
-            <Badge variant="outline" className="!px-2 !py-0.5 !text-[10px]">
-              via Slack
-            </Badge>
+            <Badge variant="outline" className="!px-2 !py-0.5 !text-[10px]">via Slack</Badge>
           )}
           <span className="text-txt-muted">{time}</span>
         </div>
 
-        {/* 말풍선 + 액션 */}
+        {/* 말풍선 */}
         <div className="relative">
+          {/* 리액션 표시 — 말풍선 상단 */}
+          {hasReactions && (
+            <div className={`flex gap-1 mb-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
+              {REACTIONS.map(({ key, icon: Icon }) => {
+                const count = msgReactions[key] || 0;
+                if (!count) return null;
+                return (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary"
+                  >
+                    <Icon size={11} />
+                    {count}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           <div
             onClick={handleQuote}
             className={`px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap cursor-pointer ${
@@ -106,22 +133,38 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
             {displayContent}
           </div>
 
-          {/* 호버 액션: 말풍선 하단 오른쪽 */}
+          {/* 호버 액션 */}
           <div className="flex gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
-            <button
-              onClick={handleCopy}
-              className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
-              title="복사"
-            >
+            <button onClick={handleCopy} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="복사">
               {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleQuote(); }}
-              className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
-              title="인용 답글"
-            >
+            <button onClick={(e) => { e.stopPropagation(); handleQuote(); }} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="인용 답글">
               <Reply size={16} />
             </button>
+            {/* 리액션 토글 */}
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setReactOpen(!reactOpen); }}
+                className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
+                title="반응"
+              >
+                <SmilePlus size={16} />
+              </button>
+              {reactOpen && (
+                <div className="absolute bottom-full right-0 mb-1 flex gap-1 px-2 py-1.5 rounded-lg bg-bg-secondary border border-border-subtle shadow-md z-10">
+                  {REACTIONS.map(({ key, icon: Icon, label }) => (
+                    <button
+                      key={key}
+                      onClick={(e) => { e.stopPropagation(); handleReact(key); }}
+                      className="p-1.5 rounded-md hover:bg-bg-tertiary text-txt-muted hover:text-txt-primary transition-colors"
+                      title={label}
+                    >
+                      <Icon size={18} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

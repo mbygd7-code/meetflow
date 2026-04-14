@@ -7,10 +7,19 @@ import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   const [input, setInput] = useState('');
-  const [quotedMessage, setQuotedMessage] = useState(null); // { senderName, content, messageId }
+  const [quotedMessage, setQuotedMessage] = useState(null);
+  const [reactions, setReactions] = useState({}); // { [messageId]: { like: 1, heart: 2 } }
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const { user } = useAuthStore();
+
+  const handleReact = (messageId, key) => {
+    setReactions((prev) => {
+      const msg = { ...(prev[messageId] || {}) };
+      msg[key] = (msg[key] || 0) + 1;
+      return { ...prev, [messageId]: msg };
+    });
+  };
 
   // 자동 스크롤
   useEffect(() => {
@@ -55,7 +64,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
           </div>
         ) : (
           messages.map((m) => (
-            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} />
+            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} reactions={reactions} />
           ))
         )}
 
