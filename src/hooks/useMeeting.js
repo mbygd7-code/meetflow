@@ -71,15 +71,17 @@ export function useMeeting() {
         return newMeeting;
       }
 
+      const insertData = {
+        title,
+        created_by: user?.id,
+        status: 'scheduled',
+        scheduled_at: scheduledAt,
+      };
+      if (team_id) insertData.team_id = team_id;
+
       const { data: meeting, error } = await supabase
         .from('meetings')
-        .insert({
-          title,
-          team_id,
-          created_by: user?.id,
-          status: 'scheduled',
-          scheduled_at: scheduledAt,
-        })
+        .insert(insertData)
         .select()
         .single();
       if (error) throw error;
