@@ -78,11 +78,13 @@ export function useMeeting() {
           team_id,
           created_by: user?.id,
           status: 'scheduled',
+          scheduled_at: scheduledAt,
         })
         .select()
         .single();
       if (error) throw error;
 
+      let insertedAgendas = [];
       if (agendas.length > 0) {
         const agendaRows = agendas.map((a, i) => ({
           meeting_id: meeting.id,
@@ -90,9 +92,13 @@ export function useMeeting() {
           duration_minutes: a.duration_minutes || 10,
           sort_order: i,
         }));
-        await supabase.from('agendas').insert(agendaRows);
+        const { data: savedAgendas } = await supabase
+          .from('agendas')
+          .insert(agendaRows)
+          .select();
+        insertedAgendas = savedAgendas || agendaRows;
       }
-      addMeeting({ ...meeting, agendas });
+      addMeeting({ ...meeting, agendas: insertedAgendas });
       return meeting;
     },
     [user, addMeeting]
