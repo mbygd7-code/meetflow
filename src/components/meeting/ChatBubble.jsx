@@ -106,21 +106,21 @@ export default function ChatBubble({ message, currentUserId, onQuote }) {
             {displayContent}
           </div>
 
-          {/* 호버 액션: 말풍선 하단에 자연스럽게 */}
-          <div className={`flex gap-2 mt-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity ${isMine ? 'justify-end' : 'justify-start'}`}>
+          {/* 호버 액션: 말풍선 하단 오른쪽 */}
+          <div className="flex gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
-              className="p-1 text-txt-muted hover:text-txt-primary transition-colors"
+              className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
               title="복사"
             >
-              {copied ? <Check size={14} className="text-status-success" /> : <Copy size={14} />}
+              {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleQuote(); }}
-              className="p-1 text-txt-muted hover:text-txt-primary transition-colors"
+              className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
               title="인용 답글"
             >
-              <Reply size={14} />
+              <Reply size={16} />
             </button>
           </div>
         </div>
