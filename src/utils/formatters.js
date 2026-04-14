@@ -19,6 +19,12 @@ export function formatRelative(date) {
   return formatDistanceToNowStrict(d, { addSuffix: true, locale: ko });
 }
 
+export function formatElapsed(date) {
+  if (!date) return '';
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  return formatDistanceToNowStrict(d, { locale: ko });
+}
+
 export function formatDueDate(dueDate) {
   if (!dueDate) return '';
   const d = typeof dueDate === 'string' ? parseISO(dueDate) : dueDate;

@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Clock, ListChecks, Bell } from 'lucide-react';
 import { Card, Avatar, Badge } from '@/components/ui';
-import { formatRelative, formatDate } from '@/utils/formatters';
+import { formatRelative, formatDate, formatElapsed } from '@/utils/formatters';
 import { useToastStore } from '@/stores/toastStore';
 
 export default function MeetingCard({ meeting, onClick, onCancel }) {
@@ -17,7 +17,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
   };
 
   const timeLabel = () => {
-    if (isActive) return `시작 ${formatRelative(meeting.started_at)}`;
+    if (isActive) return `진행 ${formatElapsed(meeting.started_at)}`;
     if (isScheduled) return formatDate(meeting.scheduled_at, 'MM/dd HH:mm');
     if (isCompleted) return formatRelative(meeting.ended_at || meeting.started_at);
     return '';
