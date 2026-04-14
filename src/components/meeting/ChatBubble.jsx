@@ -50,11 +50,14 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
     ? message.content?.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
     : message.content;
 
-  // 인용문 파싱: "> 이름: 내용...\n\n본문" 구조 분리
-  const quoteMatch = rawContent?.match(/^>\s*(.+?):\s*(.+?)(?:\n\n)([\s\S]*)$/);
-  const quotedSender = quoteMatch?.[1];
-  const quotedText = quoteMatch?.[2];
-  const displayContent = quoteMatch ? quoteMatch[3] : rawContent;
+  // 인용문 파싱: [quote:이름]내용[/quote]\n본문
+  const quoteMatch = rawContent?.match(/^\[quote:(.+?)\]([\s\S]*?)\[\/quote\]\n?([\s\S]*)$/);
+  // 레거시 호환: > 이름: 내용\n\n본문
+  const legacyMatch = !quoteMatch && rawContent?.match(/^>\s*(.+?):\s*(.+?)(?:\n\n)([\s\S]*)$/);
+  const match = quoteMatch || legacyMatch;
+  const quotedSender = match?.[1];
+  const quotedText = match?.[2]?.trim();
+  const displayContent = match ? match[3] : rawContent;
 
   const handleCopy = (e) => {
     e.stopPropagation();

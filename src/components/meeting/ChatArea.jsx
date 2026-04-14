@@ -40,7 +40,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   const handleSend = async () => {
     if (!input.trim() || disabled) return;
     const text = quotedMessage
-      ? `> ${quotedMessage.senderName}: ${quotedMessage.content.slice(0, 80)}${quotedMessage.content.length > 80 ? '...' : ''}\n\n${input}`
+      ? `[quote:${quotedMessage.senderName}]${quotedMessage.content.slice(0, 100)}${quotedMessage.content.length > 100 ? '...' : ''}[/quote]\n${input}`
       : input;
     setInput('');
     setQuotedMessage(null);
