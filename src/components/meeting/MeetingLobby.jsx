@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
+import { useToastStore } from '@/stores/toastStore';
 import MeetingCard from './MeetingCard';
 import CreateMeetingModal from './CreateMeetingModal';
 
@@ -32,6 +33,7 @@ export default function MeetingLobby({ pageTitle }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [completedMonths, setCompletedMonths] = useState(1);
   const { meetings, deleteMeeting } = useMeeting();
+  const addToast = useToastStore((s) => s.addToast);
 
   const filtered = useMemo(() => {
     let list = meetings.filter((m) => m.status === tab);
@@ -56,6 +58,7 @@ export default function MeetingLobby({ pageTitle }) {
     e.stopPropagation();
     if (!confirm(`"${meeting.title}" 회의를 취소하시겠습니까?`)) return;
     await deleteMeeting(meeting.id);
+    addToast(`"${meeting.title}" 회의가 취소되었습니다. Slack · Calendar 취소 알림이 전송되었습니다.`, 'success');
   };
 
   return (
