@@ -191,6 +191,24 @@ export default function MeetingRoom() {
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
+      {/* 회의 종료 로딩 오버레이 */}
+      {ending && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-bg-secondary border border-border-subtle rounded-xl p-8 max-w-sm mx-4 text-center shadow-lg">
+            <div className="w-14 h-14 rounded-full bg-gradient-brand shadow-glow flex items-center justify-center mx-auto mb-4">
+              <Sparkles size={24} className="text-white animate-pulse" strokeWidth={2} />
+            </div>
+            <h3 className="text-lg font-semibold text-txt-primary mb-2">AI 인사이트 준비 중</h3>
+            <p className="text-sm text-txt-secondary">Milo가 회의 내용을 분석하고 요약을 생성하고 있습니다...</p>
+            <div className="flex justify-center gap-1 mt-4">
+              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 회의 헤더 */}
       <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
