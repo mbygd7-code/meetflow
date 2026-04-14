@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign } from 'lucide-react';
+import { ArrowUp, AtSign, X } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
@@ -7,6 +7,7 @@ import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
   const [input, setInput] = useState('');
+  const [quotedMessage, setQuotedMessage] = useState(null); // { senderName, content, messageId }
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const { user } = useAuthStore();
@@ -21,17 +22,24 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
 
   const handleSend = async () => {
     if (!input.trim() || disabled) return;
-    const text = input;
+    const text = quotedMessage
+      ? `> ${quotedMessage.senderName}: ${quotedMessage.content.slice(0, 80)}${quotedMessage.content.length > 80 ? '...' : ''}\n\n${input}`
+      : input;
     setInput('');
+    setQuotedMessage(null);
     await onSend?.(text);
   };
 
   const handleKeyDown = (e) => {
-    // 한글 IME 조합 중에는 전송하지 않음 (중복/분할 전송 방지)
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleQuote = (quote) => {
+    setQuotedMessage(quote);
+    textareaRef.current?.focus();
   };
 
   return (
@@ -47,7 +55,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
           </div>
         ) : (
           messages.map((m) => (
-            <ChatBubble key={m.id} message={m} currentUserId={user?.id} />
+            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} />
           ))
         )}
 
@@ -71,6 +79,19 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
 
       {/* 입력창 */}
       <div className="px-6 pb-5 pt-2">
+        {/* 인용 프리뷰 */}
+        {quotedMessage && (
+          <div className="flex items-start gap-2 mb-2 px-4 py-2 bg-bg-tertiary border border-border-subtle rounded-lg text-xs">
+            <div className="flex-1 min-w-0">
+              <span className="font-medium text-brand-purple">{quotedMessage.senderName}</span>
+              <p className="text-txt-secondary mt-0.5 line-clamp-2">{quotedMessage.content}</p>
+            </div>
+            <button onClick={() => setQuotedMessage(null)} className="p-0.5 text-txt-muted hover:text-txt-primary shrink-0">
+              <X size={12} />
+            </button>
+          </div>
+        )}
+
         <div className="relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-5 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
           <textarea
             ref={textareaRef}
