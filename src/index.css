@@ -236,14 +236,14 @@ html.theme-transitioning *::after {
 }
 .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
 
-/* 사이드바 심볼 — 옐로우↔옐로우그린 투톤 그라디언트 애니메이션 */
+/* 사이드바 심볼 — 옐로우↔그린(Milo) 투톤 그라디언트 애니메이션 */
 @keyframes symbol-gradient {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
 .sidebar-symbol {
-  background: linear-gradient(135deg, #FFEF63 0%, #A3E635 50%, #FFEF63 100%);
+  background: linear-gradient(135deg, #FFEF63 0%, #34D399 50%, #FFEF63 100%);
   background-size: 200% 200%;
   animation: symbol-gradient 3s ease-in-out infinite;
   border-radius: 8px;
