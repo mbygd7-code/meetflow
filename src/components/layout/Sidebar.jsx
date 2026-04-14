@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -33,8 +33,10 @@ function getNavItems(isAdmin) {
 export default function Sidebar({ mobile = false, onClose }) {
   const { user, signOut, isAdmin } = useAuthStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const navItems = getNavItems(isAdmin());
   const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
+  const isMeetingPage = pathname.startsWith('/meetings/');
 
   const handleLogout = async () => {
     await signOut();
@@ -94,6 +96,15 @@ export default function Sidebar({ mobile = false, onClose }) {
       className="group/sidebar h-full flex flex-col p-2 lg:p-3 shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle"
       style={{ background: 'var(--sidebar-bg)' }}
     >
+      {/* 태블릿 회의 페이지: LNB 상단에 서비스 심볼 */}
+      {isMeetingPage && (
+        <div className="hidden md:flex lg:hidden items-center justify-center py-3" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
+          <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 sidebar-symbol">
+            <Sparkles size={14} className="text-white" strokeWidth={2.5} />
+          </div>
+        </div>
+      )}
+
       <nav className="flex flex-col gap-0.5 flex-1 mt-2">
         {navItems.map(({ to, label, icon: Icon, end }) => {
           // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
