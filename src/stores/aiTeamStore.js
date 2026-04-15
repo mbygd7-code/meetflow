@@ -428,6 +428,14 @@ export const useAiTeamStore = create((set, get) => ({
     saveToStorage(get());
   },
 
+  // 특정 AI에게 구글시트 ID 설정
+  setGoogleSheetsId: (employeeId, sheetsId) => {
+    const overrides = { ...get().employeeOverrides };
+    overrides[employeeId] = { ...(overrides[employeeId] || {}), googleSheetsId: sheetsId || null };
+    set({ employeeOverrides: overrides });
+    saveToStorage(get());
+  },
+
   // 특정 AI에게 지식 파일 추가 (localStorage + Supabase)
   addKnowledgeFile: async (employeeId, file) => {
     const overrides = { ...get().employeeOverrides };

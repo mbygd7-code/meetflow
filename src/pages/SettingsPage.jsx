@@ -249,6 +249,28 @@ function ExpandedEmployeePanel({ employee }) {
           className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary placeholder-txt-muted focus:border-brand-purple/50 focus:outline-none transition-colors resize-none"
         />
       </div>
+
+      {/* Google Sheets 연동 */}
+      <div>
+        <p className="text-[11px] text-txt-muted mb-1.5 font-medium">Google Sheets 연동</p>
+        <input
+          value={overrides.googleSheetsId || ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            // URL에서 스프레드시트 ID 자동 추출
+            const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+            store.setGoogleSheetsId(employee.id, match ? match[1] : raw);
+          }}
+          placeholder="https://docs.google.com/spreadsheets/d/..."
+          className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary placeholder-txt-muted focus:border-brand-purple/50 focus:outline-none transition-colors"
+        />
+        <p className="text-[10px] text-txt-muted mt-1">시트를 "링크가 있는 모든 사용자에게 공개"로 설정하세요</p>
+        {overrides.googleSheetsId && (
+          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-status-success">
+            <span>ID: {overrides.googleSheetsId.slice(0, 20)}...</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

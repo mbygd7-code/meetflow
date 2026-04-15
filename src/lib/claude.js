@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 /**
  * Milo 분석 — Supabase Edge Function 'milo-analyze' 호출
  */
-export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '' }) {
+export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleSheetsId = null }) {
   const { data, error } = await supabase.functions.invoke('milo-analyze', {
     body: {
       messages: (messages || []).slice(-15),
@@ -14,6 +14,7 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
       preset,
       context,
       compressedContext,
+      googleSheetsId,
       miloSettings: miloSettings
         ? {
             systemPromptOverride: miloSettings.systemPromptOverride,

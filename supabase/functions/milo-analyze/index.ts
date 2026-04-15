@@ -40,7 +40,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agenda, preset, context, miloSettings, compressedContext } = await req.json();
+    const { messages, agenda, preset, context, miloSettings, compressedContext, googleSheetsId } = await req.json();
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
@@ -57,6 +57,36 @@ serve(async (req) => {
       .map((m: any) => `[${m.user?.name || (m.is_ai ? 'Milo' : '참가자')}] ${m.content}`)
       .join('\n');
 
+    // Google Sheets 데이터 fetch (있으면)
+    let sheetsSection = '';
+    if (googleSheetsId) {
+      try {
+        const sheetsApiKey = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+        if (sheetsApiKey) {
+          const sheetsRes = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${googleSheetsId}/values/Sheet1?key=${sheetsApiKey}`
+          );
+          if (sheetsRes.ok) {
+            const sheetsData = await sheetsRes.json();
+            const rows = (sheetsData.values || []).slice(0, 100); // 최대 100행
+            if (rows.length > 1) {
+              const headers = rows[0].slice(0, 20); // 최대 20열
+              const divider = headers.map(() => '---');
+              const dataRows = rows.slice(1).map((r: string[]) =>
+                r.slice(0, 20).map((c: string) => (c || '').slice(0, 50))
+              );
+              sheetsSection = `## 참조 스프레드시트 데이터 (실시간)\n` +
+                `| ${headers.join(' | ')} |\n| ${divider.join(' | ')} |\n` +
+                dataRows.map((r: string[]) => `| ${r.join(' | ')} |`).join('\n') +
+                (rows.length > 100 ? `\n(${rows.length}행 중 100행만 표시)\n\n` : '\n\n');
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[milo-analyze] Sheets fetch error:', e);
+      }
+    }
+
     // 참가자 목록 (AI가 @멘션할 수 있도록)
     const participantList = (context?.participants || []).length > 0
       ? `## 회의 참가자 (실제 사람)\n${context.participants.map((n: string) => `- ${n}`).join('\n')}\n`
@@ -70,7 +100,7 @@ serve(async (req) => {
     const userPrompt = `## 현재 어젠다
 ${agenda?.title || '미지정'} (${agenda?.duration_minutes || 10}분)
 
-${participantList}${compressedSection}## 최근 대화
+${participantList}${compressedSection}${sheetsSection}## 최근 대화
 ${transcript}
 
 ## 프리셋

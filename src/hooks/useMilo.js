@@ -100,6 +100,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
   const routeByKeywords = useAiTeamStore((s) => s.routeByKeywords);
   const buildPromptFor = useAiTeamStore((s) => s.buildPromptFor);
   const getEmployeeModelId = useAiTeamStore((s) => s.getEmployeeModelId);
+  const getEmployeeOverrides = useAiTeamStore((s) => s.employeeOverrides);
 
   // 10턴마다 대화 압축 (비동기, 백그라운드)
   useEffect(() => {
@@ -242,6 +243,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
             context: { routedEmployees, participants: humanNames },
             miloSettings,
             compressedContext: compressedContextRef.current,
+            googleSheetsId: (getEmployeeOverrides['drucker'] || {}).googleSheetsId || null,
           });
           if (result) result.ai_employee = 'drucker';
           onThinking?.(false, null);
@@ -333,6 +335,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
                   context: { routedEmployees, participants: humanNames },
                   miloSettings: specSettings,
                   compressedContext: compressedContextRef.current,
+                  googleSheetsId: (getEmployeeOverrides[specId] || {}).googleSheetsId || null,
                 });
                 // 전문가 호출이므로 should_respond 강제
                 if (specResult && !specResult.should_respond && specResult.response_text) {
