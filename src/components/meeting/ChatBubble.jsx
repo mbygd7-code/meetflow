@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
-import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart, HelpCircle } from 'lucide-react';
+import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart, HelpCircle, ExternalLink } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import RichText from './RichText';
@@ -192,6 +192,37 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
               </div>
             )}
             {isAi ? <RichText content={displayContent} /> : displayContent}
+            {/* 검색 출처 카드 */}
+            {isAi && message.search_sources?.length > 0 && (
+              <div className="mt-3 pt-2.5 border-t border-brand-purple/15 space-y-1.5">
+                <p className="text-[10px] text-txt-muted font-medium uppercase tracking-wider flex items-center gap-1">
+                  <ExternalLink size={10} /> 출처
+                </p>
+                {message.search_sources.map((src, i) => (
+                  <a
+                    key={i}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 p-2 rounded-md bg-bg-tertiary/50 border border-border-subtle hover:border-brand-purple/30 transition-colors group/src"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {src.thumbnail && (
+                      <img src={src.thumbnail} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium text-txt-primary truncate group-hover/src:text-brand-purple transition-colors">
+                        {src.title}
+                      </p>
+                      <p className="text-[9px] text-txt-muted truncate">
+                        {src.url?.replace(/^https?:\/\//, '').split('/')[0]}
+                      </p>
+                    </div>
+                    <ExternalLink size={10} className="text-txt-muted shrink-0" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
           {/* 호버 액션 (질문일 때는 답변하기 버튼도 포함) */}
           <div className={`flex items-center gap-2 mt-1.5 ${isQuestion ? '' : 'justify-end opacity-0 group-hover/bubble:opacity-100'} transition-opacity`}>

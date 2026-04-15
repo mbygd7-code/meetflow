@@ -96,17 +96,70 @@ ${preset || 'default'}
 참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라 (예: "@명배영님, ...").
 응답이 필요 없다면 should_respond=false.`;
 
+    // ── 웹 검색 (Google Custom Search) ──
+    let searchSection = '';
+    const GOOGLE_CSE_ID = Deno.env.get('GOOGLE_CSE_ID');
+    const GOOGLE_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+    if (GOOGLE_CSE_ID && GOOGLE_API_KEY) {
+      try {
+        // 1단계: Haiku에게 검색 필요 여부 판단
+        const searchDecision = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 150,
+          system: '대화를 보고 최신 데이터나 외부 정보가 필요한지 판단하라. 검색이 필요하면 한국어 검색 쿼리 1~2개를 JSON으로, 불필요하면 빈 배열로 응답. 반드시 {"queries":[...]} 형식만.',
+          messages: [{ role: 'user', content: `최근 대화:\n${transcript.slice(-1000)}\n\nJSON:` }],
+        });
+        const searchText = searchDecision.content.find((b: any) => b.type === 'text')?.text || '{}';
+        const searchJson = JSON.parse(searchText.match(/\{[\s\S]*\}/)?.[0] || '{"queries":[]}');
+        const queries: string[] = (searchJson.queries || []).slice(0, 2);
+
+        // 2단계: Google Custom Search 실행
+        if (queries.length > 0) {
+          const searchResults: string[] = [];
+          for (const q of queries) {
+            try {
+              const ctrl = new AbortController();
+              setTimeout(() => ctrl.abort(), 3000);
+              const res = await fetch(
+                `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(q)}&num=3&lr=lang_ko`,
+                { signal: ctrl.signal }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                const items = (data.items || []).slice(0, 3);
+                if (items.length > 0) {
+                  searchResults.push(`검색어: "${q}"`);
+                  items.forEach((item: any, i: number) => {
+                    const thumb = item.pagemap?.cse_thumbnail?.[0]?.src || '';
+                    searchResults.push(`${i + 1}. [${item.title}](${item.link})${thumb ? ` ![thumb](${thumb})` : ''}\n   ${(item.snippet || '').slice(0, 150)}`);
+                  });
+                }
+              }
+            } catch {}
+          }
+          if (searchResults.length > 0) {
+            searchSection = `\n\n## 웹 검색 결과 (실시간)\n응답에 관련 링크를 [제목](URL) 형식으로 인용하세요.\n\n${searchResults.join('\n')}\n`;
+          }
+        }
+      } catch (e) {
+        console.error('[milo-analyze] Search error:', e);
+      }
+    }
+
     // miloSettings에서 커스텀 시스템 프롬프트 / 모델 지원
     const systemPrompt = miloSettings?.systemPromptOverride || MILO_SYSTEM_PROMPT;
     const model = miloSettings?.apiModelId || 'claude-sonnet-4-20250514';
 
-    const JSON_FORMAT_INSTRUCTION = `\n\n## 응답 형식 (반드시 준수)\n반드시 순수 JSON만 응답하세요. 마크다운이나 설명 텍스트를 포함하지 마세요.\nresponse_text에는 회의 참가자에게 보여줄 깔끔한 메시지만 작성하세요.\n{\n  "should_respond": boolean,\n  "response_text": "회의 참가자에게 보여줄 깔끔한 응답 메시지",\n  "ai_type": "data" | "insight" | "question" | "summary" | "nudge"\n}`;
+    // 검색 결과를 userPrompt에 추가
+    const finalUserPrompt = userPrompt + searchSection;
+
+    const JSON_FORMAT_INSTRUCTION = `\n\n## 응답 형식 (반드시 준수)\n반드시 순수 JSON만 응답하세요. 마크다운이나 설명 텍스트를 포함하지 마세요.\nresponse_text에는 회의 참가자에게 보여줄 깔끔한 메시지만 작성하세요. 웹 검색 결과가 있으면 관련 링크를 [제목](URL) 형식으로 자연스럽게 인용하세요.\nsearch_sources가 있으면 포함하세요.\n{\n  "should_respond": boolean,\n  "response_text": "응답 메시지",\n  "ai_type": "data" | "insight" | "question" | "summary" | "nudge",\n  "search_sources": [{"title": "...", "url": "...", "thumbnail": "..."}]\n}`;
 
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 600,
+      max_tokens: 800,
       system: systemPrompt + JSON_FORMAT_INSTRUCTION,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [{ role: 'user', content: finalUserPrompt }],
     });
 
     const textBlock = response.content.find((b: any) => b.type === 'text');

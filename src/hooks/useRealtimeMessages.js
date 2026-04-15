@@ -140,7 +140,7 @@ export function useRealtimeMessages(meetingId) {
   }, [meetingId]);
 
   const sendMessage = useCallback(
-    async (content, { agendaId, isAi = false, aiType, aiEmployee, source = 'web' } = {}) => {
+    async (content, { agendaId, isAi = false, aiType, aiEmployee, source = 'web', searchSources = null } = {}) => {
       if (!content?.trim()) return;
 
       if (isDemoMode(user?.id, meetingId)) {
@@ -160,6 +160,7 @@ export function useRealtimeMessages(meetingId) {
           is_ai: isAi,
           ai_type: aiType,
           ai_employee: isAi ? (aiEmployee || 'drucker') : undefined,
+          search_sources: searchSources || undefined,
           source,
           user: isAi ? aiUser : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
           created_at: new Date().toISOString(),
@@ -189,7 +190,7 @@ export function useRealtimeMessages(meetingId) {
       // Realtime이 지연되거나 미작동할 수 있으므로 즉시 로컬 state에 추가
       // ai_employee는 DB에 없으므로 로컬에서 보강
       if (data) {
-        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'drucker' } : data;
+        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'drucker', search_sources: searchSources || undefined } : data;
         setMessages((prev) => {
           if (prev.some((m) => m.id === enriched.id)) return prev;
           return [...prev, enriched];

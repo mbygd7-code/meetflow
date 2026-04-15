@@ -115,6 +115,7 @@ export default function MeetingRoom() {
         isAi: true,
         aiType: result.ai_type,
         aiEmployee: result.ai_employee || 'drucker',
+        searchSources: result.search_sources || null,
       });
     },
     [sendMessage, currentAgenda]
