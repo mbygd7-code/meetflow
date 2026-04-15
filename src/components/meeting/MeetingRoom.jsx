@@ -26,6 +26,7 @@ export default function MeetingRoom() {
   const [summaryExpanded, setSummaryExpanded] = useState(false); // 태블릿 AI 요약 패널
   const [ending, setEnding] = useState(false);
   const [leavingConfirmed, setLeavingConfirmed] = useState(false);
+  const [aiAutoIntervene, setAiAutoIntervene] = useState(true);
   const { messages, sendMessage } = useRealtimeMessages(id);
 
   // 활성 회의 등록 — 회의방 입장 시
@@ -129,6 +130,7 @@ export default function MeetingRoom() {
     onRespond: handleMiloRespond,
     onThinking: handleThinking,
     alwaysRespond: isAiOnlyMeeting,
+    autoIntervene: aiAutoIntervene,
   });
 
   // 응답한 AI 직원 추출 (참여자 리스트에 표시)
@@ -319,7 +321,7 @@ export default function MeetingRoom() {
       {mobilePanel && (
         <div className="md:hidden border-b border-border-divider max-h-48 overflow-y-auto">
           {mobilePanel === 'participants' && (
-            <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} />
+            <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} autoIntervene={aiAutoIntervene} onToggleAutoIntervene={() => setAiAutoIntervene((v) => !v)} />
           )}
           {mobilePanel === 'summary' && (
             <div>
@@ -335,7 +337,7 @@ export default function MeetingRoom() {
       {/* 데스크톱: 3컬럼 / 모바일: 채팅만 */}
       <div className="flex flex-1 overflow-hidden relative">
         <div className="hidden md:block">
-          <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} />
+          <ParticipantList participants={meeting.participants || []} activeAiEmployees={activeAiEmployees} autoIntervene={aiAutoIntervene} onToggleAutoIntervene={() => setAiAutoIntervene((v) => !v)} />
         </div>
         <ChatArea
           messages={messages}

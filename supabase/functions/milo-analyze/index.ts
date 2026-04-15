@@ -40,7 +40,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agenda, preset, context, miloSettings } = await req.json();
+    const { messages, agenda, preset, context, miloSettings, compressedContext } = await req.json();
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
@@ -57,10 +57,20 @@ serve(async (req) => {
       .map((m: any) => `[${m.user?.name || (m.is_ai ? 'Milo' : '참가자')}] ${m.content}`)
       .join('\n');
 
+    // 참가자 목록 (AI가 @멘션할 수 있도록)
+    const participantList = (context?.participants || []).length > 0
+      ? `## 회의 참가자 (실제 사람)\n${context.participants.map((n: string) => `- ${n}`).join('\n')}\n`
+      : '';
+
+    // 압축된 이전 컨텍스트
+    const compressedSection = compressedContext
+      ? `## 이전 논의 요약 (압축)\n${compressedContext}\n\n`
+      : '';
+
     const userPrompt = `## 현재 어젠다
 ${agenda?.title || '미지정'} (${agenda?.duration_minutes || 10}분)
 
-## 최근 대화
+${participantList}${compressedSection}## 최근 대화
 ${transcript}
 
 ## 프리셋
@@ -78,6 +88,7 @@ ${preset || 'default'}
 ## 과제
 위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (3~4문장).
 @Milo 직접 호출이 있다면 반드시 응답 (5~8문장).
+참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라 (예: "@명배영님, ...").
 응답이 필요 없다면 should_respond=false.`;
 
     // miloSettings에서 커스텀 시스템 프롬프트 / 모델 지원

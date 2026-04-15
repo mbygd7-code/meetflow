@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Avatar, Badge } from '@/components/ui';
 import { formatTime } from '@/utils/formatters';
-import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
+import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart, HelpCircle } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import RichText from './RichText';
@@ -46,6 +46,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
 
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';
   const time = formatTime(message.created_at);
+  const isQuestion = isAi && message.ai_type === 'question';
 
   const rawContent = isAi
     ? message.content?.replace(/^\[[\u3131-\uD79D\w]+\]\s*/, '')
@@ -62,9 +63,25 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
 
   const handleCopy = (e) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(displayContent || '').catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    const textToCopy = displayContent || rawContent || message.content || '';
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }).catch(() => {
+        // fallback: textarea 방식
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    }
   };
 
   const handleQuote = () => {
@@ -147,13 +164,22 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
           <div
             onClick={handleQuote}
             className={`px-4 py-3 text-sm leading-relaxed cursor-pointer ${
-              isAi
-                ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-xl rounded-tl-sm hover:border-brand-purple/40'
-                : isMine
-                  ? 'bg-brand-purple text-white rounded-xl rounded-tr-sm hover:opacity-90 whitespace-pre-wrap'
-                  : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default whitespace-pre-wrap'
+              isQuestion
+                ? 'text-txt-primary bg-brand-orange/10 border border-brand-orange/25 rounded-xl rounded-tl-sm hover:border-brand-orange/40'
+                : isAi
+                  ? 'text-txt-primary bg-brand-purple/10 border border-brand-purple/20 rounded-xl rounded-tl-sm hover:border-brand-purple/40'
+                  : isMine
+                    ? 'bg-brand-purple text-white rounded-xl rounded-tr-sm hover:opacity-90 whitespace-pre-wrap'
+                    : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default whitespace-pre-wrap'
             } transition-all`}
           >
+            {/* 질문 표시 */}
+            {isQuestion && (
+              <div className="flex items-center gap-1.5 mb-2 text-brand-orange">
+                <HelpCircle size={14} strokeWidth={2.5} />
+                <span className="text-[11px] font-semibold uppercase tracking-wider">질문</span>
+              </div>
+            )}
             {/* 인용 블록 */}
             {quotedSender && (
               <div className={`mb-2 pl-3 py-1.5 text-xs leading-relaxed rounded-md ${
@@ -167,9 +193,18 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
             )}
             {isAi ? <RichText content={displayContent} /> : displayContent}
           </div>
-
-          {/* 호버 액션 */}
-          <div className="flex gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+          {/* 호버 액션 (질문일 때는 답변하기 버튼도 포함) */}
+          <div className={`flex items-center gap-2 mt-1.5 ${isQuestion ? '' : 'justify-end opacity-0 group-hover/bubble:opacity-100'} transition-opacity`}>
+            {isQuestion && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleQuote(); }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-brand-orange hover:bg-brand-orange/90 shadow-sm transition-colors"
+              >
+                <Reply size={12} />
+                답변하기
+              </button>
+            )}
+            <div className={`flex gap-1.5 ${isQuestion ? 'ml-auto opacity-0 group-hover/bubble:opacity-100' : ''} transition-opacity`}>
             <button onClick={handleCopy} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="복사">
               {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
             </button>
@@ -199,6 +234,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
                   ))}
                 </div>
               )}
+            </div>
             </div>
           </div>
         </div>

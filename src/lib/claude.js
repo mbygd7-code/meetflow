@@ -6,13 +6,14 @@ import { supabase } from '@/lib/supabase';
 /**
  * Milo 분석 — Supabase Edge Function 'milo-analyze' 호출
  */
-export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null }) {
+export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '' }) {
   const { data, error } = await supabase.functions.invoke('milo-analyze', {
     body: {
       messages: (messages || []).slice(-15),
       agenda,
       preset,
       context,
+      compressedContext,
       miloSettings: miloSettings
         ? {
             systemPromptOverride: miloSettings.systemPromptOverride,
@@ -23,8 +24,14 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
   });
 
   if (error) {
-    console.error('[analyzeMilo] Edge Function error:', error);
-    return { should_respond: false };
+    console.error('[analyzeMilo] Edge Function error:', error.message || error);
+    // 에러 시 사용자에게 피드백 메시지 반환
+    return {
+      should_respond: true,
+      response_text: '[밀로] 죄송합니다, 잠시 응답 처리에 문제가 있었습니다. 다시 시도해주세요.',
+      ai_type: 'nudge',
+      ai_employee: 'drucker',
+    };
   }
 
   // response_text 정제
@@ -38,6 +45,35 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
   }
 
   return data || { should_respond: false };
+}
+
+/**
+ * 대화 압축 — 이전 메시지들을 3줄 요약으로 압축
+ * Edge Function을 재사용하되, 요약 전용 프롬프트를 주입
+ */
+export async function compressConversation(messages) {
+  if (!messages?.length) return '';
+  const transcript = messages
+    .map((m) => `[${m.user?.name || (m.is_ai ? 'AI' : '참가자')}] ${m.content?.slice(0, 150)}`)
+    .join('\n');
+
+  const { data, error } = await supabase.functions.invoke('milo-analyze', {
+    body: {
+      messages: [],
+      agenda: { title: '대화 압축' },
+      preset: 'default',
+      context: {},
+      miloSettings: {
+        systemPromptOverride: `당신은 회의 대화 요약 전문가입니다. 반드시 아래 JSON으로만 응답하세요.
+{"should_respond":true,"response_text":"요약 내용","ai_type":"summary"}`,
+        apiModelId: 'claude-haiku-4-5-20251001',
+      },
+      compressedContext: `다음 대화를 3~5줄로 요약하라. 핵심 결정사항, 미해결 질문, 주요 의견 대립점을 포함하라. 간결하게.\n\n${transcript}`,
+    },
+  });
+
+  if (error || !data?.response_text) return '';
+  return data.response_text;
 }
 
 /**

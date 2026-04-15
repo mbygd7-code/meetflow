@@ -3,7 +3,7 @@ import { Slack, Globe } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-export default function ParticipantList({ participants = [], activeAiEmployees = [] }) {
+export default function ParticipantList({ participants = [], activeAiEmployees = [], autoIntervene = true, onToggleAutoIntervene }) {
   // Milo(drucker)는 항상 표시, 나머지 AI는 응답한 것만
   const aiIds = ['drucker', ...activeAiEmployees.filter((id) => id !== 'drucker')];
   const uniqueAiIds = [...new Set(aiIds)];
@@ -17,6 +17,23 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
           <span className="lg:hidden">{participants.length + uniqueAiIds.length}</span>
         </h3>
       </div>
+
+      {/* AI 자동 개입 토글 */}
+      <label className="flex items-center justify-between px-2 lg:px-3 pt-3 pb-1 cursor-pointer group">
+        <span className="hidden lg:block text-[11px] text-txt-secondary font-medium">자동 개입</span>
+        <button
+          type="button"
+          onClick={onToggleAutoIntervene}
+          className={`relative w-10 h-[22px] rounded-full transition-colors shrink-0 ${
+            autoIntervene ? 'bg-brand-purple' : 'bg-bg-tertiary border border-border-default'
+          }`}
+          title={autoIntervene ? 'AI가 상황에 따라 자동 개입합니다' : 'AI는 직접 호출할 때만 응답합니다'}
+        >
+          <span
+            className={`absolute top-1/2 -translate-y-1/2 ${autoIntervene ? 'left-[22px]' : 'left-[3px]'} w-4 h-4 rounded-full bg-white transition-all shadow-sm`}
+          />
+        </button>
+      </label>
 
       <div className="flex-1 overflow-visible lg:overflow-y-auto px-1.5 lg:px-3 py-3 space-y-1">
         {/* AI 직원 목록 */}

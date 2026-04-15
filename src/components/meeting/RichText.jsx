@@ -27,11 +27,12 @@ const EMOJI_MAP = [
 function parseInline(text, keyPrefix = '') {
   if (!text) return null;
 
-  // 통합 정규식: **bold** | (Art. X) | 이모지
+  // 통합 정규식: **bold** | @멘션 | (Art. X) | 이모지
   const emojiChars = EMOJI_MAP.map((e) => e.pattern.source).join('|');
   const inlineRegex = new RegExp(
     `(\\*\\*(.+?)\\*\\*)|` +                          // **bold**
-    `(\\(?Art\\.\\s*\\d+(?:\\(\\d+\\))?\\)?)` +       // (Art. X) or Art. X
+    `(@[\\u3131-\\uD79D\\w]+(?:님)?)` +               // @멘션 (@명배영, @명배영님)
+    `|(\\(?Art\\.\\s*\\d+(?:\\(\\d+\\))?\\)?)` +      // (Art. X) or Art. X
     `|(${emojiChars})`,                                // emojis
     'g'
   );
@@ -54,8 +55,15 @@ function parseInline(text, keyPrefix = '') {
         </strong>
       );
     } else if (match[3]) {
+      // @멘션 — 하이라이트
+      parts.push(
+        <span key={`${keyPrefix}m${match.index}`} className="text-brand-purple font-semibold">
+          {match[3]}
+        </span>
+      );
+    } else if (match[4]) {
       // (Art. X) — 참조 뱃지
-      const refText = match[3].replace(/^\(|\)$/g, '').trim();
+      const refText = match[4].replace(/^\(|\)$/g, '').trim();
       parts.push(
         <ReferenceBadge key={`${keyPrefix}r${match.index}`} reference={refText} />
       );

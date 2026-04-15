@@ -29,7 +29,7 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
   const hasContent = sections.some((s) => s.items.length > 0);
 
   return (
-    <aside className="w-80 shrink-0 border-l border-border-subtle bg-bg-primary flex flex-col">
+    <aside className="w-80 shrink-0 border-l border-border-subtle bg-bg-primary flex flex-col min-h-0 h-full overflow-hidden">
       {/* 헤더 */}
       <div className="px-5 py-4 border-b border-border-divider flex items-center gap-3">
         <Avatar variant="ai" size="sm" label="M" />
@@ -43,7 +43,7 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
       </div>
 
       {/* 섹션 */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 scrollbar-hide">
         {!hasContent && (
           <div className="text-center py-10 text-txt-muted">
             <Sparkles size={20} className="mx-auto mb-2 opacity-40" />
