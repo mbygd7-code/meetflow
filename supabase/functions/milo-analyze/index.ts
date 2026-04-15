@@ -96,27 +96,26 @@ ${preset || 'default'}
 참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라 (예: "@명배영님, ...").
 응답이 필요 없다면 should_respond=false.`;
 
-    // ── 웹 검색 (Google Custom Search) ──
+    // ── 웹 검색 (Google Custom Search) — 요청 시에만 실행 ──
     let searchSection = '';
     const GOOGLE_CSE_ID = Deno.env.get('GOOGLE_CSE_ID');
     const GOOGLE_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
-    console.log('[milo-analyze] CSE_ID:', GOOGLE_CSE_ID ? 'SET' : 'MISSING', 'API_KEY:', GOOGLE_API_KEY ? 'SET' : 'MISSING');
-    if (GOOGLE_CSE_ID && GOOGLE_API_KEY) {
-      try {
-        // 1단계: Haiku에게 검색 필요 여부 판단
-        const searchDecision = await anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 150,
-          system: '대화를 보고 최신 데이터나 외부 정보가 필요한지 판단하라. 검색이 필요하면 한국어 검색 쿼리 1~2개를 JSON으로, 불필요하면 빈 배열로 응답. 반드시 {"queries":[...]} 형식만.',
-          messages: [{ role: 'user', content: `최근 대화:\n${transcript.slice(-1000)}\n\nJSON:` }],
-        });
-        const searchText = searchDecision.content.find((b: any) => b.type === 'text')?.text || '{}';
-        console.log('[milo-analyze] Haiku search decision:', searchText);
-        const searchJson = JSON.parse(searchText.match(/\{[\s\S]*\}/)?.[0] || '{"queries":[]}');
-        const queries: string[] = (searchJson.queries || []).slice(0, 2);
-        console.log('[milo-analyze] Search queries:', JSON.stringify(queries));
+    // 마지막 사용자 메시지에서 검색 요청 키워드 감지
+    const lastUserMsg = (messages || []).filter((m: any) => !m.is_ai).pop()?.content || '';
+    const searchKeywords = /검색|찾아|서치|search|조사|리서치|트렌드|최신|경쟁사|사례|레퍼런스/i;
+    const wantsSearch = searchKeywords.test(lastUserMsg);
 
-        // 2단계: Google Custom Search 실행
+    if (GOOGLE_CSE_ID && GOOGLE_API_KEY && wantsSearch) {
+      try {
+        // 검색 쿼리: 마지막 메시지에서 핵심 키워드 추출 (간단하게)
+        const cleanQuery = lastUserMsg
+          .replace(/검색해줘|찾아줘|서치해줘|알려줘|보여줘|해줘|해 줘/g, '')
+          .replace(/@\S+/g, '')
+          .trim()
+          .slice(0, 80);
+        const queries = cleanQuery ? [cleanQuery] : [];
+        console.log('[milo-analyze] Search triggered, query:', cleanQuery);
+
         if (queries.length > 0) {
           const searchResults: string[] = [];
           for (const q of queries) {

@@ -652,7 +652,9 @@ export const useAiTeamStore = create((set, get) => ({
   // 특정 AI 직원의 실제 API 모델 ID 반환
   getEmployeeModelId: (employeeId) => {
     const overrides = get().employeeOverrides[employeeId] || {};
-    const selectedId = overrides.model || 'claude-sonnet-4-6';
+    // 밀로(drucker)는 Sonnet, 나머지 전문가는 Haiku 기본 (비용 절약)
+    const defaultModel = employeeId === 'drucker' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5';
+    const selectedId = overrides.model || defaultModel;
     const model = LLM_MODELS.find((m) => m.id === selectedId);
     return model?.apiModelId || null;
   },
