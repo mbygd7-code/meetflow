@@ -140,10 +140,10 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
         />
 
         {/* 입력 영역: 텍스트 ↔ 음성 트랜지션 */}
-        <div className="flex items-center justify-center gap-3">
-          {!voiceMode ? (
-            /* ── 텍스트 모드 (필 형태) ── */
-            <div className="flex-1 relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-2 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all duration-500 ease-out">
+        <div className="flex flex-col items-center gap-0">
+          {!voiceMode ? ( <>
+            {/* ── 텍스트 모드 (필 형태) ── */}
+            <div className="w-full relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-2 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all duration-500 ease-out">
               {/* + 메뉴 */}
               <div className="relative">
                 <button
@@ -202,7 +202,10 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 <ArrowUp size={16} strokeWidth={2.4} />
               </button>
             </div>
-          ) : (
+            <p className="text-[11px] text-txt-muted mt-2 text-center w-full">
+              Enter로 전송 · Shift + Enter로 줄바꿈
+            </p>
+            </> ) : (
             /* ── 음성 모드 ── */
             <div className="flex flex-col items-center gap-3 transition-all duration-500 ease-out">
               {/* 인식 텍스트 */}
@@ -216,7 +219,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
               <div className="flex items-center justify-center">
                 <button
                   onClick={() => { setVoiceMode(false); setInput((v) => (v ? v + ' @Milo ' : '@Milo ')); textareaRef.current?.focus(); }}
-                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all"
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="Milo 호출"
                 >
                   <AtSign size={13} />
@@ -228,7 +231,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 {/* + 자료 업로드 */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all"
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="자료 업로드"
                 >
                   <Plus size={13} />
@@ -238,7 +241,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 <button
                   onClick={isListening ? stopSTT : startSTT}
                   disabled={disabled}
-                  className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                  className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:scale-110 ${
                     isListening
                       ? 'bg-status-error text-white shadow-status-error/40'
                       : 'bg-brand-purple text-white hover:shadow-brand-purple/40'
@@ -253,7 +256,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 {/* 텍스트 모드 */}
                 <button
                   onClick={() => { setVoiceMode(false); if (isListening) stopSTT(); }}
-                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-txt-primary hover:border-border-hover flex items-center justify-center transition-all"
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-txt-primary hover:border-border-hover hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="텍스트 모드"
                 >
                   <Keyboard size={13} />
