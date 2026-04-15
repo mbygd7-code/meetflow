@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
+export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
-  const [reactions, setReactions] = useState({}); // { [messageId]: { like: 1, heart: 2 } }
+  const [reactions, setReactions] = useState({});
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
   const { user } = useAuthStore();
 
   const handleReact = (messageId, key) => {
@@ -109,7 +111,49 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking }) {
           </div>
         )}
 
-        <div className="relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-5 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
+        <div className="relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-2 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
+          {/* + 메뉴 */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+              className={`p-2 rounded-full transition-colors ${plusMenuOpen ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted hover:text-brand-purple'}`}
+            >
+              <Plus size={16} strokeWidth={2.4} />
+            </button>
+            {plusMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setPlusMenuOpen(false)} />
+                <div className="absolute bottom-full left-0 mb-2 w-44 bg-bg-secondary border border-border-subtle rounded-lg shadow-lg z-20 py-1">
+                  <button
+                    onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                  >
+                    <Paperclip size={15} className="text-txt-muted" />
+                    자료 업로드
+                  </button>
+                  <button
+                    onClick={() => { setPlusMenuOpen(false); /* TODO: 음성 모드 */ }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                  >
+                    <Mic size={15} className="text-txt-muted" />
+                    음성 모드
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv"
+            onChange={(e) => {
+              Array.from(e.target.files || []).forEach((f) => onFileUpload?.(f));
+              e.target.value = '';
+            }}
+            className="hidden"
+          />
           <textarea
             ref={textareaRef}
             value={input}
