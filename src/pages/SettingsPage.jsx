@@ -149,6 +149,195 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
   );
 }
 
+// ── Google 문서 연동 (Sheets + Docs 통합 + 동기화) ──
+function GoogleDocsInput({ employeeId, value, onChange }) {
+  const store = useAiTeamStore();
+  const overrides = store.employeeOverrides[employeeId] || {};
+  // value: [{id, type, label}] 배열 (하위 호환)
+  const items = Array.isArray(value)
+    ? value.map((v) => typeof v === 'string' ? { id: v, type: 'sheets', label: '' } : { type: 'sheets', ...v })
+    : (value ? [{ id: value, type: 'sheets', label: '' }] : []);
+  const [inputValue, setInputValue] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null); // 'success' | 'error'
+
+  const parseUrl = (raw) => {
+    const sheetsMatch = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (sheetsMatch) return { id: sheetsMatch[1], type: 'sheets' };
+    const docsMatch = raw.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    if (docsMatch) return { id: docsMatch[1], type: 'docs' };
+    return { id: raw.trim(), type: 'sheets' }; // fallback
+  };
+
+  const handleAdd = () => {
+    const parsed = parseUrl(inputValue);
+    if (parsed.id && !items.some((s) => s.id === parsed.id)) {
+      onChange([...items, { ...parsed, label: '' }]);
+      setInputValue('');
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    const parsed = parseUrl(pasted);
+    if (parsed.id && !items.some((s) => s.id === parsed.id)) {
+      onChange([...items, { ...parsed, label: '' }]);
+      setInputValue('');
+    } else {
+      setInputValue(pasted);
+    }
+  };
+
+  const handleRemove = (id) => {
+    const next = items.filter((s) => s.id !== id);
+    onChange(next.length > 0 ? next : null);
+  };
+
+  const handleLabelChange = (id, label) => {
+    onChange(items.map((s) => s.id === id ? { ...s, label } : s));
+  };
+
+  // ── 동기화: 시트/Docs 데이터를 fetch → 요약 → localStorage 저장 ──
+  const handleSync = async () => {
+    if (items.length === 0) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const summaryParts = [];
+      for (const item of items.slice(0, 5)) {
+        try {
+          if (item.type === 'docs') {
+            const res = await fetch(`https://docs.google.com/document/d/${item.id}/export?format=txt`);
+            if (res.ok) {
+              let text = await res.text();
+              if (text.length > 6000) text = text.slice(0, 3000) + '\n...(생략)...\n' + text.slice(-3000);
+              summaryParts.push(`### ${item.label || 'Google Docs'}\n${text}`);
+            }
+          } else {
+            // Sheets: CSV export (API 키 불필요, 공개 시트)
+            const res = await fetch(`https://docs.google.com/spreadsheets/d/${item.id}/gviz/tq?tqx=out:csv`);
+            if (res.ok) {
+              const csv = await res.text();
+              const rows = csv.split('\n').filter(Boolean);
+              const totalRows = rows.length - 1;
+              // 헤더 + 통계 계산
+              const headers = rows[0]?.replace(/"/g, '').split(',') || [];
+              const dataRows = rows.slice(1);
+              const colStats = [];
+              for (let c = 0; c < Math.min(headers.length, 15); c++) {
+                const vals = dataRows.map((r) => { const cells = r.match(/(".*?"|[^",]+)/g) || []; return (cells[c] || '').replace(/"/g, '').trim(); }).filter(Boolean);
+                const nums = vals.map(Number).filter((n) => !isNaN(n) && isFinite(n));
+                if (nums.length > vals.length * 0.5 && nums.length > 0) {
+                  const sum = nums.reduce((a, b) => a + b, 0);
+                  colStats.push(`- **${headers[c]}**: 합계=${sum.toLocaleString()}, 평균=${(sum / nums.length).toFixed(1)}, 최소=${Math.min(...nums)}, 최대=${Math.max(...nums)} (${nums.length}건)`);
+                } else {
+                  const freq = {};
+                  vals.forEach((v) => { freq[v] = (freq[v] || 0) + 1; });
+                  const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                  colStats.push(`- **${headers[c]}**: ${Object.keys(freq).length}종류 — ${top.map(([k, v]) => `${k.slice(0, 20)}(${v}건)`).join(', ')}`);
+                }
+              }
+              // 최근 10행 샘플
+              const sample = dataRows.slice(-10).map((r) => r.replace(/"/g, '').slice(0, 200)).join('\n');
+              summaryParts.push(`### ${item.label || 'Sheets'} (총 ${totalRows.toLocaleString()}행)\n${colStats.join('\n')}\n\n**최근 10행:**\n${sample}`);
+            }
+          }
+        } catch (e) { console.error('[GoogleDocsSync]', e); }
+      }
+      const finalSummary = summaryParts.join('\n\n');
+      store.setGoogleDocsSummary(employeeId, finalSummary);
+      setSyncResult('success');
+      setTimeout(() => setSyncResult(null), 3000);
+    } catch (e) {
+      console.error('[GoogleDocsSync]', e);
+      setSyncResult('error');
+      setTimeout(() => setSyncResult(null), 3000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[11px] text-txt-muted font-medium">Google 문서 연동</p>
+        {overrides.googleDocsSyncedAt && (
+          <span className="text-[9px] text-txt-muted">마지막 동기화: {new Date(overrides.googleDocsSyncedAt).toLocaleString('ko')}</span>
+        )}
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onPaste={handlePaste}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAdd())}
+          placeholder="Sheets 또는 Docs URL 붙여넣기 + Enter"
+          className="flex-1 bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary placeholder-txt-muted focus:border-brand-purple/50 focus:outline-none transition-colors"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!inputValue.trim()}
+          className="px-2.5 py-2 rounded-md text-xs font-medium bg-brand-purple/10 text-brand-purple border border-brand-purple/20 hover:bg-brand-purple/20 disabled:opacity-30 transition-colors shrink-0"
+        >
+          추가
+        </button>
+      </div>
+      <p className="text-[10px] text-txt-muted mt-1">"링크가 있는 모든 사용자에게 공개"로 설정하세요 (Sheets, Docs 모두 지원)</p>
+      {items.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {items.map((item, i) => (
+            <div key={item.id} className="rounded-md bg-bg-primary border border-border-subtle px-2.5 py-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 truncate flex-1 mr-2">
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                    item.type === 'docs' ? 'bg-blue-500/15 text-blue-500' : 'bg-status-success/15 text-status-success'
+                  }`}>
+                    {item.type === 'docs' ? 'DOC' : 'SHEET'}
+                  </span>
+                  <span className="text-[10px] text-txt-secondary truncate">{item.id.slice(0, 20)}...</span>
+                </div>
+                <button onClick={() => handleRemove(item.id)} className="text-[10px] text-status-error hover:underline shrink-0">삭제</button>
+              </div>
+              <input
+                value={item.label || ''}
+                onChange={(e) => handleLabelChange(item.id, e.target.value)}
+                placeholder="설명 (예: 회원 DB, 주간계획, QA 이슈)"
+                className="w-full bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-[10px] text-txt-primary placeholder-txt-muted focus:border-brand-purple/50 focus:outline-none transition-colors"
+              />
+            </div>
+          ))}
+          {/* 동기화 버튼 */}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className={`w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+              syncResult === 'success'
+                ? 'bg-status-success/15 text-status-success border border-status-success/30'
+                : syncResult === 'error'
+                  ? 'bg-status-error/15 text-status-error border border-status-error/30'
+                  : 'bg-brand-purple/10 text-brand-purple border border-brand-purple/20 hover:bg-brand-purple/20'
+            } disabled:opacity-50`}
+          >
+            {syncing ? (
+              <><span className="w-3 h-3 border-2 border-brand-purple/30 border-t-brand-purple rounded-full animate-spin" />동기화 중...</>
+            ) : syncResult === 'success' ? (
+              '동기화 완료'
+            ) : syncResult === 'error' ? (
+              '동기화 실패 — 시트 공개 설정 확인'
+            ) : (
+              '데이터 동기화'
+            )}
+          </button>
+          {overrides.googleDocsSummary && (
+            <p className="text-[9px] text-status-success mt-1">요약 데이터 저장됨 ({(overrides.googleDocsSummary.length / 1024).toFixed(1)}KB)</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 확장된 AI 직원 상세 패널 ──
 function ExpandedEmployeePanel({ employee }) {
   const store = useAiTeamStore();
@@ -251,26 +440,11 @@ function ExpandedEmployeePanel({ employee }) {
       </div>
 
       {/* Google Sheets 연동 */}
-      <div>
-        <p className="text-[11px] text-txt-muted mb-1.5 font-medium">Google Sheets 연동</p>
-        <input
-          value={overrides.googleSheetsId || ''}
-          onChange={(e) => {
-            const raw = e.target.value;
-            // URL에서 스프레드시트 ID 자동 추출
-            const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-            store.setGoogleSheetsId(employee.id, match ? match[1] : raw);
-          }}
-          placeholder="https://docs.google.com/spreadsheets/d/..."
-          className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary placeholder-txt-muted focus:border-brand-purple/50 focus:outline-none transition-colors"
-        />
-        <p className="text-[10px] text-txt-muted mt-1">시트를 "링크가 있는 모든 사용자에게 공개"로 설정하세요</p>
-        {overrides.googleSheetsId && (
-          <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-status-success">
-            <span>ID: {overrides.googleSheetsId.slice(0, 20)}...</span>
-          </div>
-        )}
-      </div>
+      <GoogleDocsInput
+        employeeId={employee.id}
+        value={overrides.googleSheetsId || ''}
+        onChange={(id) => store.setGoogleSheetsId(employee.id, id)}
+      />
     </div>
   );
 }

@@ -45,6 +45,7 @@ export default function App() {
   const initMeetings = useMeetingStore((s) => s.init);
   const initTasks = useTaskStore((s) => s.init);
   const loadKnowledgeFiles = useAiTeamStore((s) => s.loadKnowledgeFiles);
+  const loadAiOverridesFromDB = useAiTeamStore((s) => s.loadFromDB);
   const cleanupMeetings = useMeetingStore((s) => s.cleanup);
   const cleanupTasks = useTaskStore((s) => s.cleanup);
 
@@ -60,6 +61,7 @@ export default function App() {
       initMeetings();
       initTasks();
       loadKnowledgeFiles();
+      loadAiOverridesFromDB();
     }
     return () => {
       cleanupMeetings();

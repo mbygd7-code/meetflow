@@ -243,7 +243,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
             context: { routedEmployees, participants: humanNames },
             miloSettings,
             compressedContext: compressedContextRef.current,
-            googleSheetsId: (getEmployeeOverrides['drucker'] || {}).googleSheetsId || null,
+            googleDocsSummary: (getEmployeeOverrides['drucker'] || {}).googleDocsSummary || null,
           });
           if (result) result.ai_employee = 'drucker';
           onThinking?.(false, null);
@@ -335,7 +335,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
                   context: { routedEmployees, participants: humanNames },
                   miloSettings: specSettings,
                   compressedContext: compressedContextRef.current,
-                  googleSheetsId: (getEmployeeOverrides[specId] || {}).googleSheetsId || null,
+                  googleDocsSummary: (getEmployeeOverrides[specId] || {}).googleDocsSummary || null,
                 });
                 // 전문가 호출이므로 should_respond 강제
                 if (specResult && !specResult.should_respond && specResult.response_text) {

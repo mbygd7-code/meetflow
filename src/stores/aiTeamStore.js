@@ -388,10 +388,72 @@ function saveToStorage(state) {
   } catch (e) {
     console.warn('[aiTeamStore] save failed:', e);
   }
+  // Supabase DB에도 ai_overrides 동기화 (비동기, 실패 무시)
+  if (SUPABASE_ENABLED && state.employeeOverrides) {
+    saveOverridesToDB(state.employeeOverrides);
+  }
+}
+
+// DB에 ai_overrides 저장 (디바운스)
+let _saveTimer = null;
+async function saveOverridesToDB(overrides) {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const { data: membership } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .single();
+      if (!membership) return;
+      await supabase
+        .from('teams')
+        .update({ ai_overrides: overrides })
+        .eq('id', membership.team_id);
+    } catch (e) {
+      console.warn('[aiTeamStore] DB save failed:', e);
+    }
+  }, 2000); // 2초 디바운스
+}
+
+// DB에서 ai_overrides 불러오기
+async function loadOverridesFromDB() {
+  if (!SUPABASE_ENABLED) return null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+    const { data: membership } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', session.user.id)
+      .limit(1)
+      .single();
+    if (!membership) return null;
+    const { data: team } = await supabase
+      .from('teams')
+      .select('ai_overrides')
+      .eq('id', membership.team_id)
+      .single();
+    return team?.ai_overrides || null;
+  } catch {
+    return null;
+  }
 }
 
 export const useAiTeamStore = create((set, get) => ({
   ...loadFromStorage(),
+
+  // DB에서 최신 overrides 로드 (앱 시작 시 호출)
+  loadFromDB: async () => {
+    const dbOverrides = await loadOverridesFromDB();
+    if (dbOverrides && Object.keys(dbOverrides).length > 0) {
+      set({ employeeOverrides: dbOverrides });
+      saveToStorage({ ...get(), employeeOverrides: dbOverrides });
+    }
+  },
 
   toggleEmployee: (id) => {
     const active = get().activeEmployees;
@@ -428,10 +490,19 @@ export const useAiTeamStore = create((set, get) => ({
     saveToStorage(get());
   },
 
-  // 특정 AI에게 구글시트 ID 설정
-  setGoogleSheetsId: (employeeId, sheetsId) => {
+  // 특정 AI에게 구글 문서 ID 설정 (배열 지원: [{id, type, label}])
+  setGoogleSheetsId: (employeeId, sheetsIds) => {
     const overrides = { ...get().employeeOverrides };
-    overrides[employeeId] = { ...(overrides[employeeId] || {}), googleSheetsId: sheetsId || null };
+    const value = Array.isArray(sheetsIds) ? (sheetsIds.length > 0 ? sheetsIds : null) : (sheetsIds || null);
+    overrides[employeeId] = { ...(overrides[employeeId] || {}), googleSheetsId: value };
+    set({ employeeOverrides: overrides });
+    saveToStorage(get());
+  },
+
+  // 미리 요약된 문서 데이터 저장
+  setGoogleDocsSummary: (employeeId, summary) => {
+    const overrides = { ...get().employeeOverrides };
+    overrides[employeeId] = { ...(overrides[employeeId] || {}), googleDocsSummary: summary || null, googleDocsSyncedAt: summary ? new Date().toISOString() : null };
     set({ employeeOverrides: overrides });
     saveToStorage(get());
   },
@@ -534,11 +605,18 @@ export const useAiTeamStore = create((set, get) => ({
     // ── 공통: 비판적 사고 + @멘션 규칙 주입 ──
     prompt += `\n
 ## 응답 성향 (반드시 준수)
-- 70% 건설적 분석: 정확한 정보, 데이터 기반 의견, 실행 가능한 제안
-- 30% 비판적 사고: 리스크 지적, 반론 제시, "그런데...", "한 가지 우려되는 점은..."
-- 다른 전문가의 의견에 무조건 동의하지 말 것. 자신의 도메인에서 다른 관점이 있으면 정중히 반박하라
-- 예: "코틀러님이 GTM 전략을 제안하셨는데, 교육 현장의 실제 온보딩 속도를 고려하면 시기를 조정할 필요가 있습니다."
-- 근거 없는 반대는 금지. 반드시 자신의 전문 분야 데이터/경험 기반으로 반론할 것
+- 대부분은 건설적 분석: 정확한 정보, 데이터 기반 의견, 실행 가능한 제안
+- 필요할 때만 비판적 사고: 실제 리스크가 있을 때만 지적. 매번 우려를 표하지 말 것
+- 비판 시 특정 표현("그런데 한 가지 우려되는 점은")을 반복하지 말 것. 자연스럽게 다양한 표현 사용
+- 다른 전문가 의견에 동의할 부분은 동의하고, 자신의 도메인에서 실질적 반론이 있을 때만 반박
+- 근거 없는 반대는 금지. 반드시 자신의 전문 분야 데이터/경험 기반으로
+
+## 반복 금지 규칙 (매우 중요)
+- 이전 대화에서 이미 언급한 내용을 다시 말하지 마라. 새로운 관점이나 추가 정보만 제시하라
+- 다른 전문가가 이미 말한 포인트를 그대로 반복하지 마라. 보완하거나 다른 각도에서 접근하라
+- "앞서 말씀드린 것처럼" 같은 표현을 반복하며 같은 내용을 되풀이하지 마라
+- 이미 충분히 논의된 주제에 대해서는 should_respond: false로 응답하라 (침묵도 선택지)
+- 새로운 정보나 관점이 없으면 개입하지 마라
 
 ## 참가자 멘션 규칙 (반드시 준수)
 - 회의 참가자의 발언을 인용하거나 질문할 때 반드시 @이름 형식으로 멘션하라
