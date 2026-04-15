@@ -127,123 +127,135 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           </div>
         )}
 
-        <div className="relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-2 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all">
-          {/* + 메뉴 */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setPlusMenuOpen(!plusMenuOpen)}
-              className={`p-2 rounded-full transition-colors ${plusMenuOpen ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted hover:text-brand-purple'}`}
-            >
-              <Plus size={16} strokeWidth={2.4} />
-            </button>
-            {plusMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setPlusMenuOpen(false)} />
-                <div className="absolute bottom-full left-0 mb-2 w-44 bg-bg-secondary border border-border-subtle rounded-lg shadow-lg z-20 py-1">
-                  <button
-                    onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
-                  >
-                    <Paperclip size={15} className="text-txt-muted" />
-                    자료 업로드
-                  </button>
-                  <button
-                    onClick={() => { setPlusMenuOpen(false); setVoiceMode(true); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
-                  >
-                    <Mic size={15} className="text-txt-muted" />
-                    음성 모드
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv"
-            onChange={(e) => {
-              Array.from(e.target.files || []).forEach((f) => onFileUpload?.(f));
-              e.target.value = '';
-            }}
-            className="hidden"
-          />
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="의견을 입력하세요..."
-            rows={1}
-            disabled={disabled}
-            className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
-          />
-          <button
-            type="button"
-            className="p-2 text-txt-muted hover:text-brand-purple transition-colors"
-            onClick={() => {
-              setInput((v) => (v ? v + ' @Milo ' : '@Milo '));
-              textareaRef.current?.focus();
-            }}
-            title="Milo 호출"
-          >
-            <AtSign size={16} strokeWidth={2.2} />
-          </button>
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!input.trim() || disabled}
-            className="w-9 h-9 rounded-full bg-brand-purple text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
-          >
-            <ArrowUp size={16} strokeWidth={2.4} />
-          </button>
-        </div>
-        {!voiceMode && (
-          <p className="text-[11px] text-txt-muted mt-2 text-center">
-            Enter로 전송 · Shift + Enter로 줄바꿈
-          </p>
-        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv"
+          onChange={(e) => {
+            Array.from(e.target.files || []).forEach((f) => onFileUpload?.(f));
+            e.target.value = '';
+          }}
+          className="hidden"
+        />
 
-        {/* ── 음성 모드 ── */}
-        {voiceMode && (
-          <div className="mt-3 flex flex-col items-center gap-3">
-            {/* 중간 인식 텍스트 */}
-            {(interim || isListening) && (
-              <div className="w-full px-4 py-2 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-txt-primary text-center min-h-[40px]">
-                {interim || <span className="text-txt-muted animate-pulse">듣고 있습니다...</span>}
+        {/* 입력 영역: 텍스트 ↔ 음성 트랜지션 */}
+        <div className="flex items-center justify-center gap-3">
+          {!voiceMode ? (
+            /* ── 텍스트 모드 (필 형태) ── */
+            <div className="flex-1 relative flex items-end gap-2 bg-bg-tertiary border border-border-subtle rounded-full pl-2 pr-2 py-2 focus-within:border-brand-purple/50 focus-within:ring-[3px] focus-within:ring-brand-purple/15 transition-all duration-500 ease-out">
+              {/* + 메뉴 */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+                  className={`p-2 rounded-full transition-colors ${plusMenuOpen ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted hover:text-brand-purple'}`}
+                >
+                  <Plus size={16} strokeWidth={2.4} />
+                </button>
+                {plusMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setPlusMenuOpen(false)} />
+                    <div className="absolute bottom-full left-0 mb-2 w-44 bg-bg-secondary border border-border-subtle rounded-lg shadow-lg z-20 py-1">
+                      <button
+                        onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                      >
+                        <Paperclip size={15} className="text-txt-muted" />
+                        자료 업로드
+                      </button>
+                      <button
+                        onClick={() => { setPlusMenuOpen(false); setVoiceMode(true); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                      >
+                        <Mic size={15} className="text-txt-muted" />
+                        음성 모드
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="의견을 입력하세요..."
+                rows={1}
+                disabled={disabled}
+                className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
+              />
+              <button
+                type="button"
+                className="p-2 text-txt-muted hover:text-brand-purple transition-colors"
+                onClick={() => { setInput((v) => (v ? v + ' @Milo ' : '@Milo ')); textareaRef.current?.focus(); }}
+                title="Milo 호출"
+              >
+                <AtSign size={16} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim() || disabled}
+                className="w-9 h-9 rounded-full bg-brand-purple text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
+              >
+                <ArrowUp size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+          ) : (
+            /* ── 음성 모드 (리퀴드 버블) ── */
+            <div className="flex flex-col items-center gap-2 transition-all duration-500 ease-out animate-in fade-in">
+              {/* 인식 텍스트 */}
+              {(interim || isListening) && (
+                <div className="px-5 py-2 rounded-full bg-bg-tertiary/80 border border-border-subtle text-sm text-txt-primary text-center max-w-[80%]">
+                  {interim || <span className="text-txt-muted animate-pulse">듣고 있습니다...</span>}
+                </div>
+              )}
 
-            {/* 발언권 버튼 */}
-            <button
-              onClick={isListening ? stopSTT : startSTT}
-              disabled={disabled}
-              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${
-                isListening
-                  ? 'bg-status-error text-white scale-110 shadow-status-error/30 animate-pulse'
-                  : 'bg-brand-purple text-white hover:scale-105 shadow-brand-purple/30'
-              } disabled:opacity-40`}
-            >
-              {isListening ? <MicOff size={32} /> : <Mic size={32} />}
-            </button>
-            <p className="text-[11px] text-txt-muted">
-              {isListening ? '발언 중... 클릭하여 종료' : '클릭하여 발언 시작'}
-            </p>
+              {/* 리퀴드 버블: 마이크(큰) + T(작은) 결합 */}
+              <div className="relative flex items-center">
+                {/* + 버튼 (왼쪽 위) */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -left-5 -top-5 w-8 h-8 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all z-10 shadow-sm"
+                  title="자료 업로드"
+                >
+                  <Plus size={14} />
+                </button>
 
-            {sttError && <p className="text-[10px] text-status-error">{sttError}</p>}
+                {/* 메인 마이크 버튼 */}
+                <button
+                  onClick={isListening ? stopSTT : startSTT}
+                  disabled={disabled}
+                  className={`relative w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-[1] ${
+                    isListening
+                      ? 'bg-status-error text-white shadow-status-error/40'
+                      : 'bg-brand-purple text-white hover:shadow-brand-purple/40'
+                  } disabled:opacity-40`}
+                >
+                  {isListening && (
+                    <span className="absolute inset-0 rounded-full bg-status-error/30 animate-ping" />
+                  )}
+                  {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+                </button>
 
-            {/* 텍스트 모드로 전환 */}
-            <button
-              onClick={() => { setVoiceMode(false); if (isListening) stopSTT(); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-txt-secondary hover:text-txt-primary bg-bg-tertiary border border-border-subtle hover:border-border-hover transition-colors"
-            >
-              <Keyboard size={13} />
-              텍스트 모드
-            </button>
-          </div>
-        )}
+                {/* T (텍스트 모드) 버튼 — 리퀴드처럼 마이크에 붙어있음 */}
+                <button
+                  onClick={() => { setVoiceMode(false); if (isListening) stopSTT(); }}
+                  className="relative -ml-3 w-10 h-10 rounded-full bg-bg-tertiary border-2 border-bg-primary text-txt-secondary hover:text-txt-primary hover:bg-bg-secondary flex items-center justify-center transition-all z-[2] shadow-md"
+                  title="텍스트 모드"
+                >
+                  <Keyboard size={16} />
+                </button>
+              </div>
+
+              <p className="text-[10px] text-txt-muted mt-1">
+                {isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언'}
+              </p>
+              {sttError && <p className="text-[9px] text-status-error">{sttError}</p>}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
