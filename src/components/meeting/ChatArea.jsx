@@ -1,18 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X, Plus, Paperclip, Mic } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
 
 export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
   const [reactions, setReactions] = useState({});
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // STT 설정 읽기
+  const sttProvider = (() => {
+    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; }
+  })();
+
+  const { isListening, start: startSTT, stop: stopSTT, interim, error: sttError, supported: sttSupported } = useVoiceInput({
+    provider: sttProvider,
+    language: 'ko-KR',
+    onTranscript: (text) => {
+      if (text.trim()) onSend?.(text.trim());
+    },
+    onInterim: () => {},
+  });
   const { user } = useAuthStore();
 
   const handleReact = (messageId, key) => {
@@ -133,7 +149,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                     자료 업로드
                   </button>
                   <button
-                    onClick={() => { setPlusMenuOpen(false); /* TODO: 음성 모드 */ }}
+                    onClick={() => { setPlusMenuOpen(false); setVoiceMode(true); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
                   >
                     <Mic size={15} className="text-txt-muted" />
@@ -184,9 +200,50 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
             <ArrowUp size={16} strokeWidth={2.4} />
           </button>
         </div>
-        <p className="text-[11px] text-txt-muted mt-2 text-center">
-          Enter로 전송 · Shift + Enter로 줄바꿈
-        </p>
+        {!voiceMode && (
+          <p className="text-[11px] text-txt-muted mt-2 text-center">
+            Enter로 전송 · Shift + Enter로 줄바꿈
+          </p>
+        )}
+
+        {/* ── 음성 모드 ── */}
+        {voiceMode && (
+          <div className="mt-3 flex flex-col items-center gap-3">
+            {/* 중간 인식 텍스트 */}
+            {(interim || isListening) && (
+              <div className="w-full px-4 py-2 rounded-lg bg-bg-tertiary border border-border-subtle text-sm text-txt-primary text-center min-h-[40px]">
+                {interim || <span className="text-txt-muted animate-pulse">듣고 있습니다...</span>}
+              </div>
+            )}
+
+            {/* 발언권 버튼 */}
+            <button
+              onClick={isListening ? stopSTT : startSTT}
+              disabled={disabled}
+              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${
+                isListening
+                  ? 'bg-status-error text-white scale-110 shadow-status-error/30 animate-pulse'
+                  : 'bg-brand-purple text-white hover:scale-105 shadow-brand-purple/30'
+              } disabled:opacity-40`}
+            >
+              {isListening ? <MicOff size={32} /> : <Mic size={32} />}
+            </button>
+            <p className="text-[11px] text-txt-muted">
+              {isListening ? '발언 중... 클릭하여 종료' : '클릭하여 발언 시작'}
+            </p>
+
+            {sttError && <p className="text-[10px] text-status-error">{sttError}</p>}
+
+            {/* 텍스트 모드로 전환 */}
+            <button
+              onClick={() => { setVoiceMode(false); if (isListening) stopSTT(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-txt-secondary hover:text-txt-primary bg-bg-tertiary border border-border-subtle hover:border-border-hover transition-colors"
+            >
+              <Keyboard size={13} />
+              텍스트 모드
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

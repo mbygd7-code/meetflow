@@ -935,6 +935,38 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+
+        {/* Speech-to-Text 설정 */}
+        <div className="bg-bg-tertiary rounded-[7px] p-4 mt-3">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Bell size={14} className="text-brand-orange" />
+              <div>
+                <h3 className="text-xs font-semibold text-txt-primary">음성 인식 (STT)</h3>
+                <p className="text-[10px] text-txt-secondary">회의 중 음성 입력 처리</p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-[10px] font-medium text-txt-muted uppercase tracking-wider mb-1">STT 서비스</label>
+              <select
+                value={(() => { try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; } })()}
+                onChange={(e) => {
+                  const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+                  localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, sttProvider: e.target.value }));
+                }}
+                className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary focus:border-brand-purple/50 focus:outline-none transition-colors"
+              >
+                <option value="google">Google Cloud STT (기본, 고정밀)</option>
+                <option value="web-speech">Web Speech API (무료, 브라우저 내장)</option>
+              </select>
+            </div>
+            <p className="text-[10px] text-txt-muted">
+              Google Cloud STT: 고정밀 한국어 인식 (비용 발생). Web Speech API: 무료, Chrome/Edge 지원
+            </p>
+          </div>
+        </div>
       </SectionPanel>
 
       </div>

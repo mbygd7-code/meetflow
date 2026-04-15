@@ -47,26 +47,50 @@ function DocumentPanel({ files = [], expanded, onToggle }) {
         </button>
       </div>
 
-      {/* 프리뷰 */}
-      {previewFile && (
-        <div className="border-b border-border-divider p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-medium text-txt-primary truncate">{previewFile.name}</span>
-            <button onClick={() => setPreviewFile(null)} className="text-txt-muted hover:text-txt-primary p-0.5">
-              <X size={12} />
+      {/* 프리뷰 (전체 패널 사용) */}
+      {previewFile ? (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border-divider">
+            <span className="text-[11px] font-medium text-txt-primary truncate flex-1 mr-2">{previewFile.name}</span>
+            <button onClick={() => setPreviewFile(null)} className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded transition-colors">
+              <X size={14} />
             </button>
           </div>
-          {previewFile.type?.startsWith('image/') ? (
-            <img src={previewFile.url || previewFile.preview} alt={previewFile.name} className="w-full rounded-md object-contain max-h-48 bg-bg-tertiary" />
-          ) : (
-            <div className="flex items-center justify-center h-24 bg-bg-tertiary rounded-md">
-              <FileText size={24} className="text-txt-muted" />
-            </div>
-          )}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-bg-tertiary/30">
+            {previewFile.type?.startsWith('image/') ? (
+              <img src={previewFile.url || previewFile.preview} alt={previewFile.name} className="max-w-full max-h-full rounded-md object-contain shadow-md" />
+            ) : previewFile.type === 'application/pdf' ? (
+              <iframe
+                src={previewFile.url || previewFile.preview}
+                className="w-full h-full rounded-md border border-border-subtle"
+                title={previewFile.name}
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-txt-muted">
+                <FileText size={48} strokeWidth={1.5} />
+                <p className="text-sm font-medium">{previewFile.name}</p>
+                <p className="text-[11px]">{(previewFile.size / 1024).toFixed(0)}KB · {previewFile.type || '알 수 없는 형식'}</p>
+              </div>
+            )}
+          </div>
+          {/* 파일 목록 (축소) */}
+          <div className="border-t border-border-divider px-3 py-2 space-y-1 max-h-24 overflow-y-auto">
+            {files.map((f) => (
+              <button
+                key={f.id || f.name}
+                onClick={() => setPreviewFile(f)}
+                className={`w-full flex items-center gap-2 px-2 py-1 rounded text-left text-[10px] transition-colors ${
+                  previewFile?.name === f.name ? 'bg-brand-purple/10 text-brand-purple font-medium' : 'text-txt-secondary hover:bg-bg-tertiary'
+                }`}
+              >
+                <FileText size={10} className="shrink-0" />
+                <span className="truncate">{f.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
-
-      {/* 파일 리스트 */}
+      ) : (
+      /* 파일 리스트 (프리뷰 없을 때) */
       <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
         {files.length === 0 ? (
           <div className="text-center py-8 text-txt-muted">
@@ -100,6 +124,7 @@ function DocumentPanel({ files = [], expanded, onToggle }) {
           ))
         )}
       </div>
+      )}
     </aside>
   );
 }
