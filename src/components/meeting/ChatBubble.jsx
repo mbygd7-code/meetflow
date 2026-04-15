@@ -194,33 +194,49 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
             {isAi ? <RichText content={displayContent} /> : displayContent}
             {/* 검색 출처 카드 */}
             {isAi && message.search_sources?.length > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-brand-purple/15 space-y-1.5">
-                <p className="text-[10px] text-txt-muted font-medium uppercase tracking-wider flex items-center gap-1">
-                  <ExternalLink size={10} /> 출처
+              <div className="mt-3 pt-3 border-t border-brand-purple/10">
+                <p className="text-[10px] text-txt-muted font-medium uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                  <ExternalLink size={10} /> 참고 자료
                 </p>
-                {message.search_sources.map((src, i) => (
-                  <a
-                    key={i}
-                    href={src.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2.5 p-2 rounded-md bg-bg-tertiary/50 border border-border-subtle hover:border-brand-purple/30 transition-colors group/src"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {src.thumbnail && (
-                      <img src={src.thumbnail} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium text-txt-primary truncate group-hover/src:text-brand-purple transition-colors">
-                        {src.title}
-                      </p>
-                      <p className="text-[9px] text-txt-muted truncate">
-                        {src.url?.replace(/^https?:\/\//, '').split('/')[0]}
-                      </p>
-                    </div>
-                    <ExternalLink size={10} className="text-txt-muted shrink-0" />
-                  </a>
-                ))}
+                <div className="grid gap-2" style={{ gridTemplateColumns: message.search_sources.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                  {message.search_sources.map((src, i) => (
+                    <a
+                      key={i}
+                      href={src.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-lg overflow-hidden bg-bg-tertiary/60 border border-border-subtle hover:border-brand-purple/30 hover:shadow-md transition-all group/src"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {src.thumbnail && (
+                        <div className="w-full h-24 overflow-hidden bg-bg-tertiary">
+                          <img
+                            src={src.thumbnail}
+                            alt=""
+                            className="w-full h-full object-cover group-hover/src:scale-105 transition-transform duration-300"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        </div>
+                      )}
+                      <div className="px-2.5 py-2">
+                        <p className="text-[11px] font-medium text-txt-primary line-clamp-2 leading-snug group-hover/src:text-brand-purple transition-colors">
+                          {src.title}
+                        </p>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <img
+                            src={`https://www.google.com/s2/favicons?domain=${src.url?.replace(/^https?:\/\//, '').split('/')[0]}&sz=16`}
+                            alt=""
+                            className="w-3 h-3 rounded-sm"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <p className="text-[9px] text-txt-muted truncate">
+                            {src.url?.replace(/^https?:\/\//, '').split('/')[0]}
+                          </p>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
