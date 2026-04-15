@@ -203,8 +203,8 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
               </button>
             </div>
           ) : (
-            /* ── 음성 모드 (리퀴드 버블) ── */
-            <div className="flex flex-col items-center gap-2 transition-all duration-500 ease-out animate-in fade-in">
+            /* ── 음성 모드 ── */
+            <div className="flex flex-col items-center gap-3 transition-all duration-500 ease-out">
               {/* 인식 텍스트 */}
               {(interim || isListening) && (
                 <div className="px-5 py-2 rounded-full bg-bg-tertiary/80 border border-border-subtle text-sm text-txt-primary text-center max-w-[80%]">
@@ -212,22 +212,33 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 </div>
               )}
 
-              {/* 리퀴드 버블: 마이크(큰) + T(작은) 결합 */}
-              <div className="relative flex items-center">
-                {/* + 버튼 (왼쪽 위) */}
+              {/* 상단: [@] 멘션 버튼 (마이크 위) */}
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => { setVoiceMode(false); setInput((v) => (v ? v + ' @Milo ' : '@Milo ')); textareaRef.current?.focus(); }}
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all"
+                  title="Milo 호출"
+                >
+                  <AtSign size={13} />
+                </button>
+              </div>
+
+              {/* 하단: [+] [마이크] [T] 가로 */}
+              <div className="flex items-center gap-3">
+                {/* + 자료 업로드 */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -left-5 -top-5 w-8 h-8 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all z-10 shadow-sm"
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 flex items-center justify-center transition-all"
                   title="자료 업로드"
                 >
-                  <Plus size={14} />
+                  <Plus size={13} />
                 </button>
 
-                {/* 메인 마이크 버튼 */}
+                {/* 마이크 */}
                 <button
                   onClick={isListening ? stopSTT : startSTT}
                   disabled={disabled}
-                  className={`relative w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all duration-300 shadow-lg z-[1] ${
+                  className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
                     isListening
                       ? 'bg-status-error text-white shadow-status-error/40'
                       : 'bg-brand-purple text-white hover:shadow-brand-purple/40'
@@ -236,20 +247,20 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   {isListening && (
                     <span className="absolute inset-0 rounded-full bg-status-error/30 animate-ping" />
                   )}
-                  {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+                  {isListening ? <MicOff size={26} /> : <Mic size={26} />}
                 </button>
 
-                {/* T (텍스트 모드) 버튼 — 리퀴드처럼 마이크에 붙어있음 */}
+                {/* 텍스트 모드 */}
                 <button
                   onClick={() => { setVoiceMode(false); if (isListening) stopSTT(); }}
-                  className="relative -ml-3 w-10 h-10 rounded-full bg-bg-tertiary border-2 border-bg-primary text-txt-secondary hover:text-txt-primary hover:bg-bg-secondary flex items-center justify-center transition-all z-[2] shadow-md"
+                  className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-txt-primary hover:border-border-hover flex items-center justify-center transition-all"
                   title="텍스트 모드"
                 >
-                  <Keyboard size={16} />
+                  <Keyboard size={13} />
                 </button>
               </div>
 
-              <p className="text-[10px] text-txt-muted mt-1">
+              <p className="text-[10px] text-txt-muted">
                 {isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언'}
               </p>
               {sttError && <p className="text-[9px] text-status-error">{sttError}</p>}
