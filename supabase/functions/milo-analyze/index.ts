@@ -100,6 +100,7 @@ ${preset || 'default'}
     let searchSection = '';
     const GOOGLE_CSE_ID = Deno.env.get('GOOGLE_CSE_ID');
     const GOOGLE_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+    console.log('[milo-analyze] CSE_ID:', GOOGLE_CSE_ID ? 'SET' : 'MISSING', 'API_KEY:', GOOGLE_API_KEY ? 'SET' : 'MISSING');
     if (GOOGLE_CSE_ID && GOOGLE_API_KEY) {
       try {
         // 1단계: Haiku에게 검색 필요 여부 판단
@@ -110,8 +111,10 @@ ${preset || 'default'}
           messages: [{ role: 'user', content: `최근 대화:\n${transcript.slice(-1000)}\n\nJSON:` }],
         });
         const searchText = searchDecision.content.find((b: any) => b.type === 'text')?.text || '{}';
+        console.log('[milo-analyze] Haiku search decision:', searchText);
         const searchJson = JSON.parse(searchText.match(/\{[\s\S]*\}/)?.[0] || '{"queries":[]}');
         const queries: string[] = (searchJson.queries || []).slice(0, 2);
+        console.log('[milo-analyze] Search queries:', JSON.stringify(queries));
 
         // 2단계: Google Custom Search 실행
         if (queries.length > 0) {
@@ -119,14 +122,15 @@ ${preset || 'default'}
           for (const q of queries) {
             try {
               const ctrl = new AbortController();
-              setTimeout(() => ctrl.abort(), 3000);
-              const res = await fetch(
-                `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(q)}&num=3&lr=lang_ko`,
-                { signal: ctrl.signal }
-              );
+              setTimeout(() => ctrl.abort(), 5000);
+              const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(q)}&num=3&lr=lang_ko`;
+              console.log('[milo-analyze] Fetching:', searchUrl.replace(GOOGLE_API_KEY, 'KEY***'));
+              const res = await fetch(searchUrl, { signal: ctrl.signal });
+              console.log('[milo-analyze] Search response status:', res.status);
               if (res.ok) {
                 const data = await res.json();
                 const items = (data.items || []).slice(0, 3);
+                console.log('[milo-analyze] Search results count:', items.length);
                 if (items.length > 0) {
                   searchResults.push(`검색어: "${q}"`);
                   items.forEach((item: any, i: number) => {
@@ -134,8 +138,13 @@ ${preset || 'default'}
                     searchResults.push(`${i + 1}. [${item.title}](${item.link})${thumb ? ` ![thumb](${thumb})` : ''}\n   ${(item.snippet || '').slice(0, 150)}`);
                   });
                 }
+              } else {
+                const errText = await res.text();
+                console.error('[milo-analyze] Search API error:', res.status, errText.slice(0, 300));
               }
-            } catch {}
+            } catch (fetchErr) {
+              console.error('[milo-analyze] Search fetch error:', fetchErr);
+            }
           }
           if (searchResults.length > 0) {
             searchSection = `\n\n## 웹 검색 결과 (실시간)\n응답에 관련 링크를 [제목](URL) 형식으로 인용하세요.\n\n${searchResults.join('\n')}\n`;
