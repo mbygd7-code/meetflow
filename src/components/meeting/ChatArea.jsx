@@ -134,8 +134,14 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
         )}
       </div>
 
-      {/* 입력창 */}
-      <div className="px-6 pb-5 pt-2">
+      {/* 입력창 — 섹션은 솔리드 bg로 고정, 위쪽에 별도 페이드 레이어를 올려 메시지 페이드 효과 */}
+      <div className="relative px-6 pb-5 pt-2" style={{ background: 'var(--bg-primary)' }}>
+        {/* 메시지창 위로 올라가는 페이드 레이어 (더 높이 올림) */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-16 h-16"
+          style={{ background: 'linear-gradient(to top, var(--bg-primary) 0%, transparent 100%)' }}
+        />
         {/* 자동개입 상태 배너 — 토글 변경/초기 OFF 시 일정 시간 표시 후 자동 사라짐 */}
         {banner && (
           <div
