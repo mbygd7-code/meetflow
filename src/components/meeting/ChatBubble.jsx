@@ -19,7 +19,7 @@ function detectAiEmployee(message) {
     const id = NAME_TO_ID[match[1]] || NAME_TO_ID[match[1].toLowerCase()];
     if (id) return id;
   }
-  return 'drucker';
+  return 'milo';
 }
 
 const REACTIONS = [
@@ -31,6 +31,7 @@ const REACTIONS = [
 export default function ChatBubble({ message, currentUserId, onQuote, onReact, reactions = {} }) {
   const [copied, setCopied] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
+  const [quoteExpanded, setQuoteExpanded] = useState(false);
   const isAi = message.is_ai;
   const isMine = !isAi && message.user_id === currentUserId;
 
@@ -180,15 +181,23 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
                 <span className="text-[11px] font-semibold uppercase tracking-wider">질문</span>
               </div>
             )}
-            {/* 인용 블록 */}
+            {/* 인용 블록 — 클릭 시 전체 펼침/접힘 */}
             {quotedSender && (
-              <div className={`mb-2 pl-3 py-1.5 text-xs leading-relaxed rounded-md ${
-                isMine
-                  ? 'border-l-2 border-white/40 bg-white/10'
-                  : 'border-l-2 border-brand-purple/40 bg-brand-purple/5'
-              }`}>
+              <div
+                onClick={(e) => { e.stopPropagation(); setQuoteExpanded((v) => !v); }}
+                className={`mb-2 pl-3 py-1.5 text-xs leading-relaxed rounded-md border-l-2 border-brand-purple/40 cursor-pointer hover:border-brand-purple/60 transition-colors ${
+                  isMine ? 'text-txt-primary' : ''
+                }`}
+                style={{
+                  background:
+                    'linear-gradient(rgb(var(--brand-purple-rgb) / 0.1), rgb(var(--brand-purple-rgb) / 0.1)), color-mix(in srgb, var(--bg-content), transparent 20%)',
+                }}
+                title={quoteExpanded ? '접기' : '전체 보기'}
+              >
                 <span className="font-semibold">{quotedSender}</span>
-                <p className="mt-0.5 opacity-80 line-clamp-2">{quotedText}</p>
+                <p className={`mt-0.5 opacity-80 whitespace-pre-wrap ${quoteExpanded ? '' : 'line-clamp-2'}`}>
+                  {quotedText}
+                </p>
               </div>
             )}
             {isAi ? <RichText content={displayContent} /> : displayContent}
@@ -240,18 +249,9 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, r
               </div>
             )}
           </div>
-          {/* 호버 액션 (질문일 때는 답변하기 버튼도 포함) */}
-          <div className={`flex items-center gap-2 mt-1.5 ${isQuestion ? '' : 'justify-end opacity-0 group-hover/bubble:opacity-100'} transition-opacity`}>
-            {isQuestion && (
-              <button
-                onClick={(e) => { e.stopPropagation(); handleQuote(); }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-brand-orange hover:bg-brand-orange/90 shadow-sm transition-colors"
-              >
-                <Reply size={12} />
-                답변하기
-              </button>
-            )}
-            <div className={`flex gap-1.5 ${isQuestion ? 'ml-auto opacity-0 group-hover/bubble:opacity-100' : ''} transition-opacity`}>
+          {/* 호버 액션 */}
+          <div className="flex items-center gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+            <div className="flex gap-1.5">
             <button onClick={handleCopy} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="복사">
               {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
             </button>

@@ -15,7 +15,7 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
 
   // 라우팅된 전문가 이름 가져오기
   const specialists = routedEmployees
-    .filter((id) => id !== 'drucker')
+    .filter((id) => id !== 'milo')
     .map((id) => AI_EMPLOYEES.find((e) => e.id === id))
     .filter(Boolean);
 
@@ -30,6 +30,7 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
         : `[밀로] 말씀하신 주제에 대해 정리해드리면, 현재 어젠다인 "${agenda?.title || '논의 주제'}"와 관련해 데이터 기반 접근이 효과적이었어요. 구체적으로 어떤 부분을 더 깊이 보고 싶으신가요?`,
       ai_type: 'insight',
       ai_employee: responder.id,
+      selected_specialists: specialists.slice(0, 2).map((s) => s.id),
     };
   }
   if (MILO_INTERVENTION_TRIGGERS.GUESS.test(lastUserMsg.content)) {
@@ -38,7 +39,8 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
       response_text: '[밀로] 참고로 이 부분은 구체적인 수치로 확인해볼 만합니다.' +
         (specialists.length > 0 ? ` ${specialistNames}에게 확인해보겠습니다.` : ''),
       ai_type: 'data',
-      ai_employee: 'drucker',
+      ai_employee: 'milo',
+      selected_specialists: specialists.slice(0, 1).map((s) => s.id),
     };
   }
   if (MILO_INTERVENTION_TRIGGERS.AGREEMENT.test(lastUserMsg.content)) {
@@ -47,7 +49,7 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
       response_text:
         '[밀로] 지금까지 나온 의견을 정리하면, 팀은 현재 주제에 대해 방향성에 동의하는 것으로 보이네요. 후속 태스크로 만들어둘까요?',
       ai_type: 'summary',
-      ai_employee: 'drucker',
+      ai_employee: 'milo',
       suggested_tasks: [
         { title: `${agenda?.title || '논의 결과'} 후속 조치`, priority: 'medium' },
       ],
@@ -62,7 +64,7 @@ function mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond = fal
         ? `[${(AI_EMPLOYEES.find((e) => e.id === responder.id) || responder).nameKo}] 말씀하신 내용에 대해 ${responder.role} 관점에서 검토해보겠습니다. 좀 더 구체적인 방향이 있으시면 알려주세요.`
         : `[밀로] 네, 말씀 잘 들었습니다. "${agenda?.title || '논의 주제'}"와 관련해서 정리해드리면, 현재까지의 논의를 바탕으로 구체적인 액션 아이템을 도출해볼 수 있을 것 같습니다. 어떤 부분을 더 깊이 논의해볼까요?`,
       ai_type: 'insight',
-      ai_employee: specialists.length > 0 ? responder.id : 'drucker',
+      ai_employee: specialists.length > 0 ? responder.id : 'milo',
     };
   }
 
@@ -76,7 +78,8 @@ const MILO_DELAYS = {
 };
 
 // 후속 대화 감지 — 이전 AI 직원과 이어서 대화하는지 판단
-const FOLLOW_UP_PATTERNS = /^(더\s*자세히|계속|좀\s*더|구체적으로|예를\s*들어|그래서|그러면|그럼|응|네|맞아|좋아|알겠어|오케이|ok|ㅇㅇ|ㄱㄱ|어떻게|왜|뭐가|어떤|그거|그건|이어서|추가로|그렇구나|설명해|알려줘|해줘|부탁|말해봐)/i;
+// 문장 시작 + 공백/구두점으로 끝나야 매칭 (단어 경계) — false positive 최소화
+const FOLLOW_UP_PATTERNS = /^(더\s*자세히|좀\s*더|구체적으로|예를\s*들어|그래서\b|그러면\b|그럼\b|맞아\b|알겠어\b|오케이\b|ok\b|이어서\b|추가로\b|그렇구나\b|설명해\b|계속해|말해봐\b|부탁해\b)/i;
 
 export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond = false, autoIntervene = true }) {
   const lastInterventionRef = useRef(0);
@@ -86,6 +89,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
   const messagesRef = useRef(messages); // 전문가 연쇄 중 사람 개입 감지용
   messagesRef.current = messages;
   const runningRef = useRef(false); // AI 응답 실행 중 플래그 (중복 실행 방지)
+  const processedIdsRef = useRef(new Set()); // 한번이라도 처리 시작한 메시지 ID (영구 락)
+  const currentChainAbortRef = useRef(null); // 진행 중 체인의 AbortController (어젠다 변경 시 취소용)
 
   // ── 대화 압축: 10턴마다 이전 대화를 요약 ──
   const compressedContextRef = useRef('');
@@ -123,23 +128,45 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
   useEffect(() => {
     if (!messages.length) return;
     const lastMsg = messages[messages.length - 1];
+    if (!lastMsg?.id) return; // id 없는 메시지는 스킵
 
-    // 중복 처리 방지 (ID 기반 + 실행 중 플래그)
-    if (lastProcessedIdRef.current === lastMsg.id) return;
-    if (runningRef.current) return; // AI 응답 진행 중이면 무시
+    // ── 다중 락 (StrictMode/중복 재렌더/Realtime 에코 모두 방어) ──
+    // 1) 이미 처리 시작한 ID는 다시 처리하지 않음 (영구 락)
+    if (processedIdsRef.current.has(lastMsg.id)) return;
+    // 2) 현재 실행 중인 체인이 있으면 대기
+    if (runningRef.current) return;
+    // 3) AI 메시지는 처리 대상 아님
+    if (lastMsg.is_ai) {
+      processedIdsRef.current.add(lastMsg.id); // AI msg도 마크해서 재확인 방지
+      lastProcessedIdRef.current = lastMsg.id;
+      return;
+    }
+
+    // 동기적으로 락 설정 (setTimeout 지연 중 다른 useEffect 호출을 즉시 차단)
+    processedIdsRef.current.add(lastMsg.id);
     lastProcessedIdRef.current = lastMsg.id;
-
-    // Milo 본인 메시지는 무시
-    if (lastMsg.is_ai) return;
+    runningRef.current = lastMsg.id;
 
     // 프리셋 설정
     const cfg = MILO_PRESETS[preset] || MILO_PRESETS.default;
 
-    // @Milo 멘션 체크 (쿨다운 무시)
-    const mentioned = MILO_INTERVENTION_TRIGGERS.MENTION.test(lastMsg.content);
+    // 인용 감지: [quote:이름]...[/quote]\n실제메시지 → 인용한 AI에게 직접 호출로 처리
+    // (인용 블록의 텍스트를 멘션 감지에서 제외하여 false positive 방지)
+    const quoteMatch = lastMsg.content?.match(/^\[quote:(.+?)\]([\s\S]*?)\[\/quote\]\n?([\s\S]*)$/);
+    const quotedSenderName = quoteMatch?.[1]?.trim();
+    const afterQuote = quoteMatch ? (quoteMatch[3] || '').trim() : lastMsg.content;
+    // 인용된 이름이 AI 직원인지 확인 (한글 이름 → id 매핑)
+    const quotedAiId = quotedSenderName
+      ? (AI_EMPLOYEES.find((e) => e.nameKo === quotedSenderName || e.name.toLowerCase() === quotedSenderName.toLowerCase())?.id)
+      : null;
 
-    // AI 직원 직접 멘션 체크 (노먼, 코르프 등) — 쿨다운 무시
-    const directEmployeeMention = MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION?.test(lastMsg.content);
+    // @Milo 멘션 체크 (쿨다운 무시) — 인용 블록 제외한 본문만 검사
+    const mentioned = MILO_INTERVENTION_TRIGGERS.MENTION.test(afterQuote) || quotedAiId === 'milo';
+
+    // AI 직원 직접 멘션 체크 (노먼, 코르프 등) — 인용 블록 제외한 본문만 검사
+    const directEmployeeMention =
+      MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION?.test(afterQuote) ||
+      (!!quotedAiId && quotedAiId !== 'milo');
 
     // 자동 개입 OFF → 직접 호출(@멘션)만 허용
     if (!autoIntervene && !mentioned && !directEmployeeMention) return;
@@ -149,13 +176,14 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         // 기존 로직: 개입 횟수/쿨다운/최소 턴 체크
         if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) return;
 
-        const sinceLastMs = Date.now() - lastInterventionRef.current;
+        // performance.now()는 단조 증가 보장 (시스템 클럭 변경 영향 받지 않음)
+        const sinceLastMs = performance.now() - lastInterventionRef.current;
         if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) return;
 
-        // 마지막 밀로(drucker) 응답 이후 사람 턴만 카운트
+        // 마지막 밀로(milo) 응답 이후 사람 턴만 카운트
         let humanTurnsSinceMilo = 0;
         for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].is_ai && (messages[i].ai_employee === 'drucker' || !messages[i].ai_employee)) break;
+          if (messages[i].is_ai && (messages[i].ai_employee === 'milo' || !messages[i].ai_employee)) break;
           if (!messages[i].is_ai) humanTurnsSinceMilo++;
         }
         if (humanTurnsSinceMilo < cfg.minTurnsBefore) return;
@@ -176,18 +204,27 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
 
     // 비동기 분석
     const run = async () => {
-      // 이미 실행 중이면 스킵 (중복 응답 방지)
-      if (runningRef.current) return;
-      runningRef.current = true;
+      // atomic lock은 useEffect 초입에서 이미 설정됨 (runningRef = lastMsg.id)
+      // 새 메시지가 와서 runningRef ID가 바뀌었으면 이 run()은 취소된 것
+      if (runningRef.current !== lastMsg.id) return;
+      // 체인 전체 Abort (어젠다 변경/언마운트 시 취소용)
+      const chainAbort = new AbortController();
+      currentChainAbortRef.current = chainAbort;
       try {
         // 키워드 기반 AI 라우팅
         const routedEmployees = routeByKeywords(lastMsg.content);
-        let specialists = routedEmployees.filter((id) => id !== 'drucker');
+        let specialists = routedEmployees.filter((id) => id !== 'milo');
 
         // AI 직원 직접 멘션 시 — 멘션된 직원 식별
         let directSpecialist = null;
-        if (directEmployeeMention) {
-          const match = lastMsg.content.match(MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION);
+        // 1) 인용한 AI가 전문가면 최우선 (인용 답글 = 해당 AI에게 이어 말하기)
+        if (quotedAiId && quotedAiId !== 'milo') {
+          directSpecialist = quotedAiId;
+          if (!specialists.includes(directSpecialist)) {
+            specialists = [directSpecialist, ...specialists];
+          }
+        } else if (directEmployeeMention) {
+          const match = afterQuote.match(MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION);
           if (match) {
             const name = match[1].replace('@', '').toLowerCase();
             directSpecialist = EMPLOYEE_NAME_MAP[name];
@@ -200,7 +237,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         // ── 후속 대화 감지: 이전에 응답한 AI 직원과 이어서 대화 ──
         const isFollowUp = !mentioned && !directEmployeeMention
           && lastRespondingEmployeeRef.current
-          && lastRespondingEmployeeRef.current !== 'drucker'
+          && lastRespondingEmployeeRef.current !== 'milo'
           && (FOLLOW_UP_PATTERNS.test(lastMsg.content) || specialists.length === 0);
 
         if (isFollowUp) {
@@ -212,7 +249,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         }
 
         // 로딩 표시 시작
-        onThinking?.(true, directSpecialist || specialists[0] || 'drucker');
+        onThinking?.(true, directSpecialist || specialists[0] || 'milo');
 
         let result;
 
@@ -221,16 +258,20 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
           result = { should_respond: false };
           onThinking?.(false, null);
         } else if (CLAUDE_API_ENABLED) {
-          // 1단계: 밀로(드러커)가 먼저 응답
-          let miloPrompt = buildPromptFor('drucker');
+          // 1단계: 밀로가 먼저 응답
+          let miloPrompt = buildPromptFor('milo');
           if (alwaysRespond) {
             miloPrompt += '\n\n## 중요: 1:1 회의 모드입니다. 사용자의 모든 메시지에 반드시 should_respond: true로 응답하세요. 짧은 인사나 간단한 질문에도 친절하게 응답합니다.';
           }
-          const miloModelId = getEmployeeModelId('drucker');
+          // @밀로 직접 호출 시: 침묵 금지 — 반드시 응답
+          if (mentioned) {
+            miloPrompt += '\n\n## 직접 호출 모드 (최우선)\n사용자가 당신을 직접 @밀로(또는 "밀로 ...") 로 호출했습니다. **반드시 should_respond: true로 응답하세요**. 질문이 모호하면 "무엇을 도와드릴까요?" 처럼 되물어 명확히 하세요. "침묵도 선택지" 원칙은 이 경우 적용되지 않습니다.';
+          }
+          const miloModelId = getEmployeeModelId('milo');
           const miloSettings = {
             ...getSnapshot(),
             systemPromptOverride: miloPrompt,
-            aiEmployee: 'drucker',
+            aiEmployee: 'milo',
             apiModelId: miloModelId,
           };
           // 참가자 이름 추출 (AI 멘션용)
@@ -244,9 +285,12 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
             context: { routedEmployees, participants: humanNames },
             miloSettings,
             compressedContext: compressedContextRef.current,
-            googleDocsSummary: (getEmployeeOverrides['drucker'] || {}).googleDocsSummary || null,
+            googleDocsSummary: (getEmployeeOverrides['milo'] || {}).googleDocsSummary || null,
+            skipKnowledge: true, // Milo는 지휘자 역할 — retrieval 생략 (토큰 절약)
+            signal: chainAbort.signal,
           });
-          if (result) result.ai_employee = 'drucker';
+          if (chainAbort.signal.aborted) return; // 어젠다 변경으로 취소됨
+          if (result) result.ai_employee = 'milo';
           onThinking?.(false, null);
         } else {
           result = mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond);
@@ -254,154 +298,218 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         }
 
         if (result?.should_respond) {
-          lastInterventionRef.current = Date.now();
+          lastInterventionRef.current = performance.now();
           interventionCountRef.current += 1;
-          lastRespondingEmployeeRef.current = result.ai_employee || 'drucker';
-          onRespond?.(result);
+          lastRespondingEmployeeRef.current = result.ai_employee || 'milo';
+          try {
+            onRespond?.(result);
+          } catch (respondErr) {
+            console.error('[useMilo] Milo onRespond error:', respondErr);
+          }
         }
 
         // 밀로가 응답했든 직접 호출이든 — 전문가 선별 호출
         {
           // ── 지휘자 모델: Milo가 선별한 전문가만 호출 (최대 2명) ──
           // directSpecialist(@멘션)이 있으면 그것만 사용
-          // 없으면 Milo 응답의 selected_specialists 사용
+          // 없으면 Milo 응답의 selected_specialists 사용. 비어있으면 routeByKeywords fallback
           if (!directSpecialist) {
             const miloSelected = (result?.selected_specialists || [])
-              .filter((id) => id && id !== 'drucker' && AI_EMPLOYEES.find((e) => e.id === id));
-            specialists = miloSelected.slice(0, 2); // 최대 2명
+              .filter((id) => id && id !== 'milo' && AI_EMPLOYEES.find((e) => e.id === id));
+            if (miloSelected.length > 0) {
+              specialists = miloSelected.slice(0, 2); // Milo가 선별한 전문가
+            } else if (mentioned || directEmployeeMention) {
+              // @Milo 호출인데 선별이 없으면 키워드 기반 fallback (최대 1명)
+              specialists = routedEmployees.filter((id) => id !== 'milo').slice(0, 1);
+            } else {
+              specialists = []; // 자동 개입에서 선별이 없으면 전문가 호출하지 않음
+            }
           } else {
             specialists = [directSpecialist].slice(0, 2);
           }
 
-          // 2단계: 선별된 전문가 순차 호출 (최대 2명, 체인 확장 없음)
-          const calledSpecs = new Set();
-          let specIdx = 0;
-          const msgCountAtStart = messagesRef.current.length;
-          const specResponses = [];
-          const chainStart = Date.now();
-          const CHAIN_TIMEOUT = 30000; // 30초 타임아웃 (2명이므로 축소)
-          while (specIdx < specialists.length && calledSpecs.size < 2) {
-            // 체인 타임아웃
-            if (Date.now() - chainStart > CHAIN_TIMEOUT) {
-              console.warn('[useMilo] 전문가 체인 타임아웃 (45s)');
-              onThinking?.(false, null);
-              break;
-            }
-            const specId = specialists[specIdx++];
-            if (calledSpecs.has(specId)) continue;
+          // 활성화된 직원만 필터 (비활성화된 AI는 호출하지 않음)
+          const activeSet = new Set(useAiTeamStore.getState().activeEmployees || []);
+          specialists = specialists.filter((id) => activeSet.size === 0 || activeSet.has(id));
 
-            // 사람이 새 메시지를 보냈으면 연쇄 호출 중단
+          // 2단계: 선별된 전문가 병렬 호출 (최대 2명, 개별 타임아웃 15s)
+          const msgCountAtStart = messagesRef.current.length;
+          const SPEC_TIMEOUT_MS = 15000; // 전문가별 15초 타임아웃
+          const uniqueSpecs = [...new Set(specialists)].slice(0, 2);
+
+          if (uniqueSpecs.length > 0) {
+            // 사람 개입 확인
             const currentMsgs = messagesRef.current;
             const hasHumanInterruption = currentMsgs.length > msgCountAtStart &&
               currentMsgs.slice(msgCountAtStart).some((m) => !m.is_ai);
             if (hasHumanInterruption) {
-              console.log('[useMilo] 사람 개입 감지 — 전문가 연쇄 호출 중단');
+              console.log('[useMilo] 사람 개입 감지 — 전문가 호출 스킵');
               onThinking?.(false, null);
-              break;
-            }
+            } else {
+              // 진행 중인 전문가 ID를 onThinking으로 순차 표시 (UX용)
+              onThinking?.(true, uniqueSpecs[0]);
 
-            calledSpecs.add(specId);
-            // 전문가 호출 전 로딩 표시
-            await new Promise((r) => setTimeout(r, MILO_DELAYS.SPECIALIST.base + Math.random() * MILO_DELAYS.SPECIALIST.jitter));
-            onThinking?.(true, specId);
-
-            try {
-              let specResult;
-              if (CLAUDE_API_ENABLED) {
-                const specPrompt = buildPromptFor(specId);
-                const specModelId = getEmployeeModelId(specId);
-                const emp = AI_EMPLOYEES.find((e) => e.id === specId);
-                // 전문가는 밀로가 호출했으므로 반드시 응답해야 함
-                const caller = directSpecialist ? '회의 참가자' : '밀로(Milo)';
-                const forceRespondPrompt = specPrompt + `\n\n## 중요: 당신은 ${caller}에 의해 직접 호출되었습니다. 반드시 should_respond: true로 응답하고, 당신의 전문 분야(${emp?.role})에서 구체적인 자문을 제공하세요.`;
-                const specSettings = {
-                  ...getSnapshot(),
-                  systemPromptOverride: forceRespondPrompt,
-                  aiEmployee: specId,
-                  apiModelId: specModelId,
-                };
-                // 밀로 응답 + 이전 전문가 응답을 모두 컨텍스트에 포함
-                const extraContext = [];
-                if (result?.response_text) {
-                  extraContext.push({ content: result.response_text, is_ai: true, user: { name: 'Milo' } });
+              // 병렬 호출: 각 전문가에 대해 독립적 AbortController + 타임아웃
+              // rate limit 방어: 2번째 전문가는 800ms 지연 후 시작
+              const specPromises = uniqueSpecs.map(async (specId, idx) => {
+                if (idx > 0) {
+                  await new Promise((r) => setTimeout(r, 800 * idx));
                 }
-                extraContext.push(...specResponses);
-                const contextMessages = [...messages, ...extraContext];
+                const abortCtrl = new AbortController();
+                const timeoutId = setTimeout(() => abortCtrl.abort(), SPEC_TIMEOUT_MS);
+                // 체인 전체 Abort(어젠다 변경) 시 전문가 요청도 취소
+                const chainListener = () => abortCtrl.abort();
+                chainAbort.signal.addEventListener('abort', chainListener);
+                try {
+                  let specResult;
+                  if (CLAUDE_API_ENABLED) {
+                    const specPrompt = buildPromptFor(specId);
+                    const specModelId = getEmployeeModelId(specId);
+                    const emp = AI_EMPLOYEES.find((e) => e.id === specId);
+                    const caller = directSpecialist ? '회의 참가자' : '밀로(Milo)';
+                    // 반복 방지: 직전 AI 응답 3개의 요약을 "이미 언급된 포인트"로 주입
+                    const recentAiMsgs = messages
+                      .filter((m) => m.is_ai && m.ai_employee !== specId)
+                      .slice(-3)
+                      .map((m) => {
+                        const name = m.user?.name || m.ai_employee || 'AI';
+                        const snippet = (m.content || '').replace(/\[[^\]]+\]\s*/, '').slice(0, 150);
+                        return `- ${name}: ${snippet}${snippet.length >= 150 ? '...' : ''}`;
+                      });
+                    const alreadyMentioned = recentAiMsgs.length > 0
+                      ? `\n\n## 이미 언급된 포인트 (반복 금지)\n${recentAiMsgs.join('\n')}\n위 내용은 이미 다른 AI가 말했습니다. 반복하지 말고 **새로운 관점**만 제시하세요.`
+                      : '';
+                    const forceRespondPrompt = specPrompt + `\n\n## 중요: 당신은 ${caller}에 의해 직접 호출되었습니다. 반드시 should_respond: true로 응답하고, 당신의 전문 분야(${emp?.role})에서 구체적인 자문을 제공하세요. 다른 전문가와 중복되지 않는 고유한 관점을 제시하세요.${alreadyMentioned}`;
+                    const specSettings = {
+                      ...getSnapshot(),
+                      systemPromptOverride: forceRespondPrompt,
+                      aiEmployee: specId,
+                      apiModelId: specModelId,
+                    };
+                    // 밀로 응답만 컨텍스트에 포함 (병렬 호출이므로 다른 전문가 응답은 모름)
+                    const extraContext = [];
+                    if (result?.response_text) {
+                      extraContext.push({ content: result.response_text, is_ai: true, user: { name: 'Milo' } });
+                    }
+                    const contextMessages = [...messages, ...extraContext];
 
-                const humanNames = [...new Set(
-                  messages.filter((m) => !m.is_ai && m.user?.name).map((m) => m.user.name)
-                )];
-                specResult = await analyzeMilo({
-                  messages: contextMessages,
-                  agenda,
-                  preset,
-                  context: { routedEmployees, participants: humanNames },
-                  miloSettings: specSettings,
-                  compressedContext: compressedContextRef.current,
-                  googleDocsSummary: (getEmployeeOverrides[specId] || {}).googleDocsSummary || null,
-                });
-                // 전문가 호출이므로 should_respond 강제
-                if (specResult && !specResult.should_respond && specResult.response_text) {
-                  specResult.should_respond = true;
+                    const humanNames = [...new Set(
+                      messages.filter((m) => !m.is_ai && m.user?.name).map((m) => m.user.name)
+                    )];
+                    specResult = await analyzeMilo({
+                      messages: contextMessages,
+                      agenda,
+                      preset,
+                      context: { routedEmployees, participants: humanNames },
+                      miloSettings: specSettings,
+                      compressedContext: compressedContextRef.current,
+                      googleDocsSummary: (getEmployeeOverrides[specId] || {}).googleDocsSummary || null,
+                      signal: abortCtrl.signal,
+                    });
+                    if (specResult && !specResult.should_respond && specResult.response_text) {
+                      specResult.should_respond = true;
+                    }
+                  } else {
+                    const emp = AI_EMPLOYEES.find((e) => e.id === specId);
+                    specResult = {
+                      should_respond: true,
+                      response_text: `[${emp.nameKo}] ${emp.role} 관점에서 말씀드리면, 이 부분은 좀 더 심층적인 검토가 필요합니다.`,
+                      ai_type: 'insight',
+                      ai_employee: specId,
+                    };
+                  }
+                  return { specId, specResult, error: null };
+                } catch (specErr) {
+                  const isAbort = specErr?.name === 'AbortError' || abortCtrl.signal.aborted;
+                  if (isAbort) {
+                    console.warn(`[useMilo] Specialist ${specId} timeout (${SPEC_TIMEOUT_MS}ms)`);
+                  } else {
+                    console.error(`[useMilo] Specialist ${specId} error:`, specErr);
+                  }
+                  return { specId, specResult: null, error: specErr };
+                } finally {
+                  clearTimeout(timeoutId);
+                  chainAbort.signal.removeEventListener('abort', chainListener);
                 }
-              } else {
-                // 데모 모드: 전문가 Mock 응답
-                const emp = AI_EMPLOYEES.find((e) => e.id === specId);
-                specResult = {
-                  should_respond: true,
-                  response_text: `[${emp.nameKo}] ${emp.role} 관점에서 말씀드리면, 이 부분은 좀 더 심층적인 검토가 필요합니다. 관련 자료를 준비해서 다음 회의에서 구체적인 방안을 제안드리겠습니다.`,
-                  ai_type: 'insight',
-                  ai_employee: specId,
-                };
+              });
+
+              // 모든 전문가 응답 수집 (병렬) — 약 3.3초 (순차 5.4초 대비 40% 단축)
+              const specOutputs = await Promise.all(specPromises);
+              onThinking?.(false, null);
+
+              // 사용자 UX를 위해 순차적으로 응답 렌더링 (도착 순서 X, 지정 순서)
+              for (const { specId, specResult } of specOutputs) {
+                // 중간에 사람 개입했으면 남은 응답 스킵
+                const currentMsgs2 = messagesRef.current;
+                const interrupted = currentMsgs2.length > msgCountAtStart &&
+                  currentMsgs2.slice(msgCountAtStart).some((m) => !m.is_ai);
+                if (interrupted) {
+                  console.log('[useMilo] 렌더링 중 사람 개입 — 남은 전문가 응답 스킵');
+                  break;
+                }
+
+                if (specResult?.should_respond) {
+                  const emp = AI_EMPLOYEES.find((e) => e.id === specId);
+                  if (emp && specResult.response_text && !specResult.response_text.startsWith(`[${emp.nameKo}]`)) {
+                    specResult.response_text = `[${emp.nameKo}] ${specResult.response_text}`;
+                  }
+                  specResult.ai_employee = specId;
+                  lastRespondingEmployeeRef.current = specId;
+                  try {
+                    onRespond?.(specResult);
+                  } catch (respondErr) {
+                    console.error('[useMilo] onRespond error:', respondErr);
+                  }
+                  // 다음 응답까지 약간의 시간차 (UX 자연스러움)
+                  if (specOutputs.length > 1) {
+                    await new Promise((r) => setTimeout(r, MILO_DELAYS.SPECIALIST.base));
+                  }
+                }
               }
-
-              onThinking?.(false, null);
-
-              if (specResult?.should_respond) {
-                // 전문가 이름 접두사 추가
-                const emp = AI_EMPLOYEES.find((e) => e.id === specId);
-                if (emp && specResult.response_text && !specResult.response_text.startsWith(`[${emp.nameKo}]`)) {
-                  specResult.response_text = `[${emp.nameKo}] ${specResult.response_text}`;
-                }
-                specResult.ai_employee = specId;
-                lastRespondingEmployeeRef.current = specId;
-                onRespond?.(specResult);
-
-                // 다음 전문가가 이 전문가 응답을 참조할 수 있도록 누적
-                specResponses.push({
-                  content: specResult.response_text,
-                  is_ai: true,
-                  user: { name: emp?.nameKo || specId },
-                  ai_employee: specId,
-                });
-
-                // 지휘자 모델: 전문가 응답 내 멘션으로 체인 확장하지 않음
-                // (Milo가 사전에 선별한 1~2명만 호출 완료 후 종료)
-              }
-            } catch (specErr) {
-              console.error(`[useMilo] Specialist ${specId} error:`, specErr);
-              onThinking?.(false, null);
             }
           }
         }
       } catch (err) {
-        console.error('[useMilo]', err);
+        if (err?.name !== 'AbortError') {
+          console.error('[useMilo]', err);
+        }
         onThinking?.(false, null);
       } finally {
         runningRef.current = false;
+        if (currentChainAbortRef.current === chainAbort) {
+          currentChainAbortRef.current = null;
+        }
       }
     };
 
     // 살짝 지연시켜 사람처럼 보이게
-    const timer = setTimeout(run, MILO_DELAYS.THINKING.base + Math.random() * MILO_DELAYS.THINKING.jitter);
-    return () => clearTimeout(timer);
+    let timerFired = false;
+    const timer = setTimeout(() => { timerFired = true; run(); }, MILO_DELAYS.THINKING.base + Math.random() * MILO_DELAYS.THINKING.jitter);
+    return () => {
+      clearTimeout(timer);
+      // 타이머가 아직 발화 안 했으면 락 해제 (StrictMode cleanup 대응)
+      // 발화 후면 run()이 finally 블록에서 해제하므로 건드리지 않음
+      if (!timerFired && runningRef.current === lastMsg.id) {
+        runningRef.current = false;
+        processedIdsRef.current.delete(lastMsg.id); // 재실행 가능하도록 제거
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
-  // 어젠다 변경 시 개입 카운트 + 마지막 응답 AI 리셋
+  // 어젠다 변경 시: 진행 중 AI 체인 취소 + 상태 리셋
   useEffect(() => {
+    // 진행 중 체인이 있으면 먼저 취소
+    if (currentChainAbortRef.current) {
+      currentChainAbortRef.current.abort();
+      currentChainAbortRef.current = null;
+    }
+    runningRef.current = false;
+    processedIdsRef.current.clear();
     interventionCountRef.current = 0;
     lastRespondingEmployeeRef.current = null;
+    compressedContextRef.current = '';
+    lastCompressedAtRef.current = 0;
   }, [agenda?.id]);
 
   return {

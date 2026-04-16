@@ -22,3 +22,6 @@ yarn-debug.log*
 *.sln
 *.sw?
 .vercel
+
+# Supabase CLI temp (prevents project-ref / pooler-url leak)
+supabase/.temp/

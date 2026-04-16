@@ -4,14 +4,16 @@ import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 /**
  * MiloAvatar — AI 직원 아바타
- * Milo(드러커)는 그라디언트, 전문가는 고유 색상+이니셜 또는 사진
+ * Milo는 그라디언트, 전문가는 고유 색상+이니셜 또는 사진
  *
- * @param {string} employeeId - AI 직원 ID (drucker, kotler, froebel, etc.)
+ * @param {string} employeeId - AI 직원 ID (milo, kotler, froebel, etc.)
  * @param {'sm'|'md'|'lg'} size - 아바타 크기
  */
-export default function MiloAvatar({ employeeId = 'drucker', size = 'md', showTooltip = false }) {
-  const emp = AI_EMPLOYEES.find((e) => e.id === employeeId);
-  const isMilo = !employeeId || employeeId === 'drucker';
+export default function MiloAvatar({ employeeId = 'milo', size = 'md', showTooltip = false }) {
+  // 하위 호환: 'drucker'를 'milo'로 정규화
+  const normalizedId = employeeId === 'drucker' ? 'milo' : employeeId;
+  const emp = AI_EMPLOYEES.find((e) => e.id === normalizedId);
+  const isMilo = !normalizedId || normalizedId === 'milo';
 
   let avatarEl;
 
@@ -55,10 +57,16 @@ function AvatarWithTooltip({ avatarEl, emp }) {
   const handleEnter = () => {
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.top - 8,
-        left: Math.max(8, rect.left + rect.width / 2 - 90),
-      });
+      const tooltipWidth = 220;
+      const sidebarWidth = 192; // LNB w-48
+      // 좌측 경계: LNB 너비 + 여유(12px) 이상 유지
+      const minLeft = sidebarWidth + 12;
+      // 우측 경계: 화면 넘지 않게
+      const maxLeft = window.innerWidth - tooltipWidth - 12;
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+      if (left < minLeft) left = minLeft;
+      if (left > maxLeft) left = maxLeft;
+      setPos({ top: rect.top - 8, left });
     }
     setShow(true);
   };
@@ -77,17 +85,21 @@ function AvatarWithTooltip({ avatarEl, emp }) {
       </span>
       {show && (
         <div
-          className="fixed w-[180px] p-2.5 rounded-lg
-            bg-[#DDD7CE] border border-[#c5bfb5] shadow-lg pointer-events-none z-[9999]"
+          className="fixed w-[220px] rounded-lg overflow-hidden bg-[#DDD7CE] border border-[#c5bfb5] shadow-lg pointer-events-none z-[9999]"
           style={{ top: pos.top, left: pos.left, transform: 'translateY(-100%)' }}
         >
-          <p className="text-sm font-extrabold text-[#222] mb-0.5">
-            {emp.nameKo}
-          </p>
-          <p className="text-xs text-[#333] leading-snug">{emp.role}</p>
-          {emp.description && (
-            <p className="text-[11px] text-[#555] leading-snug mt-1 line-clamp-2">{emp.description}</p>
+          {emp.avatar && (
+            <div className="w-full h-[140px] overflow-hidden" style={{ backgroundColor: emp.color }}>
+              <img src={emp.avatar} alt={emp.nameKo} className="w-full h-full object-cover" />
+            </div>
           )}
+          <div className="p-2.5">
+            <p className="text-sm font-extrabold text-[#222] mb-0.5">{emp.nameKo}</p>
+            <p className="text-xs text-[#333] leading-snug">{emp.role}</p>
+            {emp.description && (
+              <p className="text-[11px] text-[#555] leading-snug mt-1 break-keep">{emp.description}</p>
+            )}
+          </div>
         </div>
       )}
     </>

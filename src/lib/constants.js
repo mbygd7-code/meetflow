@@ -33,6 +33,8 @@ export const MESSAGE_SOURCE = {
 };
 
 export const AI_EMPLOYEE_MAP = {
+  milo: { id: 'milo', name: 'Milo', color: '#723CEB' },
+  // 하위 호환: 기존 데이터가 'drucker'로 저장된 경우 같은 Milo로 매핑
   drucker: { id: 'milo', name: 'Milo', color: '#723CEB' },
   kotler: { id: 'kotler', name: 'Kotler', color: '#FF902F' },
   froebel: { id: 'froebel', name: 'Froebel', color: '#34D399' },

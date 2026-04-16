@@ -4,8 +4,8 @@ import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
 export default function ParticipantList({ participants = [], activeAiEmployees = [], autoIntervene = true, onToggleAutoIntervene }) {
-  // Milo(drucker)는 항상 표시, 나머지 AI는 응답한 것만
-  const aiIds = ['drucker', ...activeAiEmployees.filter((id) => id !== 'drucker')];
+  // Milo는 항상 표시, 나머지 AI는 응답한 것만
+  const aiIds = ['milo', ...activeAiEmployees.filter((id) => id !== 'milo')];
   const uniqueAiIds = [...new Set(aiIds)];
 
   return (
@@ -39,7 +39,7 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
         {/* AI 직원 목록 */}
         {uniqueAiIds.map((id) => {
           const emp = AI_EMPLOYEES.find((e) => e.id === id);
-          const isMilo = id === 'drucker';
+          const isMilo = id === 'milo';
           return (
             <div
               key={id}

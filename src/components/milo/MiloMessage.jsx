@@ -10,7 +10,9 @@ import { formatTime } from '@/utils/formatters';
  * @param {object} message - 메시지 객체 { content, ai_employee, created_at, user }
  */
 export default function MiloMessage({ message }) {
-  const employeeId = message.ai_employee || 'drucker';
+  // 하위 호환: 레거시 'drucker' ID를 'milo'로 정규화
+  const rawId = message.ai_employee || 'milo';
+  const employeeId = rawId === 'drucker' ? 'milo' : rawId;
   const emp = AI_EMPLOYEES.find((e) => e.id === employeeId);
   const name = message.user?.name || emp?.name || 'Milo';
   const time = formatTime(message.created_at);

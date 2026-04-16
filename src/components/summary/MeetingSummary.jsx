@@ -218,7 +218,7 @@ export default function MeetingSummary() {
       {summary.milo_insights && (
         <Card className="mb-5 border-brand-purple/30 bg-brand-purple/[0.04]">
           <div className="flex items-start gap-3">
-            <MiloAvatar employeeId="drucker" size="md" />
+            <MiloAvatar employeeId="milo" size="md" />
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-sm font-semibold text-txt-primary">Milo 인사이트</span>

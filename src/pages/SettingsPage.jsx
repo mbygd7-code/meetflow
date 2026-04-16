@@ -53,8 +53,8 @@ function AiAvatar({ employee, size = 'md' }) {
   if (employee.avatar && !imgErr) {
     return (
       <div
-        className={`${sizeClasses[size]} rounded-full overflow-hidden shrink-0 ring-2 ring-white/10`}
-        style={{ backgroundColor: employee.color }}
+        className={`${sizeClasses[size]} rounded-full overflow-hidden shrink-0 ring-2`}
+        style={{ backgroundColor: employee.color, '--tw-ring-color': employee.color, boxShadow: `0 0 0 2px ${employee.color}` }}
       >
         <img
           src={employee.avatar}
@@ -430,16 +430,37 @@ function ExpandedEmployeePanel({ employee }) {
         <p className="text-[11px] text-txt-muted mb-1.5 font-medium">업로드된 지식 문서</p>
         {(overrides.knowledgeFiles || []).length > 0 && (
           <div className="space-y-1.5 mb-2">
-            {overrides.knowledgeFiles.map((f) => (
-              <div key={f.id} className="flex items-center gap-2 p-2 bg-bg-primary rounded-md border border-border-subtle">
-                <FileText size={13} className="text-brand-purple shrink-0" />
-                <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
-                <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
-                <button onClick={() => store.removeKnowledgeFile(employee.id, f.id)} className="p-0.5 text-txt-muted hover:text-status-error">
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
+            {overrides.knowledgeFiles.map((f) => {
+              // 인덱싱 상태
+              const statusBadge = f.indexError ? (
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-status-error/15 text-status-error cursor-pointer"
+                  title={`오류: ${f.indexError}. 클릭해서 재시도`}
+                  onClick={() => store.reindexKnowledgeFile(employee.id, f.id)}
+                >
+                  ⚠️ 재시도
+                </span>
+              ) : f.processed ? (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-status-success/15 text-status-success" title="Contextual Retrieval 인덱싱 완료">
+                  ✓ 인덱싱됨
+                </span>
+              ) : (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-brand-purple/15 text-brand-purple animate-pulse" title="맥락 분석 + 임베딩 생성 중">
+                  ⋯ 인덱싱 중
+                </span>
+              );
+              return (
+                <div key={f.id} className="flex items-center gap-2 p-2 bg-bg-primary rounded-md border border-border-subtle">
+                  <FileText size={13} className="text-brand-purple shrink-0" />
+                  <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
+                  {statusBadge}
+                  <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
+                  <button onClick={() => store.removeKnowledgeFile(employee.id, f.id)} className="p-0.5 text-txt-muted hover:text-status-error">
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
         <button

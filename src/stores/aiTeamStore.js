@@ -1,6 +1,7 @@
 // AI 팀원 스토어 — Kinderboard x MeetFlow AI 직원 시스템
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { processKnowledgeFile } from '@/lib/claude';
 
 const STORAGE_KEY = 'meetflow-ai-team';
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -8,7 +9,7 @@ const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 // ═══ 7명의 AI 직원 정의 ═══
 export const AI_EMPLOYEES = [
   {
-    id: 'drucker',
+    id: 'milo',
     name: 'Milo',
     nameKo: '밀로',
     initials: 'Mi',
@@ -17,7 +18,7 @@ export const AI_EMPLOYEES = [
     inspiration: 'MeetFlow의 핵심 AI 팀원 — 회의를 이끄는 오케스트라 지휘자',
     color: '#723CEB',
     isDefault: true,
-    triggerKeywords: ['회의 진행', '진행상황', '의사결정', '다음 안건', '액션아이템', '정리 해줘'],
+    triggerKeywords: ['회의 진행', '의사결정', '다음 안건', '액션아이템', '정리 해줘', '회의록', '어젠다'],
     systemPrompt: `당신은 '밀로(Milo)'입니다. 킨더보드 전용 회의 자동진행자이자 AI 오케스트라입니다.
 
 ## 핵심 역할
@@ -147,7 +148,7 @@ export const AI_EMPLOYEES = [
     inspiration: 'Henry Gantt — 간트 차트 발명자, 프로젝트 관리 방법론의 선구자',
     color: '#3B82F6',
     isDefault: false,
-    triggerKeywords: ['태스크', '일정', '프로젝트', 'QA', '배포', '스프린트', '마일스톤', '지난 회의', '진행 상황', '블로커'],
+    triggerKeywords: ['태스크', '일정', '프로젝트', 'QA', '배포', '스프린트', '마일스톤', '블로커', '데드라인', '티켓', '이슈 트래킹'],
     systemPrompt: `당신은 '간트'입니다. 킨더보드 전용 PM이자 태스크/회의 노트 관리자입니다.
 
 ## 핵심 역할
@@ -314,9 +315,9 @@ export const AI_EMPLOYEES = [
 
 // ═══ LLM 모델 옵션 ═══
 export const LLM_MODELS = [
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic', badge: 'Top', apiModelId: 'claude-opus-4-20250514' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'Anthropic', badge: '', apiModelId: 'claude-sonnet-4-20250514' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'Anthropic', badge: 'Fast', apiModelId: 'claude-haiku-4-5-20251001' },
+  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic', badge: 'Top', apiModelId: 'claude-opus-4-5' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'Anthropic', badge: '', apiModelId: 'claude-sonnet-4-5' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'Anthropic', badge: 'Fast', apiModelId: 'claude-haiku-4-5' },
   { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', badge: '', apiModelId: null },
   { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI', badge: '', apiModelId: null },
   { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', badge: '', apiModelId: null },
@@ -327,32 +328,32 @@ export const LLM_MODELS = [
 export const MEETING_PRESETS = {
   'feature-planning': {
     label: '기능 기획 회의',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['froebel', 'norman', 'korff'],
   },
   'marketing-strategy': {
     label: '마케팅 전략 회의',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['kotler', 'deming', 'froebel'],
   },
   'sprint-review': {
     label: '프로젝트 리뷰',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['gantt', 'norman', 'korff'],
   },
   'ops-review': {
     label: '운영 리뷰',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['deming', 'kotler', 'gantt'],
   },
   'daily-standup': {
     label: '데일리 스탠드업',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['gantt'],
   },
   'global-expansion': {
     label: '해외 진출 논의',
-    default: 'drucker',
+    default: 'milo',
     specialists: ['korff', 'kotler', 'deming'],
   },
 };
@@ -360,7 +361,7 @@ export const MEETING_PRESETS = {
 // ═══ 스토어 기본 설정 ═══
 const DEFAULT_STATE = {
   // 활성화된 AI 직원 목록 (id 배열)
-  activeEmployees: ['drucker', 'kotler', 'froebel', 'gantt', 'norman', 'korff', 'deming'],
+  activeEmployees: ['milo', 'kotler', 'froebel', 'gantt', 'norman', 'korff', 'deming'],
 
   // 각 AI 직원별 커스텀 설정 오버라이드 { [id]: { customInstructions, knowledgeFiles } }
   employeeOverrides: {},
@@ -372,11 +373,28 @@ const DEFAULT_STATE = {
   defaultPreset: 'feature-planning',
 };
 
+// ID 마이그레이션: 'drucker' → 'milo' (하위 호환)
+function migrateLegacyIds(state) {
+  if (!state) return state;
+  // activeEmployees 배열 마이그레이션
+  if (Array.isArray(state.activeEmployees)) {
+    state.activeEmployees = [...new Set(state.activeEmployees.map((id) => (id === 'drucker' ? 'milo' : id)))];
+  }
+  // employeeOverrides 키 마이그레이션
+  if (state.employeeOverrides && state.employeeOverrides.drucker && !state.employeeOverrides.milo) {
+    state.employeeOverrides.milo = state.employeeOverrides.drucker;
+    delete state.employeeOverrides.drucker;
+  }
+  return state;
+}
+
 function loadFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_STATE;
-    return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const merged = { ...DEFAULT_STATE, ...parsed };
+    return migrateLegacyIds(merged);
   } catch {
     return DEFAULT_STATE;
   }
@@ -457,8 +475,8 @@ export const useAiTeamStore = create((set, get) => ({
 
   toggleEmployee: (id) => {
     const active = get().activeEmployees;
-    // drucker는 비활성화 불가 (항상 참여)
-    if (id === 'drucker') return;
+    // milo는 비활성화 불가 (항상 참여)
+    if (id === 'milo') return;
     const next = active.includes(id) ? active.filter((e) => e !== id) : [...active, id];
     set({ activeEmployees: next });
     saveToStorage(get());
@@ -507,11 +525,12 @@ export const useAiTeamStore = create((set, get) => ({
     saveToStorage(get());
   },
 
-  // 특정 AI에게 지식 파일 추가 (localStorage + Supabase)
+  // 특정 AI에게 지식 파일 추가 (localStorage + Supabase + Contextual Retrieval 인덱싱)
   addKnowledgeFile: async (employeeId, file) => {
+    const fileWithStatus = { ...file, processed: false }; // 인덱싱 전 상태
     const overrides = { ...get().employeeOverrides };
     const existing = overrides[employeeId] || {};
-    const files = [...(existing.knowledgeFiles || []), file];
+    const files = [...(existing.knowledgeFiles || []), fileWithStatus];
     overrides[employeeId] = { ...existing, knowledgeFiles: files };
     set({ employeeOverrides: overrides });
     saveToStorage(get());
@@ -525,9 +544,64 @@ export const useAiTeamStore = create((set, get) => ({
           content: file.content,
           size: file.size,
         });
+
+        // 비동기 인덱싱 (UI 차단하지 않음) — 완료 시 processed: true로 업데이트
+        processKnowledgeFile({ fileId: file.id, employeeId, content: file.content })
+          .then((res) => {
+            console.log(`[aiTeamStore] Indexed ${file.name}:`, res);
+            const cur = { ...get().employeeOverrides };
+            const curFiles = (cur[employeeId]?.knowledgeFiles || []).map((f) =>
+              f.id === file.id ? { ...f, processed: true } : f
+            );
+            cur[employeeId] = { ...cur[employeeId], knowledgeFiles: curFiles };
+            set({ employeeOverrides: cur });
+            saveToStorage(get());
+          })
+          .catch((err) => {
+            console.error(`[aiTeamStore] Indexing ${file.name} failed:`, err);
+            const cur = { ...get().employeeOverrides };
+            const curFiles = (cur[employeeId]?.knowledgeFiles || []).map((f) =>
+              f.id === file.id ? { ...f, processed: false, indexError: String(err).slice(0, 100) } : f
+            );
+            cur[employeeId] = { ...cur[employeeId], knowledgeFiles: curFiles };
+            set({ employeeOverrides: cur });
+            saveToStorage(get());
+          });
       } catch (err) {
         console.error('[aiTeamStore] DB save failed:', err);
       }
+    }
+  },
+
+  // 실패한 파일 재인덱싱
+  reindexKnowledgeFile: async (employeeId, fileId) => {
+    const overrides = get().employeeOverrides;
+    const file = (overrides[employeeId]?.knowledgeFiles || []).find((f) => f.id === fileId);
+    if (!file) return;
+
+    // 상태: 인덱싱 중으로 표시
+    const cur1 = { ...get().employeeOverrides };
+    cur1[employeeId].knowledgeFiles = cur1[employeeId].knowledgeFiles.map((f) =>
+      f.id === fileId ? { ...f, processed: false, indexError: null } : f
+    );
+    set({ employeeOverrides: cur1 });
+
+    try {
+      const res = await processKnowledgeFile({ fileId, employeeId, content: file.content });
+      console.log(`[aiTeamStore] Reindexed ${file.name}:`, res);
+      const cur = { ...get().employeeOverrides };
+      cur[employeeId].knowledgeFiles = cur[employeeId].knowledgeFiles.map((f) =>
+        f.id === fileId ? { ...f, processed: true, indexError: null } : f
+      );
+      set({ employeeOverrides: cur });
+      saveToStorage(get());
+    } catch (err) {
+      const cur = { ...get().employeeOverrides };
+      cur[employeeId].knowledgeFiles = cur[employeeId].knowledgeFiles.map((f) =>
+        f.id === fileId ? { ...f, processed: false, indexError: String(err).slice(0, 100) } : f
+      );
+      set({ employeeOverrides: cur });
+      saveToStorage(get());
     }
   },
 
@@ -574,15 +648,32 @@ export const useAiTeamStore = create((set, get) => ({
     }
   },
 
-  // 키워드 기반 AI 라우팅
+  // 키워드 기반 AI 라우팅 — 대소문자 무시, 영문은 word boundary
   routeByKeywords: (text) => {
     const active = get().activeEmployees;
     const matched = [];
+    const lowerText = (text || '').toLowerCase();
+
+    // 영문 여부 체크 — ASCII만 있으면 word boundary로 매칭
+    const isLatin = (s) => /^[\x00-\x7F]+$/.test(s);
 
     for (const emp of AI_EMPLOYEES) {
       if (!active.includes(emp.id)) continue;
-      if (emp.id === 'drucker') continue; // 드러커는 항상 포함이므로 별도 처리
-      const hits = emp.triggerKeywords.filter((kw) => text.includes(kw));
+      if (emp.id === 'milo') continue;
+      const hits = emp.triggerKeywords.filter((kw) => {
+        const lowerKw = kw.toLowerCase();
+        if (isLatin(kw)) {
+          // 영문 키워드: \b 경계로 매칭 (substring 방지)
+          const escaped = lowerKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          try {
+            return new RegExp(`\\b${escaped}\\b`, 'i').test(text || '');
+          } catch {
+            return lowerText.includes(lowerKw);
+          }
+        }
+        // 한글 키워드: 단순 substring (한글은 공백 없이 붙어쓰는 경우 많음)
+        return lowerText.includes(lowerKw);
+      });
       if (hits.length > 0) matched.push({ id: emp.id, hits: hits.length });
     }
 
@@ -591,7 +682,7 @@ export const useAiTeamStore = create((set, get) => ({
     const specialists = matched.slice(0, 3).map((m) => m.id);
 
     // 드러커는 항상 포함
-    return ['drucker', ...specialists];
+    return ['milo', ...specialists];
   },
 
   // 특정 AI의 전체 시스템 프롬프트 빌드
@@ -600,49 +691,67 @@ export const useAiTeamStore = create((set, get) => ({
     if (!emp) return '';
 
     const overrides = get().employeeOverrides[employeeId] || {};
+
+    // 1. Base system prompt (도메인 전문성)
     let prompt = emp.systemPrompt;
 
-    // ── 공통: 비판적 사고 + @멘션 규칙 주입 ──
-    prompt += `\n
-## 응답 성향 (반드시 준수)
-- 대부분은 건설적 분석: 정확한 정보, 데이터 기반 의견, 실행 가능한 제안
-- 필요할 때만 비판적 사고: 실제 리스크가 있을 때만 지적. 매번 우려를 표하지 말 것
-- 비판 시 특정 표현("그런데 한 가지 우려되는 점은")을 반복하지 말 것. 자연스럽게 다양한 표현 사용
-- 다른 전문가 의견에 동의할 부분은 동의하고, 자신의 도메인에서 실질적 반론이 있을 때만 반박
-- 근거 없는 반대는 금지. 반드시 자신의 전문 분야 데이터/경험 기반으로
+    // 2. Knowledge files —
+    // 인덱싱된 파일은 Edge Function의 Contextual Retrieval이 런타임에 관련 청크만 주입
+    // (시스템 프롬프트에 넣지 않음 → 토큰 대폭 절감)
+    // 아직 인덱싱 안 된 파일만 fallback으로 작게 주입 (최대 1개 파일, 2000자)
+    const unindexed = (overrides.knowledgeFiles || []).filter((f) => !f.processed);
+    if (unindexed.length > 0) {
+      prompt += '\n\n## 참조 지식 문서 (인덱싱 대기 중 — fallback, 외부 자료)';
+      const FALLBACK_BUDGET = 2000;
+      const f = unindexed[0]; // 가장 최근 1개만
+      const content = (f.content || '').slice(0, FALLBACK_BUDGET);
+      const truncated = (f.content || '').length > FALLBACK_BUDGET ? '\n[...인덱싱 완료 후 의미 검색으로 교체됨]' : '';
+      prompt += `\n\n### ${f.name}\n\`\`\`\n${content}${truncated}\n\`\`\``;
+    }
 
-## 반복 금지 규칙 (매우 중요)
-- 이전 대화에서 이미 언급한 내용을 다시 말하지 마라. 새로운 관점이나 추가 정보만 제시하라
-- 다른 전문가가 이미 말한 포인트를 그대로 반복하지 마라. 보완하거나 다른 각도에서 접근하라
-- "앞서 말씀드린 것처럼" 같은 표현을 반복하며 같은 내용을 되풀이하지 마라
-- 이미 충분히 논의된 주제에 대해서는 should_respond: false로 응답하라 (침묵도 선택지)
-- 새로운 정보나 관점이 없으면 개입하지 마라
-
-## 참가자 멘션 규칙 (반드시 준수)
-- 회의 참가자의 발언을 인용하거나 질문할 때 반드시 @이름 형식으로 멘션하라
-- 예: "@명배영님이 말씀하신 리텐션 문제에 대해, 데이터 관점에서 보면..."
-- 정보가 부족하면 추측하지 말고, 해당 참가자에게 직접 되물어라
-- 예: "@명배영님, 현재 DAU 기준이 어떤 측정 방식인지 확인할 수 있을까요?"
-- 다른 AI 전문가를 언급할 때도 이름을 명시하라 (예: "이 부분은 노먼에게 확인이 필요합니다")
-
-## 1인칭 규칙 (최우선 — 절대 위반 금지)
-- 당신의 이름은 "${emp.nameKo}"이다
-- 절대로 "${emp.nameKo}"를 3인칭으로 언급하지 마라. "${emp.nameKo}에게 요청하겠습니다" ❌ "${emp.nameKo}의 전문 영역" ❌
-- 자기 자신에 대해서는 반드시 "제가", "저는", "저의"를 사용하라
-- "제 전문 분야에서 분석하면..." ✅ "제가 확인해보겠습니다" ✅
-- 다른 AI 전문가만 3인칭 사용 가능 (예: "노먼이 제안한 방식은...")
-- 밀로가 "코틀러에게 요청하겠습니다"라고 말한 것을 보고 같은 패턴을 따라하지 마라. 당신은 이미 호출된 전문가이다. 바로 분석 결과를 제시하라.`;
-
+    // 3. Custom instructions — 명확한 섹션으로 격리
     if (overrides.customInstructions) {
-      prompt += `\n\n## 추가 지시사항\n${overrides.customInstructions}`;
+      prompt += `\n\n## 사용자 추가 지시사항 (참고)\n${overrides.customInstructions}`;
     }
 
-    if (overrides.knowledgeFiles?.length) {
-      prompt += '\n\n## 참조 지식 문서';
-      for (const f of overrides.knowledgeFiles) {
-        prompt += `\n\n### ${f.name}\n${f.content}`;
-      }
-    }
+    // 4. 공통 가드레일 — 반드시 마지막에 삽입하여 최우선 적용
+    prompt += `\n\n## ━━━ 공통 가드레일 (최우선 준수) ━━━
+
+### 1인칭 규칙 (절대 위반 금지)
+- 당신의 이름은 "${emp.nameKo}"이다. 자기 자신은 반드시 "제가", "저는", "저의"로 지칭
+- 절대로 "${emp.nameKo}"를 3인칭으로 언급 금지 — "${emp.nameKo}에게 요청" ❌, "제가 제시" ✅
+- 다른 AI 전문가만 3인칭 사용 가능 (예: "노먼이 제안한 방식은...")
+- Milo의 "코틀러에게 확인하겠습니다" 같은 라우팅 메시지를 따라하지 말 것. 당신은 이미 호출된 전문가이므로 바로 분석 결과를 제시
+
+### 자기 응답 재진입 금지 (CRITICAL)
+- 대화 기록(transcript)에서 "[당신(${emp.nameKo})의 이전 응답]" 또는 "[${emp.nameKo}]"로 시작하는 메시지는 **당신이 직전에 한 말**이다. 절대 타인의 발언으로 오인하지 말 것
+- 자기 이전 응답을 "검토/비판/평가"하지 말 것. "방금 ${emp.nameKo}의 응답을 검토했습니다" 같은 메타 발언 금지
+- 이전에 이미 답한 내용은 반복하지 말고, **새로 추가된 사용자 질문**에 직접 응답하거나 새 관점만 제시
+- 최근 사용자 발언이 없거나 새로 덧붙일 게 없으면 should_respond: false 반환
+
+### 환각 방지 원칙
+- 근거 없는 추측 금지: 데이터가 없으면 "확인이 필요합니다" 명시
+- 신뢰도가 낮으면 "~일 가능성이 있습니다" 같은 완곡 표현 사용
+- 실시간 데이터가 필요하면 "최신 데이터 확인이 필요합니다" 반환
+
+### 응답 성향
+- 건설적 분석 중심: 정확한 정보, 데이터 기반, 실행 가능한 제안
+- 비판은 실제 리스크가 있을 때만. 매번 "우려되는 점은"을 반복하지 말 것
+- 다른 전문가 의견에 동의할 부분은 동의하고, 실질적 반론만 제시
+
+### 반복 금지
+- 이전 대화 내용 반복 금지. 새로운 관점이나 추가 정보만 제시
+- 다른 전문가가 언급한 포인트를 되풀이하지 말 것
+- 새로운 정보가 없으면 should_respond: false로 응답 (침묵도 선택지)
+
+### 참가자 멘션
+- 회의 참가자를 언급할 때 반드시 @이름 형식 (예: "@명배영님, ...")
+- 정보가 부족하면 추측 대신 참가자에게 직접 질문
+
+### 응답 길이
+- 간단한 질문: 3~5문장
+- 복잡한 분석: 최대 300 tokens
+- 너무 길면 요점만 간결하게`;
 
     return prompt;
   },
@@ -652,8 +761,8 @@ export const useAiTeamStore = create((set, get) => ({
   // 특정 AI 직원의 실제 API 모델 ID 반환
   getEmployeeModelId: (employeeId) => {
     const overrides = get().employeeOverrides[employeeId] || {};
-    // 밀로(drucker)는 Sonnet, 나머지 전문가는 Haiku 기본 (비용 절약)
-    const defaultModel = employeeId === 'drucker' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5';
+    // 밀로(milo)는 Sonnet, 나머지 전문가는 Haiku 기본 (비용 절약)
+    const defaultModel = employeeId === 'milo' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5';
     const selectedId = overrides.model || defaultModel;
     const model = LLM_MODELS.find((m) => m.id === selectedId);
     return model?.apiModelId || null;

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 
-export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload }) {
+export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, autoIntervene = true }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
   const [reactions, setReactions] = useState({});
@@ -15,6 +15,27 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // 자동개입 상태 배너: 초기 OFF 상태면 10초, 토글 변경 시 5초 표시 후 자동 숨김
+  const [banner, setBanner] = useState(null); // { kind: 'off' | 'on', visible: bool }
+  const bannerTimerRef = useRef(null);
+  const isFirstMountRef = useRef(true);
+  useEffect(() => {
+    const firstMount = isFirstMountRef.current;
+    isFirstMountRef.current = false;
+
+    // 첫 마운트 & ON 상태 → 배너 표시 안 함
+    if (firstMount && autoIntervene) return;
+
+    const kind = autoIntervene ? 'on' : 'off';
+    const duration = firstMount ? 10000 : 5000;
+    setBanner({ kind, visible: true });
+    clearTimeout(bannerTimerRef.current);
+    bannerTimerRef.current = setTimeout(() => {
+      setBanner((b) => (b ? { ...b, visible: false } : b));
+    }, duration);
+    return () => clearTimeout(bannerTimerRef.current);
+  }, [autoIntervene]);
 
   // STT 설정 읽기 (state로 관리하여 설정 변경 즉시 반영)
   const [sttProvider] = useState(() => {
@@ -57,8 +78,9 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
 
   const handleSend = async () => {
     if (!input.trim() || disabled) return;
+    // 인용 원문 전체 저장 (클릭 시 전체 펼침 가능하도록) — 디스플레이는 line-clamp로 제어
     const text = quotedMessage
-      ? `[quote:${quotedMessage.senderName}]${quotedMessage.content.slice(0, 100)}${quotedMessage.content.length > 100 ? '...' : ''}[/quote]\n${input}`
+      ? `[quote:${quotedMessage.senderName}]${quotedMessage.content}[/quote]\n${input}`
       : input;
     setInput('');
     setQuotedMessage(null);
@@ -114,6 +136,32 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
 
       {/* 입력창 */}
       <div className="px-6 pb-5 pt-2">
+        {/* 자동개입 상태 배너 — 토글 변경/초기 OFF 시 일정 시간 표시 후 자동 사라짐 */}
+        {banner && (
+          <div
+            className={`inline-flex items-center gap-2 mb-2 px-3 py-1.5 rounded-md text-xs font-medium shadow-sm transition-all duration-300 ${
+              banner.visible
+                ? 'opacity-100 translate-y-0'
+                : 'opacity-0 -translate-y-1 pointer-events-none'
+            } ${
+              banner.kind === 'off'
+                ? 'bg-status-error text-white border border-status-error'
+                : 'bg-status-success text-white border border-status-success'
+            }`}
+          >
+            {banner.kind === 'off' ? (
+              <>
+                <ZapOff size={13} strokeWidth={2.4} />
+                <span>AI 자동 개입 OFF — <span className="font-bold">@밀로</span>/<span className="font-bold">@전문가</span>로 호출하세요</span>
+              </>
+            ) : (
+              <>
+                <Zap size={13} strokeWidth={2.4} />
+                <span>AI 자동 개입 ON — 필요한 순간 AI가 자동 응답합니다</span>
+              </>
+            )}
+          </div>
+        )}
         {/* 인용 프리뷰 */}
         {quotedMessage && (
           <div className="flex items-start gap-2 mb-2 px-4 py-2 bg-bg-tertiary border border-border-subtle rounded-lg text-xs">

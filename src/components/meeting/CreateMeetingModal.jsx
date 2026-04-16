@@ -95,7 +95,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   }, [modalReady, showSuggestions]);
   const [selectedTeams, setSelectedTeams] = useState(draft.current?.selectedTeams || []);
   const [selectedMembers, setSelectedMembers] = useState(draft.current?.selectedMembers || []);
-  const [selectedAiEmployees, setSelectedAiEmployees] = useState(['drucker']); // Milo는 기본 선택
+  const [selectedAiEmployees, setSelectedAiEmployees] = useState(['milo']); // Milo는 기본 선택
   const [agendas, setAgendas] = useState(
     draft.current?.agendas?.length ? draft.current.agendas : [{ title: '', duration_minutes: 10 }]
   );

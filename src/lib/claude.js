@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase';
 
 /**
  * Milo 분석 — Supabase Edge Function 'milo-analyze' 호출
+ * @param {AbortSignal} signal - 요청 취소용 (옵션)
  */
-export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleDocsSummary = null }) {
-  const { data, error } = await supabase.functions.invoke('milo-analyze', {
+export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleDocsSummary = null, signal = null, skipKnowledge = false }) {
+  const invokeOptions = {
     body: {
       messages: (messages || []).slice(-15),
       agenda,
@@ -15,23 +16,34 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
       context,
       compressedContext,
       googleDocsSummary,
+      skipKnowledge, // Milo 호출 시 true (retrieval 생략, 토큰 절약)
       miloSettings: miloSettings
         ? {
             systemPromptOverride: miloSettings.systemPromptOverride,
             apiModelId: miloSettings.apiModelId,
+            aiEmployee: miloSettings.aiEmployee, // Edge Function에서 retrieval 대상 결정
           }
         : null,
     },
-  });
+  };
+  // AbortSignal 지원 (Supabase JS v2.46+)
+  if (signal) invokeOptions.signal = signal;
+
+  const { data, error } = await supabase.functions.invoke('milo-analyze', invokeOptions);
 
   if (error) {
+    // AbortError는 조용히 처리 (타임아웃/취소)
+    if (error.name === 'AbortError' || signal?.aborted) {
+      console.warn('[analyzeMilo] Request aborted');
+      return null;
+    }
     console.error('[analyzeMilo] Edge Function error:', error.message || error);
     // 에러 시 사용자에게 피드백 메시지 반환
     return {
       should_respond: true,
       response_text: '[밀로] 죄송합니다, 잠시 응답 처리에 문제가 있었습니다. 다시 시도해주세요.',
       ai_type: 'nudge',
-      ai_employee: 'drucker',
+      ai_employee: 'milo',
     };
   }
 
@@ -75,6 +87,25 @@ export async function compressConversation(messages) {
 
   if (error || !data?.response_text) return '';
   return data.response_text;
+}
+
+/**
+ * 지식 파일 Contextual Retrieval 인덱싱
+ * — 파일 업로드 후 호출. Haiku로 청크별 맥락 생성 + OpenAI 임베딩 + pgvector 저장
+ * @returns { ok, chunks, summary_length }
+ */
+export async function processKnowledgeFile({ fileId, employeeId, content }) {
+  if (!fileId || !employeeId || !content) {
+    throw new Error('fileId, employeeId, content required');
+  }
+  const { data, error } = await supabase.functions.invoke('contextualize-knowledge', {
+    body: { fileId, employeeId, content },
+  });
+  if (error) {
+    console.error('[processKnowledgeFile] Edge Function error:', error.message || error);
+    throw new Error(error.message || 'Indexing failed');
+  }
+  return data || { ok: false };
 }
 
 /**

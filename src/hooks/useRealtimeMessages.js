@@ -100,9 +100,14 @@ export function useRealtimeMessages(meetingId) {
 
     if (isDemoMode(user?.id, meetingId)) return () => (cancelled = true);
 
-    // Realtime 구독
+    // Realtime 구독 — StrictMode 이중 실행 시 기존 채널 먼저 제거 (중복 구독 방지)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase
-      .channel(`messages:${meetingId}`)
+      .channel(`messages:${meetingId}:${Date.now()}`) // 유니크 채널명으로 충돌 방지
       .on(
         'postgres_changes',
         {
@@ -135,7 +140,10 @@ export function useRealtimeMessages(meetingId) {
 
     return () => {
       cancelled = true;
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [meetingId]);
 
@@ -159,7 +167,7 @@ export function useRealtimeMessages(meetingId) {
           content: content.trim(),
           is_ai: isAi,
           ai_type: aiType,
-          ai_employee: isAi ? (aiEmployee || 'drucker') : undefined,
+          ai_employee: isAi ? (aiEmployee || 'milo') : undefined,
           search_sources: searchSources || undefined,
           source,
           user: isAi ? aiUser : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
@@ -190,7 +198,7 @@ export function useRealtimeMessages(meetingId) {
       // Realtime이 지연되거나 미작동할 수 있으므로 즉시 로컬 state에 추가
       // ai_employee는 DB에 없으므로 로컬에서 보강
       if (data) {
-        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'drucker', search_sources: searchSources || undefined } : data;
+        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'milo', search_sources: searchSources || undefined } : data;
         setMessages((prev) => {
           if (prev.some((m) => m.id === enriched.id)) return prev;
           return [...prev, enriched];

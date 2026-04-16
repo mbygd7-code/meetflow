@@ -80,10 +80,11 @@ import './index.css';
   });
 })();
 
+// StrictMode 비활성화 — Realtime 구독 + useMilo 이중 실행 방지
+// (StrictMode는 useEffect를 의도적으로 2번 실행하여 사이드이펙트 문제를 찾는데,
+// Supabase Realtime과 충돌하여 메시지 중복 렌더링 유발)
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
 );

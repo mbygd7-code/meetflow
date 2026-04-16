@@ -1,5 +1,6 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -139,8 +140,20 @@ export default function MeetingRoom() {
   const [aiThinking, setAiThinking] = useState(null);
   const [polls, setPolls] = useState([]);
   const [ending, setEnding] = useState(false);
+  const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [leavingConfirmed, setLeavingConfirmed] = useState(false);
-  const [aiAutoIntervene, setAiAutoIntervene] = useState(true);
+  // 자동개입 상태: localStorage에 영속 저장 (페이지 새로고침 유지)
+  const [aiAutoIntervene, setAiAutoIntervene] = useState(() => {
+    try {
+      const saved = localStorage.getItem('meetflow_auto_intervene');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('meetflow_auto_intervene', String(aiAutoIntervene)); } catch {}
+  }, [aiAutoIntervene]);
   const [docPanelExpanded, setDocPanelExpanded] = useState(false);
   const [meetingFiles, setMeetingFiles] = useState([]); // 회의 자료
   const { messages, sendMessage } = useRealtimeMessages(id);
@@ -189,7 +202,7 @@ export default function MeetingRoom() {
   const handleCreatePoll = useCallback(({ question, options }) => {
     const newPoll = { id: `poll-${Date.now()}`, question, options, votes: {}, myVote: null, created_at: new Date().toISOString() };
     setPolls((prev) => [newPoll, ...prev]);
-    sendMessage(`📊 투표가 생성되었습니다: "${question}"`, { agendaId: currentAgenda?.id, isAi: true, aiType: 'nudge', aiEmployee: 'drucker' });
+    sendMessage(`📊 투표가 생성되었습니다: "${question}"`, { agendaId: currentAgenda?.id, isAi: true, aiType: 'nudge', aiEmployee: 'milo' });
   }, [sendMessage, currentAgenda]);
 
   const handleVote = useCallback((pollId, optionIndex) => {
@@ -202,10 +215,28 @@ export default function MeetingRoom() {
   }, []);
 
   // Milo AI
+  // 동일 응답 텍스트가 짧은 시간 내에 중복 전송되는 것을 방어 (최종 방어선)
+  const sentResponseHashesRef = useRef(new Map()); // text → timestamp
   const handleMiloRespond = useCallback(async (result) => {
+    if (!result?.response_text) return;
+    const hash = `${result.ai_employee || 'milo'}::${result.response_text.slice(0, 100)}`;
+    const now = Date.now();
+    const prevTime = sentResponseHashesRef.current.get(hash);
+    if (prevTime && now - prevTime < 10000) {
+      console.warn('[MeetingRoom] Duplicate AI response blocked:', hash.slice(0, 60));
+      return;
+    }
+    sentResponseHashesRef.current.set(hash, now);
+    // 오래된 해시 정리 (메모리 누수 방지)
+    if (sentResponseHashesRef.current.size > 50) {
+      const cutoff = now - 60000;
+      for (const [k, t] of sentResponseHashesRef.current.entries()) {
+        if (t < cutoff) sentResponseHashesRef.current.delete(k);
+      }
+    }
     await sendMessage(result.response_text, {
       agendaId: currentAgenda?.id, isAi: true, aiType: result.ai_type,
-      aiEmployee: result.ai_employee || 'drucker', searchSources: result.search_sources || null,
+      aiEmployee: result.ai_employee || 'milo', searchSources: result.search_sources || null,
     });
   }, [sendMessage, currentAgenda]);
 
@@ -230,7 +261,7 @@ export default function MeetingRoom() {
         const userName = meeting.participants?.[0]?.name || '여러분';
         sendMessage(
           `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다. 오늘 회의 주제나 논의하고 싶은 안건이 있으시면 알려주세요.`,
-          { agendaId: meeting?.agendas?.[0]?.id, isAi: true, aiType: 'nudge', aiEmployee: 'drucker' }
+          { agendaId: meeting?.agendas?.[0]?.id, isAi: true, aiType: 'nudge', aiEmployee: 'milo' }
         );
       }, 2000);
       return () => clearTimeout(checkTimer);
@@ -255,11 +286,19 @@ export default function MeetingRoom() {
     );
   }
 
-  const handleEnd = async () => {
-    if (!confirm('회의를 종료하시겠습니까? 자동 요약이 생성됩니다.')) return;
+  const handleEndClick = () => {
+    setConfirmingEnd(true);
+  };
+
+  const handleCancelEnd = () => {
+    setConfirmingEnd(false);
+  };
+
+  const handleConfirmEnd = async () => {
+    setConfirmingEnd(false);
     setEnding(true);
     setActiveMeetingId(null);
-    try { await endMeeting(id, { messages, agendas: meeting.agendas || [] }); } catch (err) { console.error('[handleEnd]', err); }
+    try { await endMeeting(id, { messages, agendas: meeting.agendas || [] }); } catch (err) { console.error('[handleConfirmEnd]', err); }
     setEnding(false);
     setLeavingConfirmed(true);
     navigate(`/summaries/${id}`);
@@ -271,22 +310,46 @@ export default function MeetingRoom() {
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      {/* 종료 오버레이 */}
-      {ending && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+      {/* 종료 확인 / 로딩 오버레이 — Portal로 body 직접 렌더링 (LNB 위로) */}
+      {(ending || confirmingEnd) && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/10 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-bg-secondary border border-border-subtle rounded-xl p-8 max-w-sm mx-4 text-center shadow-lg">
             <div className="w-14 h-14 rounded-full bg-gradient-brand shadow-glow flex items-center justify-center mx-auto mb-4">
-              <Sparkles size={24} className="text-white animate-pulse" strokeWidth={2} />
+              <Sparkles size={24} className={`text-white ${ending ? 'animate-pulse' : ''}`} strokeWidth={2} />
             </div>
-            <h3 className="text-lg font-semibold text-txt-primary mb-2">AI 인사이트 준비 중</h3>
-            <p className="text-sm text-txt-secondary">Milo가 회의 내용을 분석하고 요약을 생성하고 있습니다...</p>
-            <div className="flex justify-center gap-1 mt-4">
-              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
+            {ending ? (
+              <>
+                <h3 className="text-lg font-semibold text-txt-primary mb-2">AI 인사이트 준비 중</h3>
+                <p className="text-sm text-txt-secondary">Milo가 회의 내용을 분석하고 요약을 생성하고 있습니다...</p>
+                <div className="flex justify-center gap-1 mt-4">
+                  <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-brand-purple animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-txt-primary mb-2">회의를 종료하시겠습니까?</h3>
+                <p className="text-sm text-txt-secondary mb-6">Milo가 자동으로 회의록과 요약을 생성합니다.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelEnd}
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-border-default text-sm font-medium text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleConfirmEnd}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-brand-purple text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                  >
+                    회의록 작성
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══ 헤더 ═══ */}
@@ -342,7 +405,7 @@ export default function MeetingRoom() {
 
           {/* 회의 종료 */}
           <button
-            onClick={handleEnd}
+            onClick={handleEndClick}
             className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
           >
             <Square size={14} strokeWidth={2.4} />
@@ -371,6 +434,7 @@ export default function MeetingRoom() {
           disabled={meeting.status === 'completed'}
           aiThinking={aiThinking}
           onFileUpload={handleFileUpload}
+          autoIntervene={aiAutoIntervene}
         />
       </div>
     </div>
