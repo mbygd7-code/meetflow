@@ -16,10 +16,10 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // STT 설정 읽기
-  const sttProvider = (() => {
-    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; }
-  })();
+  // STT 설정 읽기 (state로 관리하여 설정 변경 즉시 반영)
+  const [sttProvider] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
+  });
 
   const { isListening, start: startSTT, stop: stopSTT, interim, error: sttError, supported: sttSupported } = useVoiceInput({
     provider: sttProvider,

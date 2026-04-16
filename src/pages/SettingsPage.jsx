@@ -149,6 +149,31 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
   );
 }
 
+// ── STT 서비스 선택 ──
+function SttSelect() {
+  const [provider, setProvider] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; }
+  });
+  const handleChange = (e) => {
+    const val = e.target.value;
+    setProvider(val);
+    const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+    localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, sttProvider: val }));
+  };
+  return (
+    <div>
+      <label className="block text-[10px] font-medium text-txt-muted uppercase tracking-wider mb-1">STT 서비스</label>
+      <select value={provider} onChange={handleChange} className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary focus:border-brand-purple/50 focus:outline-none transition-colors">
+        <option value="google">Google Cloud STT (기본, 고정밀)</option>
+        <option value="web-speech">Web Speech API (무료, 브라우저 내장)</option>
+      </select>
+      <p className="text-[10px] text-txt-muted mt-1.5">
+        {provider === 'google' ? 'Google Cloud STT: 고정밀 한국어 인식 (비용 발생)' : 'Web Speech API: 무료, Chrome/Edge 지원, 별도 설정 불필요'}
+      </p>
+    </div>
+  );
+}
+
 // ── Google 문서 연동 (Sheets + Docs 통합 + 동기화) ──
 function GoogleDocsInput({ employeeId, value, onChange }) {
   const store = useAiTeamStore();
@@ -946,25 +971,10 @@ export default function SettingsPage() {
                 <p className="text-[10px] text-txt-secondary">회의 중 음성 입력 처리</p>
               </div>
             </div>
+            <Badge variant="success">설정됨</Badge>
           </div>
           <div className="space-y-2">
-            <div>
-              <label className="block text-[10px] font-medium text-txt-muted uppercase tracking-wider mb-1">STT 서비스</label>
-              <select
-                value={(() => { try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; } })()}
-                onChange={(e) => {
-                  const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
-                  localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, sttProvider: e.target.value }));
-                }}
-                className="w-full bg-bg-primary border border-border-subtle rounded-md px-3 py-2 text-xs text-txt-primary focus:border-brand-purple/50 focus:outline-none transition-colors"
-              >
-                <option value="google">Google Cloud STT (기본, 고정밀)</option>
-                <option value="web-speech">Web Speech API (무료, 브라우저 내장)</option>
-              </select>
-            </div>
-            <p className="text-[10px] text-txt-muted">
-              Google Cloud STT: 고정밀 한국어 인식 (비용 발생). Web Speech API: 무료, Chrome/Edge 지원
-            </p>
+            <SttSelect />
           </div>
         </div>
       </SectionPanel>
