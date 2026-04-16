@@ -16,6 +16,21 @@ import { useAiTeamStore, AI_EMPLOYEES, MEETING_PRESETS, LLM_MODELS } from '@/sto
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
+// ── 반응형 viewport 감지 (Tailwind lg 브레이크포인트 기준, 1024px) ──
+function useIsCompact(breakpoint = 1024) {
+  const [isCompact, setIsCompact] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsCompact(e.matches);
+    handler(mql);
+    mql.addEventListener?.('change', handler);
+    return () => mql.removeEventListener?.('change', handler);
+  }, [breakpoint]);
+  return isCompact;
+}
+
 // ── Toggle 컴포넌트 ──
 function Toggle({ checked, onChange, label, description }) {
   return (
@@ -76,11 +91,139 @@ function AiAvatar({ employee, size = 'md' }) {
   );
 }
 
+// ── 공통 지식 카드 — 모든 AI가 항상 참조하는 지식 파일 섹션 ──
+function SharedKnowledgeCard() {
+  const store = useAiTeamStore();
+  const files = store.sharedKnowledgeFiles || [];
+  const fileInputRef = useRef(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const selected = Array.from(e.target.files || []);
+    for (const file of selected) {
+      if (file.size > 500 * 1024) {
+        alert(`${file.name}: 파일 크기가 500KB를 초과합니다.`);
+        continue;
+      }
+      const content = await file.text();
+      store.addSharedKnowledgeFile({
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        content,
+        addedAt: new Date().toISOString(),
+      });
+    }
+    e.target.value = '';
+  };
+
+  const formatFileSize = (bytes) => (bytes < 1024 ? bytes + 'B' : (bytes / 1024).toFixed(1) + 'KB');
+
+  return (
+    <div className="rounded-lg border border-brand-purple/30 bg-gradient-to-br from-brand-purple/5 to-brand-orange/5">
+      {/* 헤더 — 항상 펼쳐진 상태로 업로드 UI 노출 */}
+      <div
+        className="p-3 md:p-4 cursor-pointer hover:bg-bg-tertiary/20 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-purple to-brand-orange flex items-center justify-center shrink-0 shadow-glow">
+            <Users size={18} className="text-white" strokeWidth={2.2} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm font-semibold text-txt-primary">공통 지식</p>
+              <Badge variant="purple" className="text-[9px]">모든 AI 공유</Badge>
+            </div>
+            <p className="text-xs text-txt-secondary mt-0.5 truncate">
+              업로드 시 Milo와 6명 전문가 모두가 항상 참조합니다 (1회 업로드 · 비용 1/7)
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {files.length > 0 && (
+              <span className="text-[10px] text-txt-muted flex items-center gap-0.5">
+                <FileText size={10} /> {files.length}
+              </span>
+            )}
+            <span className="p-1 md:p-1.5 text-txt-muted">
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 확장 패널 — 파일 목록 + 업로드 */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-2 border-t border-brand-purple/15 pt-3">
+          {files.length > 0 && (
+            <div className="space-y-1.5">
+              {files.map((f) => {
+                const statusBadge = f.indexError ? (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-status-error/15 text-status-error cursor-pointer"
+                    title={`오류: ${f.indexError}. 클릭해서 재시도`}
+                    onClick={() => store.reindexSharedKnowledgeFile(f.id)}
+                  >
+                    ⚠️ 재시도
+                  </span>
+                ) : f.processed ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-status-success/15 text-status-success" title="Contextual Retrieval 인덱싱 완료">
+                    ✓ 인덱싱됨
+                  </span>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-brand-purple/15 text-brand-purple animate-pulse" title="맥락 분석 + 임베딩 생성 중">
+                    ⋯ 인덱싱 중
+                  </span>
+                );
+                return (
+                  <div key={f.id} className="flex items-center gap-2 p-2 bg-bg-primary rounded-md border border-border-subtle">
+                    <FileText size={13} className="text-brand-purple shrink-0" />
+                    <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
+                    {statusBadge}
+                    <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); store.removeSharedKnowledgeFile(f.id); }}
+                      className="p-0.5 text-txt-muted hover:text-status-error"
+                      title="삭제"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+            className="w-full border border-dashed border-brand-purple/30 rounded-md p-3 text-center hover:border-brand-purple/60 hover:bg-brand-purple/[0.05] transition-all"
+          >
+            <Upload size={14} className="mx-auto mb-1 text-brand-purple" />
+            <p className="text-[11px] text-txt-secondary">공통 MD/TXT 파일 업로드 (최대 500KB)</p>
+            <p className="text-[10px] text-txt-muted mt-0.5">예: 회사 개요, 제품 스펙, 개인정보 처리방침 등</p>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,.txt,.markdown"
+            multiple
+            className="hidden"
+            onChange={handleFileUpload}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AI 직원 카드 ──
 function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) {
   const store = useAiTeamStore();
   const overrides = store.employeeOverrides[employee.id] || {};
   const fileCount = overrides.knowledgeFiles?.length || 0;
+  // lg 미만: 짧은 라벨(예: "Haiku 4.5"), lg+: 전체 라벨(예: "Claude Haiku 4.5")
+  const isCompact = useIsCompact(1024);
+  const currentModel = LLM_MODELS.find((m) => m.id === (overrides.model || 'claude-sonnet-4-6'));
 
   return (
     <div
@@ -91,52 +234,81 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
       }`}
     >
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
+        className="p-3 md:p-4 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
         onClick={() => onExpand(isExpanded ? null : employee.id)}
       >
-        <AiAvatar employee={employee} size="md" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-txt-primary">{employee.name}</p>
-            <span className="text-[11px] text-txt-muted">({employee.nameKo})</span>
-            {employee.isDefault && (
-              <Badge variant="purple" className="text-[9px]">기본</Badge>
+        {/* ── 메인 행: avatar + info + 우측 액션 (모든 화면에서 한 줄) ── */}
+        <div className="flex items-center gap-3">
+          <AiAvatar employee={employee} size="md" />
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm font-semibold text-txt-primary">{employee.name}</p>
+              <span className="text-[11px] text-txt-muted">({employee.nameKo})</span>
+              {employee.isDefault && (
+                <Badge variant="purple" className="text-[9px]">기본</Badge>
+              )}
+            </div>
+            <p className="text-xs text-txt-secondary mt-0.5 truncate">{employee.role}</p>
+          </div>
+
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* ▶ 데스크톱(md+)에서 인라인 표시. 좁은 뷰포트에선 shortLabel 사용 */}
+            <select
+              value={overrides.model || 'claude-sonnet-4-6'}
+              onChange={(e) => store.setEmployeeModel(employee.id, e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              title={currentModel?.label || '모델 선택'}
+              className="hidden md:block bg-bg-tertiary border border-border-subtle rounded-md px-2 py-1 text-[10px] text-txt-secondary focus:outline-none focus:border-brand-purple/50 cursor-pointer appearance-none pr-5 min-w-0 flex-shrink max-w-[90px] lg:max-w-[140px] xl:max-w-[170px] overflow-hidden text-ellipsis whitespace-nowrap"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center' }}
+            >
+              {LLM_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{isCompact ? m.shortLabel : m.label}</option>
+              ))}
+            </select>
+            {fileCount > 0 && (
+              <span className="hidden md:flex text-[10px] text-txt-muted items-center gap-0.5">
+                <FileText size={10} /> {fileCount}
+              </span>
+            )}
+            <span className="p-1 md:p-1.5 text-txt-muted">
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+            {!employee.isDefault && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggle(employee.id); }}
+                className={`relative w-9 h-[18px] rounded-full transition-colors shrink-0 ${
+                  isActive ? 'bg-brand-purple' : 'bg-bg-primary border border-border-default'
+                }`}
+              >
+                <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all ${
+                  isActive ? 'left-[18px]' : 'left-[2px]'
+                }`} />
+              </button>
             )}
           </div>
-          <p className="text-xs text-txt-secondary mt-0.5 truncate">{employee.role}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* LLM 모델 선택 */}
+
+        {/* ── 모바일(< md)에서만: 두 번째 줄에 model select + 파일 뱃지 ── */}
+        <div
+          className="md:hidden flex items-center gap-2 mt-2.5 pl-[52px]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <select
             value={overrides.model || 'claude-sonnet-4-6'}
             onChange={(e) => store.setEmployeeModel(employee.id, e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            className="bg-bg-tertiary border border-border-subtle rounded-md px-2 py-1 text-[10px] text-txt-secondary focus:outline-none focus:border-brand-purple/50 cursor-pointer appearance-none pr-5 max-w-[120px]"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center' }}
+            title={currentModel?.label || '모델 선택'}
+            className="flex-1 min-w-0 bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1.5 text-[11px] text-txt-secondary focus:outline-none focus:border-brand-purple/50 cursor-pointer appearance-none pr-7 overflow-hidden text-ellipsis whitespace-nowrap"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B6B6B' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
           >
             {LLM_MODELS.map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
           {fileCount > 0 && (
-            <span className="text-[10px] text-txt-muted flex items-center gap-0.5">
+            <span className="text-[10px] text-txt-muted flex items-center gap-0.5 shrink-0">
               <FileText size={10} /> {fileCount}
             </span>
-          )}
-          <span className="p-1.5 text-txt-muted">
-            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </span>
-          {!employee.isDefault && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggle(employee.id); }}
-              className={`relative w-9 h-[18px] rounded-full transition-colors ${
-                isActive ? 'bg-brand-purple' : 'bg-bg-primary border border-border-default'
-              }`}
-            >
-              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all ${
-                isActive ? 'left-[18px]' : 'left-[2px]'
-              }`} />
-            </button>
           )}
         </div>
       </div>
@@ -786,6 +958,9 @@ export default function SettingsPage() {
 
         {/* AI 직원 리스트 */}
         <div className="space-y-2">
+          {/* 공통 지식 카드 — 모든 AI 직원이 항상 참조 */}
+          <SharedKnowledgeCard />
+
           {AI_EMPLOYEES.map((emp) => (
             <AiEmployeeCard
               key={emp.id}

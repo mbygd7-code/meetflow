@@ -315,13 +315,13 @@ export const AI_EMPLOYEES = [
 
 // ═══ LLM 모델 옵션 ═══
 export const LLM_MODELS = [
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic', badge: 'Top', apiModelId: 'claude-opus-4-5' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'Anthropic', badge: '', apiModelId: 'claude-sonnet-4-5' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', provider: 'Anthropic', badge: 'Fast', apiModelId: 'claude-haiku-4-5' },
-  { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', badge: '', apiModelId: null },
-  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI', badge: '', apiModelId: null },
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', badge: '', apiModelId: null },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', badge: 'Fast', apiModelId: null },
+  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', shortLabel: 'Opus 4.6', provider: 'Anthropic', badge: 'Top', apiModelId: 'claude-opus-4-5' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', shortLabel: 'Sonnet 4.6', provider: 'Anthropic', badge: '', apiModelId: 'claude-sonnet-4-5' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', shortLabel: 'Haiku 4.5', provider: 'Anthropic', badge: 'Fast', apiModelId: 'claude-haiku-4-5' },
+  { id: 'gpt-4o', label: 'GPT-4o', shortLabel: 'GPT-4o', provider: 'OpenAI', badge: '', apiModelId: null },
+  { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', shortLabel: 'GPT-4T', provider: 'OpenAI', badge: '', apiModelId: null },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', shortLabel: 'Gemini Pro', provider: 'Google', badge: '', apiModelId: null },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', shortLabel: 'Gemini Flash', provider: 'Google', badge: 'Fast', apiModelId: null },
 ];
 
 // ═══ 회의 유형별 기본 참여 프리셋 ═══
@@ -358,6 +358,9 @@ export const MEETING_PRESETS = {
   },
 };
 
+// ═══ 공통 지식 sentinel (employee_id='*') ═══
+export const SHARED_KNOWLEDGE_EMPLOYEE_ID = '*';
+
 // ═══ 스토어 기본 설정 ═══
 const DEFAULT_STATE = {
   // 활성화된 AI 직원 목록 (id 배열)
@@ -365,6 +368,9 @@ const DEFAULT_STATE = {
 
   // 각 AI 직원별 커스텀 설정 오버라이드 { [id]: { customInstructions, knowledgeFiles } }
   employeeOverrides: {},
+
+  // 공통 지식 파일 (모든 AI가 항상 참조) — employee_id='*'로 DB 저장
+  sharedKnowledgeFiles: [],
 
   // 자동 라우팅 활성화
   autoRouting: true,
@@ -622,7 +628,95 @@ export const useAiTeamStore = create((set, get) => ({
     }
   },
 
-  // DB에서 지식 문서 로드
+  // ── 공통 지식(shared) CRUD — employee_id='*'로 저장, 모든 AI 참조 ──
+  addSharedKnowledgeFile: async (file) => {
+    const fileWithStatus = { ...file, processed: false };
+    set({ sharedKnowledgeFiles: [...get().sharedKnowledgeFiles, fileWithStatus] });
+    saveToStorage(get());
+
+    if (SUPABASE_ENABLED) {
+      try {
+        await supabase.from('ai_knowledge_files').insert({
+          id: file.id,
+          employee_id: SHARED_KNOWLEDGE_EMPLOYEE_ID,
+          name: file.name,
+          content: file.content,
+          size: file.size,
+        });
+
+        processKnowledgeFile({ fileId: file.id, employeeId: SHARED_KNOWLEDGE_EMPLOYEE_ID, content: file.content })
+          .then((res) => {
+            console.log(`[aiTeamStore] Indexed shared ${file.name}:`, res);
+            const files = get().sharedKnowledgeFiles.map((f) =>
+              f.id === file.id ? { ...f, processed: true } : f
+            );
+            set({ sharedKnowledgeFiles: files });
+            saveToStorage(get());
+          })
+          .catch((err) => {
+            console.error(`[aiTeamStore] Indexing shared ${file.name} failed:`, err);
+            const files = get().sharedKnowledgeFiles.map((f) =>
+              f.id === file.id ? { ...f, processed: false, indexError: String(err).slice(0, 100) } : f
+            );
+            set({ sharedKnowledgeFiles: files });
+            saveToStorage(get());
+          });
+      } catch (err) {
+        console.error('[aiTeamStore] DB save (shared) failed:', err);
+      }
+    }
+  },
+
+  reindexSharedKnowledgeFile: async (fileId) => {
+    const file = get().sharedKnowledgeFiles.find((f) => f.id === fileId);
+    if (!file) return;
+
+    // 상태: 인덱싱 중으로 표시
+    set({
+      sharedKnowledgeFiles: get().sharedKnowledgeFiles.map((f) =>
+        f.id === fileId ? { ...f, processed: false, indexError: null } : f
+      ),
+    });
+
+    try {
+      const res = await processKnowledgeFile({
+        fileId,
+        employeeId: SHARED_KNOWLEDGE_EMPLOYEE_ID,
+        content: file.content,
+      });
+      console.log(`[aiTeamStore] Reindexed shared ${file.name}:`, res);
+      set({
+        sharedKnowledgeFiles: get().sharedKnowledgeFiles.map((f) =>
+          f.id === fileId ? { ...f, processed: true, indexError: null } : f
+        ),
+      });
+      saveToStorage(get());
+    } catch (err) {
+      set({
+        sharedKnowledgeFiles: get().sharedKnowledgeFiles.map((f) =>
+          f.id === fileId ? { ...f, processed: false, indexError: String(err).slice(0, 100) } : f
+        ),
+      });
+      saveToStorage(get());
+    }
+  },
+
+  removeSharedKnowledgeFile: async (fileId) => {
+    set({
+      sharedKnowledgeFiles: get().sharedKnowledgeFiles.filter((f) => f.id !== fileId),
+    });
+    saveToStorage(get());
+
+    if (SUPABASE_ENABLED) {
+      try {
+        await supabase.from('ai_knowledge_files').delete().eq('id', fileId);
+      } catch (err) {
+        console.error('[aiTeamStore] DB delete (shared) failed:', err);
+      }
+    }
+  },
+
+  // DB에서 지식 문서 로드 — 공통(employee_id='*')은 sharedKnowledgeFiles, 나머지는 employeeOverrides
   loadKnowledgeFiles: async () => {
     if (!SUPABASE_ENABLED) return;
     try {
@@ -633,15 +727,26 @@ export const useAiTeamStore = create((set, get) => ({
       if (error || !data?.length) return;
 
       const overrides = { ...get().employeeOverrides };
+      const shared = [...get().sharedKnowledgeFiles];
       data.forEach((f) => {
-        const emp = overrides[f.employee_id] || {};
-        const files = emp.knowledgeFiles || [];
-        if (!files.some((x) => x.id === f.id)) {
-          files.push({ id: f.id, name: f.name, content: f.content, size: f.size, addedAt: f.created_at });
+        const fileObj = {
+          id: f.id,
+          name: f.name,
+          content: f.content,
+          size: f.size,
+          addedAt: f.created_at,
+          processed: !!f.processed_at, // DB processed_at 있으면 인덱싱 완료된 것
+        };
+        if (f.employee_id === SHARED_KNOWLEDGE_EMPLOYEE_ID) {
+          if (!shared.some((x) => x.id === f.id)) shared.push(fileObj);
+        } else {
+          const emp = overrides[f.employee_id] || {};
+          const files = emp.knowledgeFiles || [];
+          if (!files.some((x) => x.id === f.id)) files.push(fileObj);
+          overrides[f.employee_id] = { ...emp, knowledgeFiles: files };
         }
-        overrides[f.employee_id] = { ...emp, knowledgeFiles: files };
       });
-      set({ employeeOverrides: overrides });
+      set({ employeeOverrides: overrides, sharedKnowledgeFiles: shared });
       saveToStorage(get());
     } catch (err) {
       console.error('[aiTeamStore] DB load failed:', err);

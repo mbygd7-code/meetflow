@@ -110,17 +110,20 @@ async function retrieveChunks(
   }
 }
 
-// 지식파일 요약 목록 불러오기 (Milo에는 짧은 메타만, 전문가에는 요약 전체)
+// 지식파일 요약 목록 불러오기 — 공통(employee_id='*') + 해당 직원 파일 모두 포함
 async function loadKnowledgeSummaries(supabase: any, employeeId: string): Promise<string> {
   try {
     const { data } = await supabase
       .from('ai_knowledge_files')
-      .select('name, summary')
-      .eq('employee_id', employeeId)
+      .select('name, summary, employee_id')
+      .or(`employee_id.eq.${employeeId},employee_id.eq.*`)
       .not('summary', 'is', null);
     if (!data?.length) return '';
     return data
-      .map((f: any) => `### ${f.name}\n${f.summary}`)
+      .map((f: any) => {
+        const prefix = f.employee_id === '*' ? '[공통] ' : '';
+        return `### ${prefix}${f.name}\n${f.summary}`;
+      })
       .join('\n\n');
   } catch {
     return '';
