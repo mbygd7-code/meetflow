@@ -45,8 +45,14 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
     recognition.onstart = () => { setIsListening(true); setError(null); };
     recognition.onend = () => { setIsListening(false); setInterim(''); };
     recognition.onerror = (e) => {
-      if (e.error === 'no-speech') return; // 무음은 무시
-      setError(`음성 인식 에러: ${e.error}`);
+      if (e.error === 'no-speech') return;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setError('마이크 권한이 필요합니다. 주소창 왼쪽 자물쇠 → 마이크 → 허용 후 새로고침하세요.');
+      } else if (e.error === 'network') {
+        setError('네트워크 연결을 확인하세요. Web Speech API는 온라인 상태가 필요합니다.');
+      } else {
+        setError(`음성 인식 에러: ${e.error}`);
+      }
       setIsListening(false);
     };
 
@@ -118,14 +124,19 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
 
         setInterim('인식 중...');
 
-        // Edge Function 호출
+        // Edge Function 호출 (JWT 포함)
         try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const headers = session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : {};
           const { data, error: fnError } = await supabase.functions.invoke('stt-recognize', {
             body: { audio: base64, language },
+            headers,
           });
           setInterim('');
           if (fnError) {
-            setError('STT 처리 실패');
+            setError('STT 처리 실패 — Edge Function 설정을 확인하세요');
             return;
           }
           if (data?.transcript) {

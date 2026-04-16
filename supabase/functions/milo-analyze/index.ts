@@ -94,7 +94,9 @@ ${preset || 'default'}
 위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (3~4문장).
 @Milo 직접 호출이 있다면 반드시 응답 (5~8문장).
 참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라 (예: "@명배영님, ...").
-응답이 필요 없다면 should_respond=false.`;
+응답이 필요 없다면 should_respond=false.
+절대로 자신을 3인칭으로 언급하지 마라. 자신에 대해서는 "제가", "저는"을 사용하라.
+다른 전문가에게 넘기는 것처럼 말하지 마라. 당신은 이미 호출된 전문가이다. 바로 분석 결과를 제시하라.`;
 
     // ── 웹 검색 (Google Custom Search) — 요청 시에만 실행 ──
     let searchSection = '';
@@ -150,7 +152,8 @@ ${preset || 'default'}
           }
         }
       } catch (e) {
-        console.error('[milo-analyze] Search error:', e);
+        // 크레딧 부족 등 에러 시 검색 없이 진행
+        console.error('[milo-analyze] Search error (skipping):', String(e).slice(0, 200));
       }
     }
 

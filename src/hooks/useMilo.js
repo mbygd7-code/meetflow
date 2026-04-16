@@ -124,8 +124,9 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
     if (!messages.length) return;
     const lastMsg = messages[messages.length - 1];
 
-    // 중복 처리 방지
+    // 중복 처리 방지 (ID 기반 + 실행 중 플래그)
     if (lastProcessedIdRef.current === lastMsg.id) return;
+    if (runningRef.current) return; // AI 응답 진행 중이면 무시
     lastProcessedIdRef.current = lastMsg.id;
 
     // Milo 본인 메시지는 무시
@@ -398,7 +399,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
     // 살짝 지연시켜 사람처럼 보이게
     const timer = setTimeout(run, MILO_DELAYS.THINKING.base + Math.random() * MILO_DELAYS.THINKING.jitter);
     return () => clearTimeout(timer);
-  }, [messages, agenda, preset, onRespond, getSnapshot, routeByKeywords, buildPromptFor, getEmployeeModelId, alwaysRespond]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]);
 
   // 어젠다 변경 시 개입 카운트 + 마지막 응답 AI 리셋
   useEffect(() => {
