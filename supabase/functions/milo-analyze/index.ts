@@ -81,22 +81,30 @@ ${transcript}
 ## 프리셋
 ${preset || 'default'}
 
-## 도메인 넘김 규칙 (중요!)
-- 자신의 전문 분야가 아닌 질문은 해당 전문가에게 넘겨라
-- 비주얼/이미지/디자인 → "노먼에게 확인해보겠습니다"
-- 법률/개인정보 → "코르프에게 확인해보겠습니다"
-- 데이터/지표 → "데밍에게 확인해보겠습니다"
-- 마케팅/브랜드 → "코틀러에게 확인해보겠습니다"
-- 교육/보육 → "프뢰벨에게 확인해보겠습니다"
-- 자신의 전문 분야만 간단히 코멘트하고 전문가 이름을 반드시 언급하여 넘겨라
+## 전문가 선별 (회의 지휘자 역할 — 매우 중요!)
+당신은 Milo일 때 회의 지휘자 역할을 한다. 대화를 분석해 **꼭 필요한 전문가 1~2명만** 선별하라.
+활성 전문가 풀:
+- kotler (코틀러): 마케팅, 브랜드, GTM, 캠페인
+- froebel (프뢰벨): 유아교육, 보육, 교육과정
+- gantt (간트): 프로젝트, 태스크, 일정, QA, 스프린트
+- norman (노먼): UI, UX, 디자인, 비주얼
+- korff (코르프): 법률, 개인정보, 약관, GDPR
+- deming (데밍): 데이터, KPI, 매출, 지표, 분석
+
+**선별 규칙**:
+- 명확한 단일 도메인 질문 → 1명만
+- 상반된 관점이나 보완이 필요한 경우 → 최대 2명
+- 전문가 개입이 불필요한 경우 (인사, 간단한 확인 등) → 빈 배열 []
+- **절대 3명 이상 선별 금지**
+- 애매하면 빈 배열
 
 ## 과제
-위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (3~4문장).
+위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (2~3문장).
 @Milo 직접 호출이 있다면 반드시 응답 (5~8문장).
-참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라 (예: "@명배영님, ...").
-응답이 필요 없다면 should_respond=false.
-절대로 자신을 3인칭으로 언급하지 마라. 자신에 대해서는 "제가", "저는"을 사용하라.
-다른 전문가에게 넘기는 것처럼 말하지 마라. 당신은 이미 호출된 전문가이다. 바로 분석 결과를 제시하라.`;
+참가자에게 질문할 때 반드시 @이름 형식으로 멘션하라.
+전문가가 필요하면 selected_specialists에 1~2명 ID 포함.
+응답이 필요 없으면 should_respond=false, selected_specialists=[].
+절대로 자신을 3인칭으로 언급하지 마라. "제가", "저는"을 사용하라.`;
 
     // ── 웹 검색 (Google Custom Search) — 요청 시에만 실행 ──
     let searchSection = '';
@@ -164,7 +172,7 @@ ${preset || 'default'}
     // 검색 결과를 userPrompt에 추가
     const finalUserPrompt = userPrompt + searchSection;
 
-    const JSON_FORMAT_INSTRUCTION = `\n\n## 응답 형식 (반드시 준수)\n반드시 순수 JSON만 응답하세요. 마크다운이나 설명 텍스트를 포함하지 마세요.\nresponse_text에는 회의 참가자에게 보여줄 깔끔한 메시지만 작성하세요. 웹 검색 결과가 있으면 관련 링크를 [제목](URL) 형식으로 자연스럽게 인용하세요.\nsearch_sources가 있으면 포함하세요.\n{\n  "should_respond": boolean,\n  "response_text": "응답 메시지",\n  "ai_type": "data" | "insight" | "question" | "summary" | "nudge",\n  "search_sources": [{"title": "...", "url": "...", "thumbnail": "..."}]\n}`;
+    const JSON_FORMAT_INSTRUCTION = `\n\n## 응답 형식 (반드시 준수)\n반드시 순수 JSON만 응답하세요. 마크다운이나 설명 텍스트를 포함하지 마세요.\nresponse_text에는 회의 참가자에게 보여줄 깔끔한 메시지만 작성하세요. 웹 검색 결과가 있으면 관련 링크를 [제목](URL) 형식으로 자연스럽게 인용하세요.\nMilo 역할일 때 선별한 전문가가 있으면 selected_specialists 배열에 ID를 포함하세요 (최대 2명).\n{\n  "should_respond": boolean,\n  "response_text": "응답 메시지",\n  "ai_type": "data" | "insight" | "question" | "summary" | "nudge",\n  "selected_specialists": ["kotler"],\n  "search_sources": [{"title": "...", "url": "...", "thumbnail": "..."}]\n}`;
 
     const response = await anthropic.messages.create({
       model,

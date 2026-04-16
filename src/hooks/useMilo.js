@@ -260,25 +260,27 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
           onRespond?.(result);
         }
 
-        // 밀로가 응답했든 직접 호출이든 — 전문가 순차 호출
+        // 밀로가 응답했든 직접 호출이든 — 전문가 선별 호출
         {
-          // 밀로 응답에서 전문가 멘션 감지 → specialists에 추가
-          if (result?.response_text) {
-            for (const [name, id] of Object.entries(EMPLOYEE_NAME_MAP)) {
-              if (result.response_text.includes(name) && !specialists.includes(id)) {
-                specialists.push(id);
-              }
-            }
+          // ── 지휘자 모델: Milo가 선별한 전문가만 호출 (최대 2명) ──
+          // directSpecialist(@멘션)이 있으면 그것만 사용
+          // 없으면 Milo 응답의 selected_specialists 사용
+          if (!directSpecialist) {
+            const miloSelected = (result?.selected_specialists || [])
+              .filter((id) => id && id !== 'drucker' && AI_EMPLOYEES.find((e) => e.id === id));
+            specialists = miloSelected.slice(0, 2); // 최대 2명
+          } else {
+            specialists = [directSpecialist].slice(0, 2);
           }
 
-          // 2단계: 라우팅된 전문가 AI 순차 호출 (최대 7명, 동적 추가 지원)
+          // 2단계: 선별된 전문가 순차 호출 (최대 2명, 체인 확장 없음)
           const calledSpecs = new Set();
           let specIdx = 0;
           const msgCountAtStart = messagesRef.current.length;
-          const specResponses = []; // 이전 전문가 응답 누적 (다음 전문가에게 전달)
+          const specResponses = [];
           const chainStart = Date.now();
-          const CHAIN_TIMEOUT = 45000; // 45초 타임아웃
-          while (specIdx < specialists.length && calledSpecs.size < 7) {
+          const CHAIN_TIMEOUT = 30000; // 30초 타임아웃 (2명이므로 축소)
+          while (specIdx < specialists.length && calledSpecs.size < 2) {
             // 체인 타임아웃
             if (Date.now() - chainStart > CHAIN_TIMEOUT) {
               console.warn('[useMilo] 전문가 체인 타임아웃 (45s)');
@@ -373,14 +375,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
                   ai_employee: specId,
                 });
 
-                // 전문가 응답에서 다른 전문가 멘션 → 추가 호출 대상에 추가
-                if (specResult.response_text) {
-                  for (const [name, id] of Object.entries(EMPLOYEE_NAME_MAP)) {
-                    if (specResult.response_text.includes(name) && !specialists.includes(id) && id !== specId) {
-                      specialists.push(id);
-                    }
-                  }
-                }
+                // 지휘자 모델: 전문가 응답 내 멘션으로 체인 확장하지 않음
+                // (Milo가 사전에 선별한 1~2명만 호출 완료 후 종료)
               }
             } catch (specErr) {
               console.error(`[useMilo] Specialist ${specId} error:`, specErr);
