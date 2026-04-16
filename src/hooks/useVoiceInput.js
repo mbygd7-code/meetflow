@@ -72,7 +72,13 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error('[useVoiceInput] start failed:', e);
+      setError(`음성 인식 시작 실패: ${e.message}`);
+      setIsListening(false);
+    }
   }, [language, onTranscript, onInterim]);
 
   const stopWebSpeech = useCallback(() => {

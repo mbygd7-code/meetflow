@@ -240,7 +240,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 {/* 마이크 */}
                 <button
                   onClick={isListening ? stopSTT : startSTT}
-                  disabled={disabled}
+                  disabled={disabled || !sttSupported}
                   className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:scale-110 ${
                     isListening
                       ? 'bg-status-error text-white shadow-status-error/40'
@@ -266,7 +266,8 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
               <p className="text-[10px] text-txt-muted">
                 {isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언'}
               </p>
-              {sttError && <p className="text-[9px] text-status-error">{sttError}</p>}
+              {sttError && <p className="text-xs text-status-error">{sttError}</p>}
+              {!sttSupported && <p className="text-xs text-status-error">이 브라우저에서 음성 인식이 지원되지 않습니다</p>}
             </div>
           )}
         </div>
