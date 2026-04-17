@@ -531,6 +531,108 @@ export const useAiTeamStore = create((set, get) => ({
     saveToStorage(get());
   },
 
+  // ── Google Docs RAG 인덱싱 — 동기화된 텍스트를 청킹+임베딩 ──
+  indexGoogleDocs: async (employeeId) => {
+    const overrides = get().employeeOverrides[employeeId] || {};
+    const content = typeof overrides.googleDocsSummary === 'object'
+      ? overrides.googleDocsSummary?.content || ''
+      : overrides.googleDocsSummary || '';
+    if (!content || content.length < 50) return; // 내용 너무 짧으면 스킵
+
+    const docs = overrides.googleSheetsId || [];
+    // deterministic fileId: 동일 문서 재인덱싱 시 기존 청크 덮어쓰기
+    const fileId = `gdoc_${employeeId}_${docs.map((d) => d.id).join('_').slice(0, 30) || 'all'}`;
+
+    // DB에 파일 레코드 upsert (있으면 content 업데이트)
+    if (SUPABASE_ENABLED) {
+      try {
+        const { data: existing } = await supabase
+          .from('ai_knowledge_files')
+          .select('id')
+          .eq('id', fileId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase.from('ai_knowledge_files').update({ content, size: content.length }).eq('id', fileId);
+        } else {
+          await supabase.from('ai_knowledge_files').insert({
+            id: fileId, employee_id: employeeId, name: `Google Docs (${docs.length}건)`,
+            content, size: content.length,
+          });
+        }
+
+        await processKnowledgeFile({ fileId, employeeId, content });
+        console.log(`[aiTeamStore] Google Docs indexed for ${employeeId}`);
+      } catch (err) {
+        console.error('[aiTeamStore] Google Docs indexing failed:', err);
+        throw err;
+      }
+    }
+
+    // 인덱싱 시점 기록
+    const cur = { ...get().employeeOverrides };
+    cur[employeeId] = { ...(cur[employeeId] || {}), googleDocsIndexedAt: new Date().toISOString() };
+    set({ employeeOverrides: cur });
+    saveToStorage(get());
+  },
+
+  // ── 기본 참조 문서 인덱싱 — public/docs/{filename} fetch → RAG ──
+  indexDefaultDoc: async (employeeId, filename) => {
+    const fileId = `default_${employeeId}_${filename}`;
+
+    try {
+      // public/docs/ 에서 파일 fetch
+      const res = await fetch(`/docs/${filename}`);
+      if (!res.ok) throw new Error(`Failed to fetch /docs/${filename}: ${res.status}`);
+      const content = await res.text();
+      if (!content || content.length < 20) throw new Error('File is empty');
+
+      if (SUPABASE_ENABLED) {
+        // DB upsert
+        const { data: existing } = await supabase
+          .from('ai_knowledge_files')
+          .select('id')
+          .eq('id', fileId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase.from('ai_knowledge_files').update({ content, size: content.length }).eq('id', fileId);
+        } else {
+          await supabase.from('ai_knowledge_files').insert({
+            id: fileId, employee_id: employeeId, name: filename,
+            content, size: content.length,
+          });
+        }
+
+        await processKnowledgeFile({ fileId, employeeId, content });
+        console.log(`[aiTeamStore] Default doc indexed: ${filename} for ${employeeId}`);
+      }
+
+      // 인덱싱 완료 목록에 추가
+      const cur = { ...get().employeeOverrides };
+      const emp = cur[employeeId] || {};
+      const indexed = new Set(emp.defaultDocsIndexed || []);
+      indexed.add(filename);
+      cur[employeeId] = { ...emp, defaultDocsIndexed: [...indexed] };
+      set({ employeeOverrides: cur });
+      saveToStorage(get());
+    } catch (err) {
+      console.error(`[aiTeamStore] Default doc indexing failed: ${filename}`, err);
+      throw err;
+    }
+  },
+
+  // ── 기본 참조 문서 일괄 인덱싱 ──
+  indexAllDefaultDocs: async (employeeId) => {
+    const emp = AI_EMPLOYEES.find((e) => e.id === employeeId);
+    if (!emp?.defaultMdFiles?.length) return;
+    for (const filename of emp.defaultMdFiles) {
+      try {
+        await get().indexDefaultDoc(employeeId, filename);
+      } catch { /* 개별 실패는 스킵하고 계속 */ }
+    }
+  },
+
   // 특정 AI에게 지식 파일 추가 (localStorage + Supabase + Contextual Retrieval 인덱싱)
   addKnowledgeFile: async (employeeId, file) => {
     const fileWithStatus = { ...file, processed: false }; // 인덱싱 전 상태

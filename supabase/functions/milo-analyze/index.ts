@@ -209,25 +209,32 @@ serve(async (req) => {
     };
     const transcript = buildTieredTranscript(messages || []);
 
-    // 미리 요약된 Google 문서 데이터 (클라이언트에서 동기화됨) — 실용적 제한
+    // 미리 요약된 Google 문서 데이터 (클라이언트에서 동기화됨)
+    // skipGoogleDocsFullInject=true (RAG 인덱싱 완료) → 요약 1,500자만 주입 (상세는 RAG 검색)
+    // skipGoogleDocsFullInject=false/undefined → 기존 방식 (15,000자 통째 주입)
     let sheetsSection = '';
+    const skipFullInject = miloSettings?.skipGoogleDocsFullInject;
     if (googleDocsSummary) {
       const isObj = typeof googleDocsSummary === 'object' && googleDocsSummary !== null;
       let content = isObj ? (googleDocsSummary.content || '') : googleDocsSummary;
       const lastUpdated = isObj ? googleDocsSummary.lastUpdated : null;
       const schema = isObj ? googleDocsSummary.schema : null;
 
-      // 최대 15,000자 (~5,000 토큰) — 실제 대시보드/보고서 반영 가능한 수준
-      const MAX_SHEETS_CHARS = 15000;
-      const truncated = content.length > MAX_SHEETS_CHARS;
-      if (truncated) content = content.slice(0, MAX_SHEETS_CHARS) + '\n[...이하 생략, 필요 시 동기화 상세 확인]';
+      // RAG 인덱싱 완료 시: 요약만 (1,500자) — 상세는 ai_knowledge_chunks에서 검색
+      // 미완료 시: 기존 방식 (15,000자)
+      const maxChars = skipFullInject ? 1500 : 15000;
+      const truncated = content.length > maxChars;
+      if (truncated) content = content.slice(0, maxChars) + (skipFullInject
+        ? '\n[...상세 데이터는 RAG 의미 검색으로 필요 시 자동 제공됩니다]'
+        : '\n[...이하 생략, 필요 시 동기화 상세 확인]');
 
       const freshnessNote = lastUpdated
         ? `마지막 갱신: ${lastUpdated} (이후 데이터는 반영되지 않음)`
         : '갱신 시점 불명';
       const schemaLine = schema ? `스키마: ${schema}\n` : '';
+      const modeNote = skipFullInject ? ' (요약 모드 — 상세는 RAG 검색)' : '';
 
-      sheetsSection = `## 참조 데이터 (사전 동기화)\n${freshnessNote}\n${schemaLine}이 데이터는 실제 DB/문서에서 동기화된 것입니다. 이 수치를 근거로 답변하세요. 단, 최신 데이터가 필요하면 "갱신이 필요합니다"라고 말하세요.\n\n${content}\n\n`;
+      sheetsSection = `## 참조 데이터${modeNote}\n${freshnessNote}\n${schemaLine}이 데이터는 실제 DB/문서에서 동기화된 것입니다. 이 수치를 근거로 답변하세요. 단, 최신 데이터가 필요하면 "갱신이 필요합니다"라고 말하세요.\n\n${content}\n\n`;
     }
     // 참가자 목록 (AI가 @멘션할 수 있도록)
     const participantList = (context?.participants || []).length > 0

@@ -527,10 +527,150 @@ function GoogleDocsInput({ employeeId, value, onChange }) {
             )}
           </button>
           {overrides.googleDocsSummary && (
-            <p className="text-[9px] text-status-success mt-1">요약 데이터 저장됨 ({(overrides.googleDocsSummary.length / 1024).toFixed(1)}KB)</p>
+            <p className="text-[9px] text-status-success mt-1">요약 데이터 저장됨 ({(typeof overrides.googleDocsSummary === 'string' ? overrides.googleDocsSummary.length : JSON.stringify(overrides.googleDocsSummary).length) / 1024 | 0}KB)</p>
+          )}
+          {/* RAG 인덱싱 버튼 — 동기화된 데이터를 청킹+임베딩하여 의미 검색 활성화 */}
+          {overrides.googleDocsSummary && (
+            <GoogleDocsIndexButton employeeId={employeeId} />
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Google Docs RAG 인덱싱 버튼 ──
+function GoogleDocsIndexButton({ employeeId }) {
+  const store = useAiTeamStore();
+  const overrides = store.employeeOverrides[employeeId] || {};
+  const [indexing, setIndexing] = useState(false);
+  const [result, setResult] = useState(null); // 'success' | 'error'
+
+  const daysSinceIndex = overrides.googleDocsIndexedAt
+    ? Math.floor((Date.now() - new Date(overrides.googleDocsIndexedAt).getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+  const needsReindex = daysSinceIndex === null || daysSinceIndex >= 7;
+
+  const handleIndex = async () => {
+    setIndexing(true);
+    setResult(null);
+    try {
+      await store.indexGoogleDocs(employeeId);
+      setResult('success');
+      setTimeout(() => setResult(null), 3000);
+    } catch {
+      setResult('error');
+      setTimeout(() => setResult(null), 3000);
+    } finally {
+      setIndexing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 mt-1.5">
+      <button
+        onClick={handleIndex}
+        disabled={indexing}
+        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors disabled:opacity-50 ${
+          result === 'success'
+            ? 'bg-status-success/15 text-status-success border border-status-success/30'
+            : result === 'error'
+              ? 'bg-status-error/15 text-status-error border border-status-error/30'
+              : needsReindex
+                ? 'bg-brand-orange/10 text-brand-orange border border-brand-orange/20 hover:bg-brand-orange/20'
+                : 'bg-bg-tertiary text-txt-secondary border border-border-subtle hover:bg-bg-primary'
+        }`}
+      >
+        {indexing ? (
+          <><Loader2 size={10} className="animate-spin" />RAG 인덱싱 중...</>
+        ) : result === 'success' ? (
+          'RAG 인덱싱 완료'
+        ) : result === 'error' ? (
+          'RAG 인덱싱 실패'
+        ) : needsReindex ? (
+          'RAG 인덱싱 (권장)'
+        ) : (
+          'RAG 재인덱싱'
+        )}
+      </button>
+      {overrides.googleDocsIndexedAt && (
+        <span className="text-[9px] text-txt-muted shrink-0 whitespace-nowrap">
+          {daysSinceIndex === 0 ? '오늘' : `${daysSinceIndex}일 전`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── 기본 참조 문서 패널 — 1클릭 인덱싱 ──
+function DefaultDocsPanel({ employee }) {
+  const store = useAiTeamStore();
+  const overrides = store.employeeOverrides[employee.id] || {};
+  const indexed = new Set(overrides.defaultDocsIndexed || []);
+  const [loadingFile, setLoadingFile] = useState(null);
+  const [loadingAll, setLoadingAll] = useState(false);
+
+  const handleLoadOne = async (filename) => {
+    setLoadingFile(filename);
+    try {
+      await store.indexDefaultDoc(employee.id, filename);
+    } catch (err) {
+      console.error('[DefaultDocsPanel]', err);
+    } finally {
+      setLoadingFile(null);
+    }
+  };
+
+  const handleLoadAll = async () => {
+    setLoadingAll(true);
+    try {
+      await store.indexAllDefaultDocs(employee.id);
+    } catch {} finally {
+      setLoadingAll(false);
+    }
+  };
+
+  const allIndexed = employee.defaultMdFiles.every((f) => indexed.has(f));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[11px] text-txt-muted font-medium">기본 참조 문서</p>
+        {!allIndexed && (
+          <button
+            onClick={handleLoadAll}
+            disabled={loadingAll}
+            className="text-[9px] text-brand-purple hover:underline disabled:opacity-50"
+          >
+            {loadingAll ? '로드 중...' : '전체 로드'}
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {employee.defaultMdFiles.map((f) => {
+          const isIndexed = indexed.has(f);
+          const isLoading = loadingFile === f;
+          return (
+            <button
+              key={f}
+              onClick={() => !isIndexed && !isLoading && handleLoadOne(f)}
+              disabled={isIndexed || isLoading}
+              className={`px-2 py-0.5 rounded text-[10px] flex items-center gap-1 transition-colors ${
+                isIndexed
+                  ? 'bg-status-success/10 border border-status-success/20 text-status-success'
+                  : isLoading
+                    ? 'bg-brand-purple/10 border border-brand-purple/20 text-brand-purple animate-pulse'
+                    : 'bg-bg-primary border border-border-subtle text-txt-muted hover:border-brand-purple/40 hover:text-brand-purple cursor-pointer'
+              }`}
+              title={isIndexed ? 'RAG 인덱싱 완료' : '클릭하여 로드 + 인덱싱'}
+            >
+              <FileText size={9} />
+              {f}
+              {isIndexed && <span className="ml-0.5">✓</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -585,17 +725,8 @@ function ExpandedEmployeePanel({ employee }) {
         </div>
       </div>
 
-      {/* 기본 MD 파일 목록 */}
-      <div>
-        <p className="text-[11px] text-txt-muted mb-1.5 font-medium">기본 참조 문서</p>
-        <div className="flex flex-wrap gap-1">
-          {employee.defaultMdFiles.map((f) => (
-            <span key={f} className="px-2 py-0.5 rounded bg-bg-primary border border-border-subtle text-[10px] text-txt-muted flex items-center gap-1">
-              <FileText size={9} /> {f}
-            </span>
-          ))}
-        </div>
-      </div>
+      {/* 기본 MD 파일 목록 — 클릭으로 RAG 인덱싱 */}
+      <DefaultDocsPanel employee={employee} />
 
       {/* 업로드된 커스텀 지식 파일 */}
       <div>

@@ -291,11 +291,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
             miloPrompt += '\n\n## 직접 호출 모드 (최우선)\n사용자가 당신을 직접 @밀로(또는 "밀로 ...") 로 호출했습니다. **반드시 should_respond: true로 응답하세요**. 질문이 모호하면 "무엇을 도와드릴까요?" 처럼 되물어 명확히 하세요. "침묵도 선택지" 원칙은 이 경우 적용되지 않습니다.';
           }
           const miloModelId = getEmployeeModelId('milo');
+          const miloOverrides = getEmployeeOverrides['milo'] || {};
           const miloSettings = {
             ...getSnapshot(),
             systemPromptOverride: miloPrompt,
             aiEmployee: 'milo',
             apiModelId: miloModelId,
+            skipGoogleDocsFullInject: !!miloOverrides.googleDocsIndexedAt, // RAG 인덱싱 완료 시 요약만 주입
           };
           // 참가자 이름 추출 (AI 멘션용)
           const humanNames = [...new Set(
@@ -308,7 +310,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
             context: { routedEmployees, participants: humanNames },
             miloSettings,
             compressedContext: compressedContextRef.current,
-            googleDocsSummary: (getEmployeeOverrides['milo'] || {}).googleDocsSummary || null,
+            googleDocsSummary: miloOverrides.googleDocsSummary || null,
             skipKnowledge: true, // Milo는 지휘자 역할 — retrieval 생략 (토큰 절약)
             signal: chainAbort.signal,
           });
@@ -414,11 +416,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                       ? `\n\n## 이미 언급된 포인트 (반복 금지)\n${recentAiMsgs.join('\n')}\n위 내용은 이미 다른 AI가 말했습니다. 반복하지 말고 **새로운 관점**만 제시하세요.`
                       : '';
                     const forceRespondPrompt = specPrompt + `\n\n## 중요: 당신은 ${caller}에 의해 직접 호출되었습니다. 반드시 should_respond: true로 응답하고, 당신의 전문 분야(${emp?.role})에서 구체적인 자문을 제공하세요. 다른 전문가와 중복되지 않는 고유한 관점을 제시하세요.${alreadyMentioned}`;
+                    const specOverrides = getEmployeeOverrides[specId] || {};
                     const specSettings = {
                       ...getSnapshot(),
                       systemPromptOverride: forceRespondPrompt,
                       aiEmployee: specId,
                       apiModelId: specModelId,
+                      skipGoogleDocsFullInject: !!specOverrides.googleDocsIndexedAt,
                     };
                     // 밀로 응답만 컨텍스트에 포함 (병렬 호출이므로 다른 전문가 응답은 모름)
                     const extraContext = [];
@@ -437,7 +441,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                       context: { routedEmployees, participants: humanNames },
                       miloSettings: specSettings,
                       compressedContext: compressedContextRef.current,
-                      googleDocsSummary: (getEmployeeOverrides[specId] || {}).googleDocsSummary || null,
+                      googleDocsSummary: specOverrides.googleDocsSummary || null,
                       signal: abortCtrl.signal,
                     });
                     if (specResult && !specResult.should_respond && specResult.response_text) {
