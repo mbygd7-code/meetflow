@@ -46,6 +46,7 @@ function makeMockSeed(meetingId) {
         '참고로 지난주 온보딩 이탈률이 34%였고, 주요 이탈 지점은 3단계(팀 초대)였어요. A/B 테스트 설계 시 이 지점을 우선 보시면 인사이트가 빠를 것 같습니다.',
       is_ai: true,
       ai_type: 'data',
+      ai_employee: 'milo',
       source: 'web',
       created_at: new Date(now - 5 * 60 * 1000).toISOString(),
     },
@@ -177,18 +178,21 @@ export function useRealtimeMessages(meetingId) {
         return newMsg;
       }
 
-      // Supabase INSERT — ai_employee 컬럼이 DB에 없으므로 제외
+      // Supabase INSERT — ai_employee 포함
+      const insertData = {
+        meeting_id: meetingId,
+        agenda_id: agendaId,
+        user_id: isAi ? null : user?.id,
+        content: content.trim(),
+        is_ai: isAi,
+        ai_type: aiType,
+        source,
+      };
+      if (isAi && aiEmployee) insertData.ai_employee = aiEmployee;
+
       const { data, error } = await supabase
         .from('messages')
-        .insert({
-          meeting_id: meetingId,
-          agenda_id: agendaId,
-          user_id: isAi ? null : user?.id,
-          content: content.trim(),
-          is_ai: isAi,
-          ai_type: aiType,
-          source,
-        })
+        .insert(insertData)
         .select('*, user:users(id,name,avatar_color)')
         .single();
       if (error) {
@@ -196,9 +200,8 @@ export function useRealtimeMessages(meetingId) {
         return null;
       }
       // Realtime이 지연되거나 미작동할 수 있으므로 즉시 로컬 state에 추가
-      // ai_employee는 DB에 없으므로 로컬에서 보강
       if (data) {
-        const enriched = isAi ? { ...data, ai_employee: aiEmployee || 'milo', search_sources: searchSources || undefined } : data;
+        const enriched = isAi ? { ...data, ai_employee: data.ai_employee || aiEmployee || 'milo', search_sources: searchSources || undefined } : data;
         setMessages((prev) => {
           if (prev.some((m) => m.id === enriched.id)) return prev;
           return [...prev, enriched];

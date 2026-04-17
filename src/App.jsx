@@ -17,7 +17,6 @@ import SummariesPage from '@/pages/SummariesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
-import TeamAnalyticsPage from '@/pages/TeamAnalyticsPage';
 import TokenUsagePage from '@/pages/TokenUsagePage';
 
 function RouteGuard({ children, requireAdmin = false }) {
@@ -87,7 +86,6 @@ export default function App() {
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/analytics" element={<RouteGuard requireAdmin><TeamAnalyticsPage /></RouteGuard>} />
         <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
         <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />
         <Route path="/admin/tokens" element={<RouteGuard requireAdmin><TokenUsagePage /></RouteGuard>} />

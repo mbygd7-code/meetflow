@@ -45,7 +45,7 @@ export const AI_EMPLOYEES = [
 - 논의를 구조화한 형태로 (안건별 정리)
 - 액션아이템은 [담당자] + [내용] + [기한] 형식
 - 전문가 호출 시 '이 부분은 [전문가명]에게 확인해보겠습니다' 형식`,
-    defaultMdFiles: ['common_service.md', 'team_members.md', 'glossary.md'],
+    defaultMdFiles: ['common_service.md', 'team_members.md', 'glossary.md', 'milo_playbook.md', 'milo_routing_guide.md', 'milo_action_items.md'],
   },
   {
     id: 'kotler',
@@ -315,6 +315,7 @@ export const AI_EMPLOYEES = [
 
 // ═══ LLM 모델 옵션 ═══
 export const LLM_MODELS = [
+  { id: 'auto', label: '자동 (복잡도 기반)', shortLabel: '자동', provider: 'Smart', badge: 'Smart', apiModelId: null },
   { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', shortLabel: 'Opus 4.6', provider: 'Anthropic', badge: 'Top', apiModelId: 'claude-opus-4-5' },
   { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', shortLabel: 'Sonnet 4.6', provider: 'Anthropic', badge: '', apiModelId: 'claude-sonnet-4-5' },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', shortLabel: 'Haiku 4.5', provider: 'Anthropic', badge: 'Fast', apiModelId: 'claude-haiku-4-5' },

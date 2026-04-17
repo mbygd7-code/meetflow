@@ -393,7 +393,21 @@ ${preset || 'default'}
     // targetEmployeeId 는 함수 상단에서 선언됨
     let retrievedBlock = '';
     let knowledgeSummariesBlock = '';
-    const shouldRetrieve = retrievalEnabled && isSpecialistCall && !skipKnowledge && targetEmployeeId;
+    // RAG 검색 조건: Milo/전문가 무관하게 skipKnowledge=false이면 검색
+    // Milo 자동 개입: skipKnowledge=true (라우팅 최적화) → 검색 생략
+    // Milo @멘션 or 전문가 호출: skipKnowledge=false → 검색 수행
+    const shouldRetrieve = retrievalEnabled && !skipKnowledge && targetEmployeeId;
+
+    // ── DEBUG: RAG 검색 조건 추적 ──
+    console.log(JSON.stringify({
+      type: 'rag_debug',
+      requestId,
+      retrievalEnabled,
+      skipKnowledge,
+      targetEmployeeId,
+      shouldRetrieve,
+      isSpecialistCall,
+    }));
 
     if (shouldRetrieve && supabase) {
       // 검색 쿼리: 마지막 사용자 메시지 + 어젠다 타이틀
@@ -404,25 +418,33 @@ ${preset || 'default'}
 
       if (queryText.trim()) {
         const [chunks, summaries] = await Promise.all([
-          retrieveChunks(supabase, openaiKey!, targetEmployeeId, queryText, 3),
+          retrieveChunks(supabase, openaiKey!, targetEmployeeId, queryText, 5),
           loadKnowledgeSummaries(supabase, targetEmployeeId),
         ]);
 
         if (chunks.length > 0) {
-          retrievedBlock = '## 관련 지식 (의미 검색 결과 — 현재 논의와 가장 연관 있는 청크)\n' +
-            chunks.map((c, i) => `### 청크 ${i + 1}\n${c.original_text}`).join('\n\n');
+          retrievedBlock = `## 📚 참조 지식 (회사 공식 자료 — 이 내용만이 진실)
+
+🚨 **절대 규칙 (위반 시 심각한 오류)**:
+1. **명단·목록 질문 시**: 아래 자료에 있는 이름만 나열하라. 자료에 없는 이름을 추가하면 안 된다.
+2. **인원 수 질문 시**: 아래 자료에서 직접 세어 답하라. 추측하지 마라.
+3. **확실하지 않으면**: "자료에 해당 정보가 없습니다"라고 답하라.
+4. **기억·상식 사용 금지**: 아래 자료에 없는 내용은 존재하지 않는다고 간주하라.
+5. **이름·직함·이메일 등 고유명사**: 반드시 자료의 표기를 그대로 사용하라 (철자 변경 금지).
+
+---
+
+${chunks.map((c, i) => `### 청크 ${i + 1}\n${c.original_text}`).join('\n\n')}
+
+---
+
+다시 강조: 위 자료에 명시되지 않은 사람·숫자·사실은 **존재하지 않는다**. 답변에 포함하지 마라.`;
           console.log('[milo-analyze] Retrieved chunks:', chunks.length, 'for', targetEmployeeId);
         }
         if (summaries) {
-          knowledgeSummariesBlock = `## 등록된 지식 문서 요약\n${summaries}`;
+          knowledgeSummariesBlock = `## 등록된 지식 문서 목록 (참고만, 실제 내용은 위 '참조 지식' 확인)\n${summaries}`;
         }
       }
-    }
-
-    // Milo 호출 시에도 지식 요약은 제공 (어떤 전문가를 호출할지 판단용, 경량)
-    if (!isSpecialistCall && !skipKnowledge && retrievalEnabled && supabase && targetEmployeeId) {
-      const summaries = await loadKnowledgeSummaries(supabase, targetEmployeeId);
-      if (summaries) knowledgeSummariesBlock = `## 등록된 지식 문서 요약 (전문가 선별 참고용)\n${summaries}`;
     }
 
     // ── Tool use로 구조화 출력 강제 (JSON 파싱 fragility 제거) ──

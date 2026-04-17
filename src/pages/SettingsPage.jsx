@@ -223,7 +223,9 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
   const fileCount = overrides.knowledgeFiles?.length || 0;
   // lg 미만: 짧은 라벨(예: "Haiku 4.5"), lg+: 전체 라벨(예: "Claude Haiku 4.5")
   const isCompact = useIsCompact(1024);
-  const currentModel = LLM_MODELS.find((m) => m.id === (overrides.model || 'claude-sonnet-4-6'));
+  // 밀로는 라우터 역할이므로 '자동' 기본, 전문가는 Sonnet 기본
+  const defaultModelId = employee.id === 'milo' ? 'auto' : 'claude-sonnet-4-6';
+  const currentModel = LLM_MODELS.find((m) => m.id === (overrides.model || defaultModelId));
 
   return (
     <div
@@ -255,7 +257,7 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             {/* ▶ 데스크톱(md+)에서 인라인 표시. 좁은 뷰포트에선 shortLabel 사용 */}
             <select
-              value={overrides.model || 'claude-sonnet-4-6'}
+              value={overrides.model || defaultModelId}
               onChange={(e) => store.setEmployeeModel(employee.id, e.target.value)}
               onClick={(e) => e.stopPropagation()}
               title={currentModel?.label || '모델 선택'}
@@ -295,7 +297,7 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
           onClick={(e) => e.stopPropagation()}
         >
           <select
-            value={overrides.model || 'claude-sonnet-4-6'}
+            value={overrides.model || defaultModelId}
             onChange={(e) => store.setEmployeeModel(employee.id, e.target.value)}
             title={currentModel?.label || '모델 선택'}
             className="flex-1 min-w-0 bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1.5 text-[11px] text-txt-secondary focus:outline-none focus:border-brand-purple/50 cursor-pointer appearance-none pr-7 overflow-hidden text-ellipsis whitespace-nowrap"
@@ -653,20 +655,25 @@ function DefaultDocsPanel({ employee }) {
           return (
             <button
               key={f}
-              onClick={() => !isIndexed && !isLoading && handleLoadOne(f)}
-              disabled={isIndexed || isLoading}
-              className={`px-2 py-0.5 rounded text-[10px] flex items-center gap-1 transition-colors ${
-                isIndexed
-                  ? 'bg-status-success/10 border border-status-success/20 text-status-success'
-                  : isLoading
-                    ? 'bg-brand-purple/10 border border-brand-purple/20 text-brand-purple animate-pulse'
+              onClick={() => !isLoading && handleLoadOne(f)}
+              disabled={isLoading}
+              className={`group/doc px-2 py-0.5 rounded text-[10px] flex items-center gap-1 transition-colors ${
+                isLoading
+                  ? 'bg-brand-purple/10 border border-brand-purple/20 text-brand-purple animate-pulse'
+                  : isIndexed
+                    ? 'bg-status-success/10 border border-status-success/20 text-status-success hover:bg-brand-purple/10 hover:border-brand-purple/30 hover:text-brand-purple cursor-pointer'
                     : 'bg-bg-primary border border-border-subtle text-txt-muted hover:border-brand-purple/40 hover:text-brand-purple cursor-pointer'
               }`}
-              title={isIndexed ? 'RAG 인덱싱 완료' : '클릭하여 로드 + 인덱싱'}
+              title={isLoading ? '로드 중...' : isIndexed ? '인덱싱 완료 (클릭하여 재인덱싱)' : '클릭하여 로드 + 인덱싱'}
             >
               <FileText size={9} />
               {f}
-              {isIndexed && <span className="ml-0.5">✓</span>}
+              {isIndexed && !isLoading && (
+                <>
+                  <span className="ml-0.5 group-hover/doc:hidden">✓</span>
+                  <span className="ml-0.5 hidden group-hover/doc:inline">↻</span>
+                </>
+              )}
             </button>
           );
         })}

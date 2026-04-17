@@ -6,7 +6,6 @@ import {
   FileText,
   Settings,
   Shield,
-  BarChart3,
   LogOut,
   X,
   Sparkles,
@@ -20,7 +19,6 @@ function getNavItems(isAdmin) {
     { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
     ...(isAdmin ? [
       { to: '/admin', label: '관리자', icon: Shield },
-      { to: '/analytics', label: '팀 분석', icon: BarChart3 },
     ] : []),
     { to: '/meetings', label: '회의', icon: MessageSquare },
     { to: '/tasks', label: '태스크', icon: CheckSquare },

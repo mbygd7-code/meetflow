@@ -311,7 +311,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
             miloSettings,
             compressedContext: compressedContextRef.current,
             googleDocsSummary: miloOverrides.googleDocsSummary || null,
-            skipKnowledge: true, // Milo는 지휘자 역할 — retrieval 생략 (토큰 절약)
+            skipKnowledge: !mentioned, // @밀로 직접 호출 시에만 지식 검색 활성화 (자동 개입은 라우팅만)
             signal: chainAbort.signal,
           });
           if (chainAbort.signal.aborted) return; // 어젠다 변경으로 취소됨
