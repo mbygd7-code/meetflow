@@ -18,6 +18,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 import TeamAnalyticsPage from '@/pages/TeamAnalyticsPage';
+import TokenUsagePage from '@/pages/TokenUsagePage';
 
 function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/analytics" element={<RouteGuard requireAdmin><TeamAnalyticsPage /></RouteGuard>} />
         <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
         <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />
+        <Route path="/admin/tokens" element={<RouteGuard requireAdmin><TokenUsagePage /></RouteGuard>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -17,7 +17,7 @@ import { useMeetingStore } from '@/stores/meetingStore';
 
 function getNavItems(isAdmin) {
   const items = [
-    { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
+    { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
     ...(isAdmin ? [
       { to: '/admin', label: '관리자', icon: Shield },
       { to: '/analytics', label: '팀 분석', icon: BarChart3 },

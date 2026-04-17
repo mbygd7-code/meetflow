@@ -123,9 +123,11 @@ export function createRequestContext(meetingId, employeeId) {
 
 /**
  * AI 호출 결과를 구조화 로그로 기록 + 메트릭 누적
+ * result._usage가 있으면 토큰 데이터도 함께 누적
  */
 export function logAiCall(ctx, result, error) {
   const elapsed = Math.round(performance.now() - ctx.startedAt);
+  const usage = result?._usage || null;
   const entry = {
     requestId: ctx.requestId,
     employee: ctx.employeeId,
@@ -133,6 +135,12 @@ export function logAiCall(ctx, result, error) {
     responded: result?.should_respond ?? null,
     error: error ? (error.message || String(error)).slice(0, 120) : null,
     timestamp: Date.now(),
+    // 토큰 데이터 (Edge Function이 _usage 반환 시)
+    model: usage?.model || null,
+    inputTokens: usage?.inputTokens || 0,
+    outputTokens: usage?.outputTokens || 0,
+    cacheRead: usage?.cacheRead || 0,
+    cacheCreate: usage?.cacheCreate || 0,
   };
 
   if (error) {
@@ -146,16 +154,47 @@ export function logAiCall(ctx, result, error) {
 }
 
 /**
- * sessionStorage에 호출 메트릭을 누적한다 (간이 대시보드용)
+ * sessionStorage에 호출 메트릭을 누적한다 (간이 대시보드 + 토큰 추적)
  */
 const METRICS_KEY = 'meetflow_ai_metrics';
 function accumulateMetrics(entry) {
   try {
     const raw = sessionStorage.getItem(METRICS_KEY);
-    const metrics = raw ? JSON.parse(raw) : { totalCalls: 0, totalErrors: 0, totalMs: 0, calls: [] };
+    const metrics = raw ? JSON.parse(raw) : {
+      totalCalls: 0, totalErrors: 0, totalMs: 0,
+      totalInputTokens: 0, totalOutputTokens: 0, totalCacheRead: 0, totalCacheCreate: 0,
+      byEmployee: {}, byModel: {},
+      calls: [],
+    };
+
     metrics.totalCalls++;
     if (entry.error) metrics.totalErrors++;
     metrics.totalMs += entry.elapsed;
+
+    // 토큰 누적
+    metrics.totalInputTokens = (metrics.totalInputTokens || 0) + (entry.inputTokens || 0);
+    metrics.totalOutputTokens = (metrics.totalOutputTokens || 0) + (entry.outputTokens || 0);
+    metrics.totalCacheRead = (metrics.totalCacheRead || 0) + (entry.cacheRead || 0);
+    metrics.totalCacheCreate = (metrics.totalCacheCreate || 0) + (entry.cacheCreate || 0);
+
+    // 직원별 집계
+    if (entry.employee) {
+      const emp = metrics.byEmployee[entry.employee] || { calls: 0, inputTokens: 0, outputTokens: 0 };
+      emp.calls++;
+      emp.inputTokens += entry.inputTokens || 0;
+      emp.outputTokens += entry.outputTokens || 0;
+      metrics.byEmployee[entry.employee] = emp;
+    }
+
+    // 모델별 집계
+    if (entry.model) {
+      const mdl = metrics.byModel[entry.model] || { calls: 0, inputTokens: 0, outputTokens: 0 };
+      mdl.calls++;
+      mdl.inputTokens += entry.inputTokens || 0;
+      mdl.outputTokens += entry.outputTokens || 0;
+      metrics.byModel[entry.model] = mdl;
+    }
+
     // 최근 50개만 유지
     metrics.calls.push(entry);
     if (metrics.calls.length > 50) metrics.calls = metrics.calls.slice(-50);
@@ -171,11 +210,21 @@ export function getMetricsSummary() {
     const raw = sessionStorage.getItem(METRICS_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw);
+    const totalTokens = (m.totalInputTokens || 0) + (m.totalOutputTokens || 0);
+    const cacheRate = (m.totalInputTokens || 0) > 0
+      ? (((m.totalCacheRead || 0) / m.totalInputTokens) * 100).toFixed(1) + '%'
+      : '0%';
     return {
       totalCalls: m.totalCalls,
       totalErrors: m.totalErrors,
       errorRate: m.totalCalls > 0 ? ((m.totalErrors / m.totalCalls) * 100).toFixed(1) + '%' : '0%',
       avgLatency: m.totalCalls > 0 ? Math.round(m.totalMs / m.totalCalls) + 'ms' : '0ms',
+      totalTokens,
+      totalInputTokens: m.totalInputTokens || 0,
+      totalOutputTokens: m.totalOutputTokens || 0,
+      cacheRate,
+      byEmployee: m.byEmployee || {},
+      byModel: m.byModel || {},
       recentCalls: m.calls.slice(-10),
     };
   } catch {

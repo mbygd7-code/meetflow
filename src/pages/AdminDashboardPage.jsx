@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight, Sparkles } from 'lucide-react';
+import { useOutletContext, Link } from 'react-router-dom';
+import { Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight, Sparkles, Coins } from 'lucide-react';
 import { Card, MetricCard, Badge, SectionPanel } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -95,16 +95,25 @@ export default function AdminDashboardPage() {
       <div className="space-y-3">
 
         {/* 헤더 */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-brand-purple/15 flex items-center justify-center">
-            <Shield size={20} className="text-brand-purple" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-brand-purple/15 flex items-center justify-center">
+              <Shield size={20} className="text-brand-purple" />
+            </div>
+            <div>
+              {pageTitle && (
+                <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-0.5">{pageTitle}</h2>
+              )}
+              <p className="text-sm text-txt-secondary">팀 운영 현황과 직원 평가를 한눈에 확인하세요</p>
+            </div>
           </div>
-          <div>
-            {pageTitle && (
-              <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-0.5">{pageTitle}</h2>
-            )}
-            <p className="text-sm text-txt-secondary">팀 운영 현황과 직원 평가를 한눈에 확인하세요</p>
-          </div>
+          <Link
+            to="/admin/tokens"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/20 hover:bg-brand-purple/20 transition-colors"
+          >
+            <Coins size={14} />
+            <span className="hidden md:inline">토큰 관리</span>
+          </Link>
         </div>
 
         {/* ═══ 섹션 1: 전체 메트릭 ═══ */}

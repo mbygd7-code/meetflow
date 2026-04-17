@@ -562,17 +562,55 @@ ${preset || 'default'}
     const toolUseBlock = response.content.find((b: any) => b.type === 'tool_use');
     const result = toolUseBlock?.input || { should_respond: false, response_text: '', ai_type: 'nudge' };
 
+    // ── DB 영속화: 사용량 로그 저장 (await — 신뢰 보장) ──
+    const usageLog = {
+      request_id: requestId,
+      employee_id: targetEmployeeId || 'milo',
+      model,
+      input_tokens: usage?.input_tokens || 0,
+      output_tokens: usage?.output_tokens || 0,
+      cache_read_tokens: usage?.cache_read_input_tokens || 0,
+      cache_create_tokens: usage?.cache_creation_input_tokens || 0,
+      retries,
+      elapsed_ms: elapsed,
+      chunks_used: retrievedBlock ? retrievedBlock.split('### 청크').length - 1 : 0,
+    };
+    if (supabase) {
+      await supabase.from('ai_usage_logs').insert(usageLog).then(({ error: logErr }) => {
+        if (logErr) console.warn('[usage_log] DB insert failed:', logErr.message);
+      });
+    }
+
+    // 클라이언트 harness 메트릭용 _usage 필드 추가
+    result._usage = {
+      model,
+      inputTokens: usageLog.input_tokens,
+      outputTokens: usageLog.output_tokens,
+      cacheRead: usageLog.cache_read_tokens,
+      cacheCreate: usageLog.cache_create_tokens,
+    };
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
     const elapsed = typeof startMs !== 'undefined' ? Date.now() - startMs : 0;
+    const reqId = typeof requestId !== 'undefined' ? requestId : 'unknown';
     console.error(JSON.stringify({
-      type: 'ai_error',
-      requestId: typeof requestId !== 'undefined' ? requestId : 'unknown',
-      error: String(err).slice(0, 300),
-      elapsed,
+      type: 'ai_error', requestId: reqId,
+      error: String(err).slice(0, 300), elapsed,
     }));
+
+    // 에러도 DB에 기록 (디버깅 + 에러율 추적)
+    if (typeof supabase !== 'undefined' && supabase) {
+      const empId = typeof targetEmployeeId !== 'undefined' ? targetEmployeeId : 'unknown';
+      const mdl = typeof model !== 'undefined' ? model : 'unknown';
+      supabase.from('ai_usage_logs').insert({
+        request_id: reqId, employee_id: empId, model: mdl,
+        error: String(err).slice(0, 300), elapsed_ms: elapsed,
+      }).catch(() => {});
+    }
+
     return new Response(
       JSON.stringify({ error: String(err), should_respond: false }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

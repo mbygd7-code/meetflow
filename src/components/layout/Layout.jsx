@@ -7,7 +7,7 @@ import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
 
 const PAGE_TITLES = {
-  '/': '대시보드',
+  '/': '마이보드',
   '/meetings': '회의',
   '/tasks': '태스크',
   '/summaries': '회의록',
@@ -21,7 +21,7 @@ export const SidebarContext = createContext();
 export const useSidebar = () => useContext(SidebarContext);
 
 const BASE_MOBILE_TABS = [
-  { to: '/', label: '대시보드', icon: LayoutDashboard, end: true },
+  { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
   { to: '/summaries', label: '회의록', icon: FileText },
   { to: '/tasks', label: '태스크', icon: CheckSquare },
   { to: '/meetings', label: '회의', icon: MessageSquare },
