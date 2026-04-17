@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Coins, Zap, Shield, AlertTriangle, ArrowLeft, RefreshCw,
-  Bot, Clock, TrendingDown, Database,
+  Coins, Zap, AlertTriangle, ArrowLeft, RefreshCw,
+  TrendingDown, Database,
 } from 'lucide-react';
-import { Card, MetricCard, SectionPanel, Badge } from '@/components/ui';
+import { MetricCard, SectionPanel, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 

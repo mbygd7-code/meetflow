@@ -41,6 +41,7 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
                     systemPromptOverride: miloSettings.systemPromptOverride,
                     apiModelId: miloSettings.apiModelId,
                     aiEmployee: miloSettings.aiEmployee,
+                    skipGoogleDocsFullInject: miloSettings.skipGoogleDocsFullInject || false,
                   }
                 : null,
             },

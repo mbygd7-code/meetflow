@@ -135,12 +135,14 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // ── Observability: Request ID + Timing (catch 블록에서도 접근 가능하도록 try 밖 선언) ──
+  const requestId = `req_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+  const startMs = Date.now();
+  let targetEmployeeId = 'unknown';
+  let model = 'unknown';
+
   try {
     const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge } = await req.json();
-
-    // ── Observability: Request ID + Timing ──
-    const requestId = `req_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-    const startMs = Date.now();
 
     // ── AI 전문가 이름 매핑 (transcript 라벨링용) ──
     const AI_NAME_MAP: Record<string, string> = {
@@ -152,7 +154,7 @@ serve(async (req) => {
       korff: '코르프',
       deming: '데밍',
     };
-    const targetEmployeeId = miloSettings?.aiEmployee || 'milo';
+    targetEmployeeId = miloSettings?.aiEmployee || 'milo';
     const isSpecialistCall = miloSettings?.aiEmployee && miloSettings.aiEmployee !== 'milo';
     const selfNameKo = AI_NAME_MAP[targetEmployeeId] || 'Milo';
 
@@ -378,7 +380,7 @@ ${preset || 'default'}
       // 기본: 전문가 호출은 Sonnet, Milo는 Haiku
       return isSpecialistCall ? 'claude-sonnet-4-5' : 'claude-haiku-4-5';
     };
-    const model = pickModelByComplexity();
+    model = pickModelByComplexity();
     console.log('[milo-analyze] Model selected:', model, 'specialist:', isSpecialistCall);
 
     // 전문가는 지휘자 규칙을 받지 않고 분석에만 집중
@@ -607,20 +609,22 @@ ${preset || 'default'}
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    const elapsed = typeof startMs !== 'undefined' ? Date.now() - startMs : 0;
-    const reqId = typeof requestId !== 'undefined' ? requestId : 'unknown';
+    const elapsed = Date.now() - startMs;
     console.error(JSON.stringify({
-      type: 'ai_error', requestId: reqId,
+      type: 'ai_error', requestId,
+      employee: targetEmployeeId, model,
       error: String(err).slice(0, 300), elapsed,
     }));
 
     // 에러도 DB에 기록 (디버깅 + 에러율 추적) — 실패 무시
     try {
-      if (typeof supabase !== 'undefined' && supabase) {
-        const empId = typeof targetEmployeeId !== 'undefined' ? targetEmployeeId : 'unknown';
-        const mdl = typeof model !== 'undefined' ? model : 'unknown';
-        await supabase.from('ai_usage_logs').insert({
-          request_id: reqId, employee_id: empId, model: mdl,
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && supabaseServiceKey) {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const sb = createClient(supabaseUrl, supabaseServiceKey);
+        await sb.from('ai_usage_logs').insert({
+          request_id: requestId, employee_id: targetEmployeeId, model,
           error: String(err).slice(0, 300), elapsed_ms: elapsed,
         });
       }
