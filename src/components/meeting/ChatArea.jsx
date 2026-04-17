@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap, AlertTriangle } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 
-export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, autoIntervene = true }) {
+export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, autoIntervene = true, aiError = null }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
   const [reactions, setReactions] = useState({});
@@ -166,6 +166,13 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 <span>AI 자동 개입 ON — 필요한 순간 AI가 자동 응답합니다</span>
               </>
             )}
+          </div>
+        )}
+        {/* AI 에러 토스트 — API 실패/서킷 오픈 시 표시 */}
+        {aiError && (
+          <div className="inline-flex items-center gap-2 mb-2 px-3 py-1.5 rounded-md text-xs font-medium shadow-sm bg-status-error text-white border border-status-error animate-pulse">
+            <AlertTriangle size={13} strokeWidth={2.4} />
+            <span>AI 응답 실패 — 자동 재시도 중...</span>
           </div>
         )}
         {/* 인용 프리뷰 */}

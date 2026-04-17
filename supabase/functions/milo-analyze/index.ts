@@ -138,6 +138,10 @@ serve(async (req) => {
   try {
     const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge } = await req.json();
 
+    // ── Observability: Request ID + Timing ──
+    const requestId = `req_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const startMs = Date.now();
+
     // ── AI 전문가 이름 매핑 (transcript 라벨링용) ──
     const AI_NAME_MAP: Record<string, string> = {
       milo: '밀로',
@@ -448,21 +452,33 @@ ${preset || 'default'}
       },
     };
 
-    // ── 프롬프트 크기 사전 체크 (rate limit 방어) ──
-    // 대략 4자 = 1 토큰 추정. Haiku 한도 50k, Sonnet 한도 40k 기준 안전 임계치
-    const approxTokens = Math.ceil((systemPrompt.length + finalUserPrompt.length) / 4);
-    const HAIKU_SAFE_LIMIT = 35000; // 한도 50k 중 여유분
+    // ── Token Budget Manager: 우선순위 기반 프롬프트 크기 제어 ──
+    const estTokens = (t: string) => Math.ceil((t || '').length / 4);
+    const approxTokens = estTokens(systemPrompt) + estTokens(finalUserPrompt);
+    const HAIKU_SAFE_LIMIT = 35000;
     const SONNET_SAFE_LIMIT = 25000;
     const modelLimit = model.includes('haiku') ? HAIKU_SAFE_LIMIT : SONNET_SAFE_LIMIT;
+
+    // 시스템 프롬프트(정체성·가드레일)는 항상 유지, 나머지 예산에서 유저 프롬프트 배분
+    const systemBudget = estTokens(systemPrompt);
+    const outputReserve = 600; // max_tokens
+    const userBudgetTokens = Math.max(modelLimit - systemBudget - outputReserve, 2000);
+
     let finalPrompt = finalUserPrompt;
     let finalSystem = systemPrompt;
+
     if (approxTokens > modelLimit) {
-      // 유저 프롬프트를 절반으로 줄임 (참조 데이터/검색 결과가 큰 경우)
-      const targetChars = modelLimit * 4 - systemPrompt.length;
-      if (finalUserPrompt.length > targetChars && targetChars > 1000) {
-        finalPrompt = finalUserPrompt.slice(0, targetChars) + '\n\n[...프롬프트 길이 제한으로 일부 생략]';
+      const targetChars = userBudgetTokens * 4;
+      if (finalUserPrompt.length > targetChars) {
+        finalPrompt = finalUserPrompt.slice(0, targetChars) +
+          '\n\n[...토큰 예산 초과로 일부 생략 — 우선순위: 최근 대화 > 이전 요약 > 참조 데이터 > 검색]';
       }
-      console.log('[milo-analyze] Prompt truncated:', approxTokens, '→', Math.ceil((finalSystem.length + finalPrompt.length) / 4));
+      console.log(JSON.stringify({
+        type: 'budget_truncation', requestId,
+        original: approxTokens, limit: modelLimit,
+        systemBudget, userBudget: userBudgetTokens,
+        truncatedTo: estTokens(finalSystem) + estTokens(finalPrompt),
+      }));
     }
 
     // ── System 3단 블록 구성 (Prompt Caching 극대화) ──
@@ -505,24 +521,36 @@ ${preset || 'default'}
           tool_choice: { type: 'tool', name: 'milo_response' } as any,
           messages: [{ role: 'user', content: finalPrompt }],
         });
-        // 캐시 히트 로그 (비용 추적용)
+        // ── 구조화 로그: 토큰 사용량 + 비용 추적 + 타이밍 ──
         const usage = response.usage as any;
+        const elapsed = Date.now() - startMs;
         if (usage) {
-          console.log(
-            '[milo-analyze] Tokens — input:', usage.input_tokens,
-            'cache_read:', usage.cache_read_input_tokens || 0,
-            'cache_create:', usage.cache_creation_input_tokens || 0,
-            'output:', usage.output_tokens,
-          );
+          console.log(JSON.stringify({
+            type: 'ai_call',
+            requestId,
+            model,
+            employee: targetEmployeeId,
+            elapsed,
+            tokens: {
+              input: usage.input_tokens,
+              output: usage.output_tokens,
+              cacheRead: usage.cache_read_input_tokens || 0,
+              cacheCreate: usage.cache_creation_input_tokens || 0,
+            },
+            retries,
+            chunks: retrievedBlock ? retrievedBlock.split('### 청크').length - 1 : 0,
+          }));
         }
         break;
       } catch (err: any) {
-        // 429 rate limit → 1~3초 대기 후 재시도
-        const is429 = err?.status === 429 || String(err).includes('429');
-        if (is429 && retries < MAX_RETRIES) {
+        // 429 rate limit / 500 server error / 529 overloaded → 대기 후 재시도
+        const status = err?.status;
+        const isRetryable = status === 429 || status === 500 || status === 529 ||
+          String(err).includes('429') || String(err).includes('overloaded');
+        if (isRetryable && retries < MAX_RETRIES) {
           retries++;
-          const waitMs = 1500 * retries;
-          console.warn(`[milo-analyze] Rate limit hit, retry ${retries}/${MAX_RETRIES} after ${waitMs}ms`);
+          const waitMs = (status === 429 ? 2000 : 1000) * retries; // rate limit은 더 길게
+          console.warn(`[${requestId}] Retryable error (${status}), retry ${retries}/${MAX_RETRIES} after ${waitMs}ms`);
           await new Promise((r) => setTimeout(r, waitMs));
           continue;
         }
@@ -538,7 +566,13 @@ ${preset || 'default'}
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error('[milo-analyze]', err);
+    const elapsed = typeof startMs !== 'undefined' ? Date.now() - startMs : 0;
+    console.error(JSON.stringify({
+      type: 'ai_error',
+      requestId: typeof requestId !== 'undefined' ? requestId : 'unknown',
+      error: String(err).slice(0, 300),
+      elapsed,
+    }));
     return new Response(
       JSON.stringify({ error: String(err), should_respond: false }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

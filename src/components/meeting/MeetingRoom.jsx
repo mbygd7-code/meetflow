@@ -1,7 +1,8 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { clearSessionState } from '@/lib/harness';
 import { Badge } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
@@ -244,9 +245,19 @@ export default function MeetingRoom() {
     setAiThinking(active ? { active: true, employeeId } : null);
   }, []);
 
+  // AI 에러 토스트 (3초 자동 사라짐)
+  const [aiError, setAiError] = useState(null);
+  const aiErrorTimerRef = useRef(null);
+  const handleAiError = useCallback((err) => {
+    setAiError(err);
+    clearTimeout(aiErrorTimerRef.current);
+    aiErrorTimerRef.current = setTimeout(() => setAiError(null), 4000);
+  }, []);
+
   useMilo({
     messages, agenda: currentAgenda, onRespond: handleMiloRespond,
-    onThinking: handleThinking, alwaysRespond: isAiOnlyMeeting, autoIntervene: aiAutoIntervene,
+    onThinking: handleThinking, onError: handleAiError,
+    meetingId: id, alwaysRespond: isAiOnlyMeeting, autoIntervene: aiAutoIntervene,
   });
 
   // AI 인사
@@ -299,6 +310,7 @@ export default function MeetingRoom() {
     setEnding(true);
     setActiveMeetingId(null);
     try { await endMeeting(id, { messages, agendas: meeting.agendas || [] }); } catch (err) { console.error('[handleConfirmEnd]', err); }
+    clearSessionState(id); // AI 세션 데이터 정리
     setEnding(false);
     setLeavingConfirmed(true);
     navigate(`/summaries/${id}`);
@@ -435,6 +447,7 @@ export default function MeetingRoom() {
           aiThinking={aiThinking}
           onFileUpload={handleFileUpload}
           autoIntervene={aiAutoIntervene}
+          aiError={aiError}
         />
       </div>
     </div>

@@ -4,6 +4,7 @@ import { MILO_INTERVENTION_TRIGGERS } from '@/utils/miloPrompts';
 import { MILO_PRESETS, EMPLOYEE_NAME_MAP } from '@/lib/constants';
 import { useMiloStore } from '@/stores/miloStore';
 import { useAiTeamStore, AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import { saveSessionState, loadSessionState } from '@/lib/harness';
 
 // Supabase Edge Function으로 Claude API 호출 (VITE_SUPABASE_URL이 있으면 활성화)
 const CLAUDE_API_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -81,7 +82,7 @@ const MILO_DELAYS = {
 // 문장 시작 + 공백/구두점으로 끝나야 매칭 (단어 경계) — false positive 최소화
 const FOLLOW_UP_PATTERNS = /^(더\s*자세히|좀\s*더|구체적으로|예를\s*들어|그래서\b|그러면\b|그럼\b|맞아\b|알겠어\b|오케이\b|ok\b|이어서\b|추가로\b|그렇구나\b|설명해\b|계속해|말해봐\b|부탁해\b)/i;
 
-export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond = false, autoIntervene = true }) {
+export function useMilo({ messages, agenda, onRespond, onThinking, onError, meetingId, alwaysRespond = false, autoIntervene = true }) {
   const lastInterventionRef = useRef(0);
   const interventionCountRef = useRef(0);
   const lastProcessedIdRef = useRef(null);
@@ -96,6 +97,21 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
   const compressedContextRef = useRef('');
   const lastCompressedAtRef = useRef(0); // 마지막 압축 시점의 메시지 수
   const compressingRef = useRef(false);
+
+  // ── Session Persistence: 새로고침 후 맥락 복원 ──
+  const sessionRestoredRef = useRef(false);
+  useEffect(() => {
+    if (sessionRestoredRef.current || !meetingId) return;
+    sessionRestoredRef.current = true;
+    const saved = loadSessionState(meetingId);
+    if (saved) {
+      if (saved.compressedContext) compressedContextRef.current = saved.compressedContext;
+      if (typeof saved.interventionCount === 'number') interventionCountRef.current = saved.interventionCount;
+      if (saved.lastRespondingEmployee) lastRespondingEmployeeRef.current = saved.lastRespondingEmployee;
+      if (typeof saved.lastCompressedAt === 'number') lastCompressedAtRef.current = saved.lastCompressedAt;
+      console.log('[useMilo] Session restored for meeting:', meetingId);
+    }
+  }, [meetingId]);
 
   // miloStore에서 설정 읽기
   const preset = useMiloStore((s) => s.preset);
@@ -119,6 +135,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
         if (summary) {
           compressedContextRef.current = summary;
           lastCompressedAtRef.current = humanMsgCount;
+          // 세션 저장 (새로고침 시 맥락 복원용)
+          if (meetingId) saveSessionState(meetingId, {
+            compressedContext: summary,
+            interventionCount: interventionCountRef.current,
+            lastRespondingEmployee: lastRespondingEmployeeRef.current,
+            lastCompressedAt: humanMsgCount,
+          });
         }
         compressingRef.current = false;
       }).catch(() => { compressingRef.current = false; });
@@ -301,6 +324,17 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
           lastInterventionRef.current = performance.now();
           interventionCountRef.current += 1;
           lastRespondingEmployeeRef.current = result.ai_employee || 'milo';
+          // 세션 저장
+          if (meetingId) saveSessionState(meetingId, {
+            compressedContext: compressedContextRef.current,
+            interventionCount: interventionCountRef.current,
+            lastRespondingEmployee: lastRespondingEmployeeRef.current,
+            lastCompressedAt: lastCompressedAtRef.current,
+          });
+          // 하네스 에러 감지 (circuit open / invoke failed) → onError 콜백
+          if (result._harnessError) {
+            onError?.({ message: result.response_text, type: result._harnessError, employeeId: result.ai_employee });
+          }
           try {
             onRespond?.(result);
           } catch (respondErr) {
@@ -472,6 +506,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, alwaysRespond
       } catch (err) {
         if (err?.name !== 'AbortError') {
           console.error('[useMilo]', err);
+          onError?.({ message: err?.message || 'AI 호출 중 오류', type: 'exception', employeeId: 'milo' });
         }
         onThinking?.(false, null);
       } finally {

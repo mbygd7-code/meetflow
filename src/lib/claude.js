@@ -1,63 +1,104 @@
-// Claude API 호출 래퍼
+// Claude API 호출 래퍼 — Harness Layer 적용
 // Supabase Edge Function을 통해 서버사이드에서 Claude API 호출 (API 키 미노출)
+// Retry + Circuit Breaker + Structured Logging으로 안정성·관찰성 보장
 
 import { supabase } from '@/lib/supabase';
+import {
+  withRetry,
+  CircuitBreaker,
+  CircuitOpenError,
+  createRequestContext,
+  logAiCall,
+} from '@/lib/harness';
+
+// ── 글로벌 Circuit Breaker (모든 AI 호출 공유) ──
+// 연속 3회 실패 → 30초 차단 → HALF_OPEN 1회 시험
+const aiCircuitBreaker = new CircuitBreaker({ threshold: 3, resetMs: 30000 });
 
 /**
  * Milo 분석 — Supabase Edge Function 'milo-analyze' 호출
- * @param {AbortSignal} signal - 요청 취소용 (옵션)
+ * Harness: withRetry(1회 재시도) + CircuitBreaker(3연속 실패 시 30초 차단) + 구조화 로깅
  */
 export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleDocsSummary = null, signal = null, skipKnowledge = false }) {
-  const invokeOptions = {
-    body: {
-      messages: (messages || []).slice(-15),
-      agenda,
-      preset,
-      context,
-      compressedContext,
-      googleDocsSummary,
-      skipKnowledge, // Milo 호출 시 true (retrieval 생략, 토큰 절약)
-      miloSettings: miloSettings
-        ? {
-            systemPromptOverride: miloSettings.systemPromptOverride,
-            apiModelId: miloSettings.apiModelId,
-            aiEmployee: miloSettings.aiEmployee, // Edge Function에서 retrieval 대상 결정
+  const employeeId = miloSettings?.aiEmployee || 'milo';
+  const ctx = createRequestContext(null, employeeId);
+
+  try {
+    const data = await aiCircuitBreaker.call(() =>
+      withRetry(
+        async () => {
+          const invokeOptions = {
+            body: {
+              messages: (messages || []).slice(-15),
+              agenda,
+              preset,
+              context,
+              compressedContext,
+              googleDocsSummary,
+              skipKnowledge,
+              miloSettings: miloSettings
+                ? {
+                    systemPromptOverride: miloSettings.systemPromptOverride,
+                    apiModelId: miloSettings.apiModelId,
+                    aiEmployee: miloSettings.aiEmployee,
+                  }
+                : null,
+            },
+          };
+          if (signal) invokeOptions.signal = signal;
+
+          const { data, error } = await supabase.functions.invoke('milo-analyze', invokeOptions);
+          if (error) {
+            // AbortError는 재시도 없이 즉시 throw (withRetry가 re-throw)
+            if (error.name === 'AbortError' || signal?.aborted) throw error;
+            throw error;
           }
-        : null,
-    },
-  };
-  // AbortSignal 지원 (Supabase JS v2.46+)
-  if (signal) invokeOptions.signal = signal;
+          return data;
+        },
+        { maxRetries: 1, baseMs: 1500, signal }
+      )
+    );
 
-  const { data, error } = await supabase.functions.invoke('milo-analyze', invokeOptions);
+    // response_text 정제
+    if (data?.response_text) {
+      data.response_text = data.response_text
+        .replace(/\*\*판단 결과[^*]*\*\*/g, '')
+        .replace(/^---\s*/gm, '')
+        .replace(/^##\s*코멘트\s*/gm, '')
+        .replace(/```[\s\S]*?```/g, (match) => match.replace(/```/g, '').trim())
+        .trim();
+    }
 
-  if (error) {
+    logAiCall(ctx, data);
+    return data || { should_respond: false };
+  } catch (err) {
     // AbortError는 조용히 처리 (타임아웃/취소)
-    if (error.name === 'AbortError' || signal?.aborted) {
-      console.warn('[analyzeMilo] Request aborted');
+    if (err?.name === 'AbortError' || signal?.aborted) {
       return null;
     }
-    console.error('[analyzeMilo] Edge Function error:', error.message || error);
-    // 에러 시 사용자에게 피드백 메시지 반환
+
+    logAiCall(ctx, null, err);
+
+    // CircuitOpenError → 서킷이 열려있어 즉시 실패
+    if (err instanceof CircuitOpenError) {
+      return {
+        should_respond: true,
+        response_text: '[밀로] AI 서비스가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요.',
+        ai_type: 'nudge',
+        ai_employee: employeeId,
+        _harnessError: 'circuit_open',
+      };
+    }
+
+    // 일반 에러 → 사용자 피드백
     return {
       should_respond: true,
       response_text: '[밀로] 죄송합니다, 잠시 응답 처리에 문제가 있었습니다. 다시 시도해주세요.',
       ai_type: 'nudge',
-      ai_employee: 'milo',
+      ai_employee: employeeId,
+      _harnessError: 'invoke_failed',
     };
   }
-
-  // response_text 정제
-  if (data?.response_text) {
-    data.response_text = data.response_text
-      .replace(/\*\*판단 결과[^*]*\*\*/g, '')
-      .replace(/^---\s*/gm, '')
-      .replace(/^##\s*코멘트\s*/gm, '')
-      .replace(/```[\s\S]*?```/g, (match) => match.replace(/```/g, '').trim())
-      .trim();
-  }
-
-  return data || { should_respond: false };
 }
 
 /**

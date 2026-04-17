@@ -873,7 +873,27 @@ export const useAiTeamStore = create((set, get) => ({
     return model?.apiModelId || null;
   },
 
-  resetToDefaults: () => {
+  resetToDefaults: async () => {
+    // 1. DB 지식파일 전체 삭제 (공통 + 직원별 모두)
+    //    ai_knowledge_chunks는 file_id FK CASCADE로 자동 삭제됨
+    if (SUPABASE_ENABLED) {
+      try {
+        // 현재 사용자의 모든 knowledge files 삭제
+        const allFileIds = [
+          ...get().sharedKnowledgeFiles.map((f) => f.id),
+          ...Object.values(get().employeeOverrides)
+            .flatMap((ov) => (ov.knowledgeFiles || []).map((f) => f.id)),
+        ];
+        if (allFileIds.length > 0) {
+          await supabase.from('ai_knowledge_files').delete().in('id', allFileIds);
+          console.log(`[aiTeamStore] Reset: deleted ${allFileIds.length} knowledge files from DB`);
+        }
+      } catch (err) {
+        console.error('[aiTeamStore] Reset DB cleanup failed:', err);
+      }
+    }
+
+    // 2. 스토어 + localStorage 초기화
     set(DEFAULT_STATE);
     saveToStorage(DEFAULT_STATE);
   },
