@@ -510,6 +510,8 @@ ${preset || 'default'}
     // ── Claude API 호출 (3단 Prompt Caching + Tool Use) + 429 재시도 ──
     let response: any;
     let retries = 0;
+    let usage: any = null;
+    let elapsed = 0;
     const MAX_RETRIES = 2;
     while (true) {
       try {
@@ -522,8 +524,8 @@ ${preset || 'default'}
           messages: [{ role: 'user', content: finalPrompt }],
         });
         // ── 구조화 로그: 토큰 사용량 + 비용 추적 + 타이밍 ──
-        const usage = response.usage as any;
-        const elapsed = Date.now() - startMs;
+        usage = response.usage as any;
+        elapsed = Date.now() - startMs;
         if (usage) {
           console.log(JSON.stringify({
             type: 'ai_call',
@@ -562,7 +564,8 @@ ${preset || 'default'}
     const toolUseBlock = response.content.find((b: any) => b.type === 'tool_use');
     const result = toolUseBlock?.input || { should_respond: false, response_text: '', ai_type: 'nudge' };
 
-    // ── DB 영속화: 사용량 로그 저장 (await — 신뢰 보장) ──
+    // ── DB 영속화: 사용량 로그 저장 ──
+    // 테이블 미존재/DB 에러 시에도 AI 응답은 정상 반환 (로깅 실패는 무시)
     const usageLog = {
       request_id: requestId,
       employee_id: targetEmployeeId || 'milo',
@@ -576,9 +579,12 @@ ${preset || 'default'}
       chunks_used: retrievedBlock ? retrievedBlock.split('### 청크').length - 1 : 0,
     };
     if (supabase) {
-      await supabase.from('ai_usage_logs').insert(usageLog).then(({ error: logErr }) => {
+      try {
+        const { error: logErr } = await supabase.from('ai_usage_logs').insert(usageLog);
         if (logErr) console.warn('[usage_log] DB insert failed:', logErr.message);
-      });
+      } catch (logEx) {
+        console.warn('[usage_log] DB insert exception:', String(logEx).slice(0, 100));
+      }
     }
 
     // 클라이언트 harness 메트릭용 _usage 필드 추가
@@ -601,15 +607,17 @@ ${preset || 'default'}
       error: String(err).slice(0, 300), elapsed,
     }));
 
-    // 에러도 DB에 기록 (디버깅 + 에러율 추적)
-    if (typeof supabase !== 'undefined' && supabase) {
-      const empId = typeof targetEmployeeId !== 'undefined' ? targetEmployeeId : 'unknown';
-      const mdl = typeof model !== 'undefined' ? model : 'unknown';
-      supabase.from('ai_usage_logs').insert({
-        request_id: reqId, employee_id: empId, model: mdl,
-        error: String(err).slice(0, 300), elapsed_ms: elapsed,
-      }).catch(() => {});
-    }
+    // 에러도 DB에 기록 (디버깅 + 에러율 추적) — 실패 무시
+    try {
+      if (typeof supabase !== 'undefined' && supabase) {
+        const empId = typeof targetEmployeeId !== 'undefined' ? targetEmployeeId : 'unknown';
+        const mdl = typeof model !== 'undefined' ? model : 'unknown';
+        await supabase.from('ai_usage_logs').insert({
+          request_id: reqId, employee_id: empId, model: mdl,
+          error: String(err).slice(0, 300), elapsed_ms: elapsed,
+        });
+      }
+    } catch { /* 로깅 실패 무시 */ }
 
     return new Response(
       JSON.stringify({ error: String(err), should_respond: false }),
