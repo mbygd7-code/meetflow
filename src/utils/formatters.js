@@ -36,6 +36,42 @@ export function formatDueDate(dueDate) {
   return format(d, 'MM/dd', { locale: ko });
 }
 
+/**
+ * D-Day 상태 계산 — 모든 태스크 카드에서 공통 사용.
+ * @returns {{ text: string, diff: number | null, overdue: boolean, today: boolean, urgent: boolean } | null}
+ */
+export function getDueDateStatus(dueDate) {
+  if (!dueDate) return null;
+  const d = typeof dueDate === 'string' ? parseISO(dueDate) : dueDate;
+  if (isNaN(d)) return null;
+  const diff = differenceInDays(d, new Date());
+  const overdue = diff < 0;
+  const today = diff === 0;
+  let text;
+  if (overdue) text = `${Math.abs(diff)}일 지연`;
+  else if (today) text = '오늘 마감';
+  else if (diff === 1) text = '내일';
+  else if (diff <= 7) text = `D-${diff}`;
+  else text = format(d, 'MM/dd', { locale: ko });
+  return { text, diff, overdue, today, urgent: overdue || today || diff === 1 };
+}
+
+/** 날짜만 간결히 (MM/dd) — 문자열 슬라이스 대신 date-fns 안전 포맷 */
+export function formatMonthDay(date) {
+  if (!date) return '';
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  if (isNaN(d)) return '';
+  return format(d, 'MM/dd', { locale: ko });
+}
+
+/** ISO 문자열이 유효한지 파싱 + 포맷. invalid면 fallback. */
+export function safeFormatDate(date, pattern = 'MM/dd HH:mm', fallback = '') {
+  if (!date) return fallback;
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  if (isNaN(d)) return fallback;
+  return format(d, pattern, { locale: ko });
+}
+
 export function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);

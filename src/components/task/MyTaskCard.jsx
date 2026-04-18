@@ -3,46 +3,28 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Circle, CircleDot, CheckCircle2, Clock, Sparkles,
-  FileText, ChevronDown, ChevronUp, Folder, Layers, Zap,
+  Sparkles, FileText, ChevronDown, ChevronUp, Folder, Layers, Zap, Clock,
 } from 'lucide-react';
 import { Badge } from '@/components/ui';
-import { differenceInDays, parseISO } from 'date-fns';
-
-const PRIORITY_MAP = {
-  urgent: { label: '긴급', tone: 'text-status-error', bg: 'bg-status-error/10', border: 'border-status-error/30' },
-  high: { label: '높음', tone: 'text-brand-orange', bg: 'bg-brand-orange/10', border: 'border-brand-orange/25' },
-  medium: { label: '보통', tone: 'text-brand-purple', bg: 'bg-brand-purple/10', border: 'border-brand-purple/20' },
-  low: { label: '낮음', tone: 'text-txt-muted', bg: 'bg-bg-tertiary', border: 'border-border-subtle' },
-};
-
-const STATUS_MAP = {
-  done: { icon: CheckCircle2, color: 'text-status-success' },
-  in_progress: { icon: CircleDot, color: 'text-brand-purple' },
-  todo: { icon: Circle, color: 'text-txt-muted' },
-};
-
-function dDayLabel(dueDate) {
-  if (!dueDate) return null;
-  const d = differenceInDays(parseISO(dueDate), new Date());
-  if (d < 0) return { text: `${Math.abs(d)}일 지연`, urgent: true };
-  if (d === 0) return { text: 'D-Day', urgent: true };
-  if (d === 1) return { text: '내일', urgent: true };
-  if (d <= 3) return { text: `D-${d}`, urgent: false };
-  return { text: `D-${d}`, urgent: false };
-}
+import { getDueDateStatus, formatMonthDay, getInitials } from '@/utils/formatters';
+import { getPriorityInfo, getStatusInfo } from '@/lib/taskConstants';
 
 export default function MyTaskCard({ task, selected, onSelect }) {
   const [expanded, setExpanded] = useState(false);
-  const priority = PRIORITY_MAP[task.priority] || PRIORITY_MAP.medium;
-  const StatusIcon = (STATUS_MAP[task.status] || STATUS_MAP.todo).icon;
-  const statusColor = (STATUS_MAP[task.status] || STATUS_MAP.todo).color;
-  const dday = dDayLabel(task.due_date);
+  const priority = getPriorityInfo(task.priority);
+  const status = getStatusInfo(task.status);
+  const StatusIcon = status.icon;
+  const dday = getDueDateStatus(task.due_date);
   const isDone = task.status === 'done';
 
   const subtasksDone = task.subtasks?.filter((s) => s.done).length || 0;
   const subtasksTotal = task.subtasks?.length || 0;
   const progress = subtasksTotal > 0 ? Math.round((subtasksDone / subtasksTotal) * 100) : 0;
+
+  // assignee는 Supabase 로드 결과에 null일 수 있음 — fallback 구성
+  const assigneeName = task.assignee?.name || task.assignee_name || null;
+  const assigneeColor = task.assignee?.color || '#723CEB';
+  const assigneeInitial = assigneeName ? getInitials(assigneeName)[0] : '?';
 
   return (
     <div
@@ -59,7 +41,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
       <div className="p-3 space-y-2">
         {/* 상단: 상태 아이콘 + 제목 + D-Day */}
         <div className="flex items-start gap-2">
-          <StatusIcon size={15} className={`${statusColor} mt-0.5 shrink-0`} />
+          <StatusIcon size={15} className={`${status.color} mt-0.5 shrink-0`} />
           <p
             className={`flex-1 text-[13px] font-medium text-txt-primary leading-snug ${
               isDone ? 'line-through decoration-txt-muted' : ''
@@ -177,14 +159,15 @@ export default function MyTaskCard({ task, selected, onSelect }) {
           </div>
         )}
 
-        {/* 하단: 담당자 + 우선순위 */}
+        {/* 하단: 담당자 + 우선순위 (D-Day는 상단에 있으므로 중복 제거) */}
         <div className="pl-[22px] flex items-center gap-2 pt-0.5">
-          {task.assignee && (
+          {assigneeName && (
             <span
               className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0"
-              style={{ backgroundColor: task.assignee.color }}
+              style={{ backgroundColor: assigneeColor }}
+              title={assigneeName}
             >
-              {task.assignee.name[0]}
+              {assigneeInitial}
             </span>
           )}
           <span className={`text-[10px] font-medium inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${priority.bg} ${priority.tone} border ${priority.border}`}>
@@ -194,7 +177,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
           {task.due_date && (
             <span className="text-[10px] text-txt-muted inline-flex items-center gap-0.5">
               <Clock size={9} />
-              {task.due_date.slice(5).replace('-', '/')}
+              {formatMonthDay(task.due_date)}
             </span>
           )}
         </div>

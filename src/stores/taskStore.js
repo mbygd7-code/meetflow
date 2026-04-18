@@ -274,11 +274,19 @@ export const useTaskStore = create((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('tasks')
-        .select('*')
+        .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      set({ tasks: data || [], loading: false });
+      // assignee 조인 결과 정규화 (avatar_color → color, DB엔 avatar_color로 저장)
+      const normalized = (data || []).map((t) => ({
+        ...t,
+        assignee: t.assignee
+          ? { id: t.assignee.id, name: t.assignee.name, color: t.assignee.avatar_color || '#723CEB' }
+          : null,
+        assignee_name: t.assignee?.name || t.assignee_name || null,
+      }));
+      set({ tasks: normalized, loading: false });
     } catch (err) {
       console.error('[taskStore] init error:', err);
       set({ loading: false });

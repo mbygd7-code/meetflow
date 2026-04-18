@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
-  Zap, AlertCircle, CircleDot, MessageSquare, TrendingUp,
+  Zap, CircleDot, MessageSquare, TrendingUp,
 } from 'lucide-react';
 import { Avatar, Button, SectionPanel } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
@@ -13,6 +13,9 @@ import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
 import MyTaskCard from '@/components/task/MyTaskCard';
 import TaskSlidePanel from '@/components/task/TaskSlidePanel';
+import EmptyState from '@/components/ui/EmptyState';
+import { getDueDateStatus, safeFormatDate } from '@/utils/formatters';
+import { DASHBOARD_LIMITS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
@@ -23,61 +26,88 @@ export default function DashboardPage() {
 
   const today = format(new Date(), 'yyyy년 MM월 dd일 EEEE', { locale: ko });
 
-  // 내 태스크만 필터링 (완료 제외는 초점 섹션에서만)
-  const myTasks = useMemo(() => {
+  // ─── 내 태스크 분류 + 카운트 한 번에 ───
+  const myTaskStats = useMemo(() => {
     const userId = user?.id;
     const userName = user?.name;
-    return tasks.filter((t) => {
-      if (t.assignee_id === userId) return true;
-      if (t.assignee?.name === userName || t.assignee_name === userName) return true;
-      return false;
-    });
+    const active = [];
+    const counts = { inProgress: 0, todo: 0, done: 0, overdue: 0, dueSoon: 0 };
+    const now = new Date();
+
+    for (const t of tasks) {
+      // 담당자 매칭 (id 우선, fallback으로 이름)
+      const isMine =
+        (userId && t.assignee_id === userId) ||
+        (userName && (t.assignee?.name === userName || t.assignee_name === userName));
+      if (!isMine) continue;
+
+      if (t.status === 'done') {
+        counts.done++;
+        continue;
+      }
+
+      active.push(t);
+      if (t.status === 'in_progress') counts.inProgress++;
+      else if (t.status === 'todo') counts.todo++;
+
+      if (t.due_date) {
+        const d = differenceInDays(parseISO(t.due_date), now);
+        if (d < 0) counts.overdue++;
+        else if (d <= 2) counts.dueSoon++;
+      }
+    }
+    return { active, counts };
   }, [tasks, user]);
 
-  const myActiveTasks = myTasks.filter((t) => t.status !== 'done');
-  const myDoneCount = myTasks.length - myActiveTasks.length;
+  const myActiveTasks = myTaskStats.active;
+  const taskCounts = myTaskStats.counts;
 
-  // 오늘의 초점 — 마감 임박 + 진행중 우선
+  // ─── 오늘의 초점 (우선순위·마감·진행중 가중치) ───
   const focusTasks = useMemo(() => {
-    return [...myActiveTasks]
+    const PRIORITY_WEIGHT = { urgent: 0, high: 1, medium: 2, low: 3 };
+    const now = new Date();
+    return myActiveTasks
       .map((t) => {
-        const days = t.due_date ? differenceInDays(parseISO(t.due_date), new Date()) : 999;
-        const priorityWeight = { urgent: 0, high: 1, medium: 2, low: 3 }[t.priority] || 2;
-        const statusWeight = t.status === 'in_progress' ? -0.5 : 0;
-        return { ...t, _score: days + priorityWeight + statusWeight };
+        const days = t.due_date ? differenceInDays(parseISO(t.due_date), now) : 999;
+        const pw = PRIORITY_WEIGHT[t.priority] ?? 2;
+        const sw = t.status === 'in_progress' ? -0.5 : 0;
+        return { task: t, score: days + pw + sw };
       })
-      .sort((a, b) => a._score - b._score)
-      .slice(0, 2);
+      .sort((a, b) => a.score - b.score)
+      .slice(0, DASHBOARD_LIMITS.FOCUS_TASKS)
+      .map(({ task }) => task);
   }, [myActiveTasks]);
 
-  // 오늘의 회의
-  const todayMeetings = meetings.filter(
-    (m) => m.status === 'active' || m.status === 'scheduled'
+  // ─── 회의 분류 ───
+  const todayMeetings = useMemo(
+    () => meetings.filter((m) => m.status === 'active' || m.status === 'scheduled'),
+    [meetings]
   );
 
-  // 최근 회의록 (놓친 것 확인용)
-  const recentSummaries = meetings
-    .filter((m) => m.status === 'completed')
-    .slice(0, 4);
+  const recentSummaries = useMemo(
+    () =>
+      meetings
+        .filter((m) => m.status === 'completed')
+        .slice(0, DASHBOARD_LIMITS.RECENT_SUMMARIES),
+    [meetings]
+  );
 
-  // 하루 요약 (인사말 아래 한 줄)
+  // ─── 하루 요약 문장 ───
   const summarySentence = useMemo(() => {
     const parts = [];
     if (todayMeetings.length > 0) parts.push(`회의 ${todayMeetings.length}개`);
-    const overdueCount = myActiveTasks.filter((t) => {
-      if (!t.due_date) return false;
-      return differenceInDays(parseISO(t.due_date), new Date()) < 0;
-    }).length;
-    const dueSoon = myActiveTasks.filter((t) => {
-      if (!t.due_date) return false;
-      const d = differenceInDays(parseISO(t.due_date), new Date());
-      return d >= 0 && d <= 2;
-    }).length;
-    if (overdueCount > 0) parts.push(`지연 ${overdueCount}건`);
-    if (dueSoon > 0) parts.push(`마감 임박 ${dueSoon}건`);
+    if (taskCounts.overdue > 0) parts.push(`지연 ${taskCounts.overdue}건`);
+    if (taskCounts.dueSoon > 0) parts.push(`마감 임박 ${taskCounts.dueSoon}건`);
     if (parts.length === 0) return '오늘은 여유로운 하루네요 ☕';
     return `오늘 ${parts.join(' · ')} 있어요`;
-  }, [todayMeetings, myActiveTasks]);
+  }, [todayMeetings, taskCounts]);
+
+  // ─── 태스크 선택 토글 (useCallback으로 렌더 간 안정화) ───
+  const handleSelectTask = useCallback((task) => {
+    setSelectedTask((cur) => (cur?.id === task.id ? null : task));
+  }, []);
+
+  const handleCloseTask = useCallback(() => setSelectedTask(null), []);
 
   return (
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
@@ -112,19 +142,30 @@ export default function DashboardPage() {
                 <FocusCard
                   key={t.id}
                   task={t}
-                  onClick={() => setSelectedTask(selectedTask?.id === t.id ? null : t)}
+                  onClick={handleSelectTask}
                 />
               ))}
             </div>
           ) : (
-            <FocusEmptyState
-              hasMeetings={todayMeetings.length > 0}
-              hasRecentSummaries={recentSummaries.length > 0}
+            <EmptyState
+              icon={Sparkles}
+              title="아직 할당된 업무가 없어요"
+              description={
+                todayMeetings.length > 0
+                  ? '오늘 예정된 회의가 있어요. 회의가 끝나면 AI가 태스크를 자동으로 추출해 드릴게요.'
+                  : recentSummaries.length > 0
+                    ? '최근 회의록을 확인하거나 새 회의를 시작해 업무를 정리해보세요.'
+                    : '새 회의를 시작하면 AI가 결정사항을 태스크로 자동 정리합니다.'
+              }
+              actions={[
+                { label: '새 회의 시작', to: '/meetings', icon: MessageSquare, variant: 'gradient' },
+                { label: '태스크 직접 만들기', to: '/tasks', icon: CircleDot, variant: 'secondary' },
+              ]}
             />
           )}
         </SectionPanel>
 
-        {/* ═══ 오늘의 회의 ═══ */}
+        {/* ═══ 오늘의 일정 ═══ */}
         <SectionPanel
           title="오늘의 일정"
           subtitle={todayMeetings.length > 0 ? `회의 ${todayMeetings.length}개 예정` : undefined}
@@ -135,40 +176,40 @@ export default function DashboardPage() {
           }
         >
           {todayMeetings.length === 0 ? (
-            <div className="text-center py-10 bg-bg-tertiary rounded-[7px]">
-              <Calendar size={24} className="mx-auto text-txt-muted mb-2" />
-              <p className="text-sm text-txt-secondary mb-4">오늘 예정된 회의가 없습니다</p>
-              <Link to="/meetings">
-                <Button variant="gradient" size="sm">새 회의 만들기</Button>
-              </Link>
-            </div>
+            <EmptyState
+              icon={Calendar}
+              title="오늘 예정된 회의가 없습니다"
+              actions={[
+                { label: '새 회의 만들기', to: '/meetings', variant: 'gradient' },
+              ]}
+              variant="solid"
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {todayMeetings.slice(0, 3).map((m) => (
+              {todayMeetings.slice(0, DASHBOARD_LIMITS.TODAY_MEETINGS).map((m) => (
                 <MeetingCard key={m.id} meeting={m} />
               ))}
             </div>
           )}
         </SectionPanel>
 
-        {/* ═══ Milo 개인 인사이트 + 최근 회의록 ═══ */}
+        {/* ═══ Milo 인사이트 + 최근 회의록 ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* Milo 개인 메시지 */}
           <SectionPanel className="subsection-gold">
             <div className="flex items-center gap-3 mb-3">
               <Avatar variant="ai" size="md" label="M" />
               <div>
                 <p className="text-sm font-semibold text-txt-primary">Milo 인사이트</p>
-                <p className="text-[10px] text-txt-muted">자동 생성 · 방금</p>
+                <p className="text-[10px] text-txt-muted">실시간 현황 요약</p>
               </div>
             </div>
             <p className="text-xs text-txt-secondary leading-relaxed mb-3">
               {myActiveTasks.length > 0 ? (
                 <>
-                  진행 중인 태스크 <span className="text-txt-primary font-semibold">{myActiveTasks.filter((t) => t.status === 'in_progress').length}건</span>,
-                  대기 중 <span className="text-txt-primary font-semibold">{myActiveTasks.filter((t) => t.status === 'todo').length}건</span>이에요.
-                  {myDoneCount > 0 && (
-                    <> 최근 <span className="text-status-success font-semibold">{myDoneCount}건</span>을 완료했습니다.</>
+                  진행 중인 태스크 <span className="text-txt-primary font-semibold">{taskCounts.inProgress}건</span>,
+                  대기 중 <span className="text-txt-primary font-semibold">{taskCounts.todo}건</span>이에요.
+                  {taskCounts.done > 0 && (
+                    <> 최근 <span className="text-status-success font-semibold">{taskCounts.done}건</span>을 완료했습니다.</>
                   )}
                 </>
               ) : (
@@ -183,7 +224,6 @@ export default function DashboardPage() {
             </Link>
           </SectionPanel>
 
-          {/* 놓치지 말아야 할 회의록 */}
           <SectionPanel
             title="최근 회의록"
             subtitle="놓친 회의 없이 빠르게 파악"
@@ -209,7 +249,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-txt-primary truncate">{m.title}</p>
                       <p className="text-[10px] text-txt-muted">
-                        {format(parseISO(m.ended_at || m.created_at), 'MM/dd HH:mm')}
+                        {safeFormatDate(m.ended_at || m.created_at, 'MM/dd HH:mm', '시간 미상')}
                         {' · '}어젠다 {m.agendas?.length || 0} · 참여 {m.participants?.length || 0}
                       </p>
                     </div>
@@ -224,15 +264,14 @@ export default function DashboardPage() {
 
       {/* ═══ 오른쪽: 내 태스크 ═══ */}
       <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 relative">
-        <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
+        <TaskSlidePanel task={selectedTask} onClose={handleCloseTask} />
 
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-semibold text-txt-primary">내 태스크</h2>
             <p className="text-[10px] text-txt-muted mt-0.5">
-              진행 {myActiveTasks.filter((t) => t.status === 'in_progress').length} ·
-              대기 {myActiveTasks.filter((t) => t.status === 'todo').length}
-              {myDoneCount > 0 && <> · 완료 {myDoneCount}</>}
+              진행 {taskCounts.inProgress} · 대기 {taskCounts.todo}
+              {taskCounts.done > 0 && <> · 완료 {taskCounts.done}</>}
             </p>
           </div>
           <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -241,7 +280,17 @@ export default function DashboardPage() {
         </div>
 
         {myActiveTasks.length === 0 ? (
-          <MyTasksEmptyState hasMeetings={todayMeetings.length > 0} />
+          <EmptyState
+            icon={CircleDot}
+            title="담당 태스크가 없어요"
+            description={
+              todayMeetings.length > 0
+                ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
+                : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
+            }
+            actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+            compact
+          />
         ) : (
           <div className="space-y-2 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
             {myActiveTasks.map((t) => (
@@ -249,7 +298,7 @@ export default function DashboardPage() {
                 key={t.id}
                 task={t}
                 selected={selectedTask?.id === t.id}
-                onSelect={(task) => setSelectedTask(selectedTask?.id === task.id ? null : task)}
+                onSelect={handleSelectTask}
               />
             ))}
           </div>
@@ -263,10 +312,9 @@ export default function DashboardPage() {
 // 오늘의 초점 카드 — 가장 급한 태스크 1~2건 하이라이트
 // ═══════════════════════════════════════════════════
 function FocusCard({ task, onClick }) {
-  const dday = task.due_date ? differenceInDays(parseISO(task.due_date), new Date()) : null;
-  const isOverdue = dday !== null && dday < 0;
-  const isToday = dday === 0;
-  const isUrgent = task.priority === 'urgent' || isOverdue || isToday;
+  const dday = getDueDateStatus(task.due_date);
+  const isOverdue = dday?.overdue ?? false;
+  const isToday = dday?.today ?? false;
 
   const tone = isOverdue
     ? 'border-status-error/40 bg-status-error/5'
@@ -276,32 +324,27 @@ function FocusCard({ task, onClick }) {
         ? 'border-brand-purple/30 bg-brand-purple/5'
         : 'border-border-subtle bg-bg-tertiary';
 
-  const ddayLabel = isOverdue
-    ? `${Math.abs(dday)}일 지연`
-    : isToday
-      ? '오늘 마감'
-      : dday !== null
-        ? `D-${dday}`
-        : '기한 없음';
-
+  const ddayLabel = dday?.text || '기한 없음';
   const ddayColor = isOverdue
     ? 'text-status-error'
     : isToday
       ? 'text-brand-orange'
       : 'text-txt-secondary';
 
+  const IconComp = dday?.urgent ? Zap : Clock;
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => onClick?.(task)}
       className={`
-        text-left p-4 rounded-[8px] border transition-all
-        hover:border-border-hover-strong hover:shadow-md ${tone}
+        text-left p-4 rounded-[8px] border transition-colors
+        hover:border-border-hover-strong ${tone}
       `}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${ddayColor}`}>
-          {isUrgent ? <Zap size={10} strokeWidth={2.6} /> : <Clock size={10} />}
+          <IconComp size={10} strokeWidth={2.6} />
           <span>{ddayLabel}</span>
         </div>
         {task.ai_suggested && (
@@ -342,64 +385,5 @@ function FocusCard({ task, onClick }) {
         )}
       </div>
     </button>
-  );
-}
-
-// ═══════════════════════════════════════════════════
-// 오늘의 초점 — 빈 상태 (할당 태스크 0건일 때)
-// ═══════════════════════════════════════════════════
-function FocusEmptyState({ hasMeetings, hasRecentSummaries }) {
-  return (
-    <div className="bg-bg-tertiary rounded-[8px] p-6 text-center border border-dashed border-border-default">
-      <div className="w-12 h-12 rounded-full bg-brand-purple/10 mx-auto mb-3 flex items-center justify-center">
-        <Sparkles size={20} className="text-brand-purple" strokeWidth={2} />
-      </div>
-      <p className="text-sm font-medium text-txt-primary mb-1">
-        아직 할당된 업무가 없어요
-      </p>
-      <p className="text-xs text-txt-secondary mb-4 leading-relaxed">
-        {hasMeetings
-          ? '오늘 예정된 회의가 있어요. 회의가 끝나면 AI가 태스크를 자동으로 추출해 드릴게요.'
-          : hasRecentSummaries
-            ? '최근 회의록을 확인하거나 새 회의를 시작해 업무를 정리해보세요.'
-            : '새 회의를 시작하면 AI가 결정사항을 태스크로 자동 정리합니다.'}
-      </p>
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        <Link to="/meetings">
-          <Button variant="gradient" size="sm" icon={MessageSquare}>
-            새 회의 시작
-          </Button>
-        </Link>
-        <Link to="/tasks">
-          <Button variant="secondary" size="sm" icon={CircleDot}>
-            태스크 직접 만들기
-          </Button>
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════
-// 오른쪽 사이드바 — 빈 상태
-// ═══════════════════════════════════════════════════
-function MyTasksEmptyState({ hasMeetings }) {
-  return (
-    <div className="bg-bg-tertiary rounded-[8px] p-5 text-center border border-dashed border-border-default">
-      <CircleDot size={22} className="mx-auto text-txt-muted mb-2" strokeWidth={1.8} />
-      <p className="text-sm font-medium text-txt-primary mb-1">
-        담당 태스크가 없어요
-      </p>
-      <p className="text-[11px] text-txt-secondary mb-4 leading-relaxed">
-        {hasMeetings
-          ? '회의가 끝나면 AI가 자동으로\n내게 필요한 일을 정리해 줍니다.'
-          : '회의에 참여하거나 직접 만들어\n업무를 정리해 보세요.'}
-      </p>
-      <Link to="/tasks">
-        <Button variant="secondary" size="sm" icon={CircleDot}>
-          새 태스크
-        </Button>
-      </Link>
-    </div>
   );
 }
