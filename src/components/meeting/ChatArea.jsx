@@ -112,7 +112,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           </div>
         ) : (
           messages.map((m) => (
-            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} reactions={reactions} />
+            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} reactions={reactions} />
           ))
         )}
 
@@ -241,10 +241,26 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={(e) => {
+                  const paste = e.clipboardData?.getData('text');
+                  if (paste) {
+                    e.preventDefault();
+                    const ta = e.target;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const newVal = input.slice(0, start) + paste + input.slice(end);
+                    setInput(newVal);
+                    requestAnimationFrame(() => {
+                      ta.selectionStart = ta.selectionEnd = start + paste.length;
+                    });
+                  }
+                }}
                 placeholder="의견을 입력하세요..."
                 rows={1}
                 disabled={disabled}
                 className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
+                onContextMenu={(e) => e.stopPropagation()}
+                style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               />
               <button
                 type="button"

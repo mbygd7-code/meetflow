@@ -1,7 +1,8 @@
 import { useState, createContext, useContext } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useMeetingStore } from '@/stores/meetingStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
@@ -28,6 +29,7 @@ const BASE_MOBILE_TABS = [
 
 function MobileTabBar() {
   const { isAdmin } = useAuthStore();
+  const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
   const tabs = isAdmin()
     ? [...BASE_MOBILE_TABS, { to: '/admin', label: '관리자', icon: Shield }]
     : BASE_MOBILE_TABS;
@@ -36,23 +38,32 @@ function MobileTabBar() {
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-content)] border-t border-border-divider backdrop-blur-md flex items-center justify-around px-2 pt-2 touch-none"
       style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
     >
-      {tabs.map(({ to, label, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors min-w-[60px] ${
-              isActive
-                ? 'text-brand-purple'
-                : 'text-txt-muted'
-            }`
-          }
-        >
-          <Icon size={22} strokeWidth={1.8} />
-          <span>{label}</span>
-        </NavLink>
-      ))}
+      {tabs.map(({ to, label, icon: Icon, end }) => {
+        const isSummaryGenerating = to === '/summaries' && !!summaryGeneratingId;
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              `flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold transition-colors min-w-[60px] ${
+                isActive
+                  ? 'text-brand-purple'
+                  : isSummaryGenerating
+                    ? 'text-brand-purple'
+                    : 'text-txt-muted'
+              } ${isSummaryGenerating ? 'summary-generating rounded-lg' : ''}`
+            }
+          >
+            {isSummaryGenerating ? (
+              <Loader2 size={22} strokeWidth={1.8} className="animate-spin" />
+            ) : (
+              <Icon size={22} strokeWidth={1.8} />
+            )}
+            <span>{isSummaryGenerating ? '작성 중...' : label}</span>
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }

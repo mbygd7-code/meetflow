@@ -92,15 +92,22 @@ export function useMeeting() {
           meeting_id: meeting.id,
           title: a.title,
           duration_minutes: a.duration_minutes || 10,
+          status: 'pending',
           sort_order: i,
         }));
-        const { data: savedAgendas } = await supabase
+        const { data: savedAgendas, error: agendaErr } = await supabase
           .from('agendas')
           .insert(agendaRows)
           .select();
-        insertedAgendas = savedAgendas || agendaRows;
+        if (agendaErr) console.error('[createMeeting] agenda insert error:', agendaErr);
+        insertedAgendas = savedAgendas || agendaRows.map((a, i) => ({ ...a, id: `local-${Date.now()}-${i}` }));
       }
-      addMeeting({ ...meeting, agendas: insertedAgendas });
+      // 참석자 정보 포함
+      const participants = [
+        { id: user?.id, name: user?.name || '사용자', color: '#723CEB' },
+        ...(meetingParticipants || []),
+      ];
+      addMeeting({ ...meeting, agendas: insertedAgendas, participants });
       return meeting;
     },
     [user, addMeeting]
@@ -114,6 +121,20 @@ export function useMeeting() {
         await supabase.from('meetings').update(patch).eq('id', id);
       }
       updateMeeting(id, patch);
+
+      // 첫 번째 어젠다를 active로 설정
+      const meeting = useMeetingStore.getState().meetings.find((m) => m.id === id);
+      const firstAgenda = meeting?.agendas?.[0];
+      if (firstAgenda) {
+        if (canUseDB && firstAgenda.id && !firstAgenda.id.startsWith('local-')) {
+          await supabase.from('agendas').update({ status: 'active' }).eq('id', firstAgenda.id);
+        }
+        const updatedAgendas = (meeting.agendas || []).map((a, i) => ({
+          ...a,
+          status: i === 0 ? 'active' : a.status || 'pending',
+        }));
+        updateMeeting(id, { agendas: updatedAgendas });
+      }
     },
     [updateMeeting]
   );

@@ -81,6 +81,10 @@ export const useMeetingStore = create((set, get) => ({
   activeMeetingId: null,
   setActiveMeetingId: (id) => set({ activeMeetingId: id }),
 
+  // 회의록 백그라운드 생성 상태
+  summaryGeneratingId: null,
+  setSummaryGeneratingId: (id) => set({ summaryGeneratingId: id }),
+
   // ── 초기 로드 + Realtime 구독 ──
   init: async () => {
     // 데모 사용자 또는 Supabase 미연결 시 목 데이터 사용

@@ -13,6 +13,7 @@ import {
 import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
+import { Loader2 } from 'lucide-react';
 
 function getNavItems(isAdmin) {
   const items = [
@@ -34,6 +35,7 @@ export default function Sidebar({ mobile = false, onClose }) {
   const { pathname } = useLocation();
   const navItems = getNavItems(isAdmin());
   const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
+  const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
   const isMeetingPage = pathname.startsWith('/meetings/');
 
   const handleLogout = async () => {
@@ -61,16 +63,24 @@ export default function Sidebar({ mobile = false, onClose }) {
           </button>
         </div>
         <nav className="flex flex-col gap-0.5 flex-1 mt-2">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to} to={to} end={end} onClick={handleNavClick}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${isActive ? 'font-medium' : ''}`}
-              style={({ isActive }) => ({ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)', background: isActive ? 'var(--sidebar-active-bg)' : undefined })}
-            >
-              <Icon size={18} strokeWidth={2} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
+          {navItems.map(({ to, label, icon: Icon, end }) => {
+            const isSummaryNav = to === '/summaries';
+            const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
+            return (
+              <NavLink
+                key={to} to={to} end={end} onClick={handleNavClick}
+                className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${isActive ? 'font-medium' : ''}`}
+                style={({ isActive }) => ({ color: isActive ? 'var(--sidebar-text)' : isSummaryGenerating ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)', background: isActive ? 'var(--sidebar-active-bg)' : undefined })}
+              >
+                {isSummaryGenerating ? (
+                  <Loader2 size={18} strokeWidth={2} className="animate-spin text-brand-purple" />
+                ) : (
+                  <Icon size={18} strokeWidth={2} />
+                )}
+                <span>{isSummaryGenerating ? '작성 중...' : label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="pt-3 mt-3" style={{ borderTop: '1px solid var(--sidebar-divider)' }}>
           <div className="flex items-center gap-3 px-2 py-2 rounded-md">
@@ -111,6 +121,10 @@ export default function Sidebar({ mobile = false, onClose }) {
           const hasActiveMeeting = isMeetingNav && activeMeetingId;
           const targetTo = hasActiveMeeting ? `/meetings/${activeMeetingId}` : to;
 
+          // 회의록 버튼 + 백그라운드 생성 중
+          const isSummaryNav = to === '/summaries';
+          const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
+
           return (
             <NavLink
               key={to}
@@ -120,13 +134,14 @@ export default function Sidebar({ mobile = false, onClose }) {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
                   isActive ? 'font-medium' : ''
-                }`
+                } ${isSummaryGenerating ? 'summary-generating' : ''}`
               }
               style={({ isActive }) => ({
-                color: isActive ? 'var(--sidebar-text)' : hasActiveMeeting ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
-                background: isActive ? 'var(--sidebar-active-bg)' : undefined,
+                color: isActive ? 'var(--sidebar-text)' : hasActiveMeeting ? 'var(--sidebar-text)' : isSummaryGenerating ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
+                background: isActive && !isSummaryGenerating ? 'var(--sidebar-active-bg)' : undefined,
               })}
               onMouseEnter={(e) => {
+                if (isSummaryGenerating) return;
                 const active = e.currentTarget.getAttribute('aria-current') === 'page';
                 if (!active) {
                   e.currentTarget.style.background = 'var(--sidebar-hover)';
@@ -134,6 +149,7 @@ export default function Sidebar({ mobile = false, onClose }) {
                 }
               }}
               onMouseLeave={(e) => {
+                if (isSummaryGenerating) return;
                 const active = e.currentTarget.getAttribute('aria-current') === 'page';
                 if (!active) {
                   e.currentTarget.style.background = '';
@@ -141,13 +157,19 @@ export default function Sidebar({ mobile = false, onClose }) {
                 }
               }}
             >
-              <span className={`relative shrink-0 ${hasActiveMeeting ? 'text-status-error' : ''}`}>
-                <Icon size={18} strokeWidth={2} />
+              <span className={`relative shrink-0 ${hasActiveMeeting ? 'text-status-error' : isSummaryGenerating ? 'text-brand-purple' : ''}`}>
+                {isSummaryGenerating ? (
+                  <Loader2 size={18} strokeWidth={2} className="animate-spin" />
+                ) : (
+                  <Icon size={18} strokeWidth={2} />
+                )}
                 {hasActiveMeeting && (
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-status-error pulse-dot" />
                 )}
               </span>
-              <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">{label}</span>
+              <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">
+                {isSummaryGenerating ? '작성 중...' : label}
+              </span>
             </NavLink>
           );
         })}

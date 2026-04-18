@@ -4,15 +4,19 @@ import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkle
 import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import { supabase } from '@/lib/supabase';
 
-const TEAMS = [
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+
+const MOCK_TEAMS = [
   { id: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7', name: '프로덕트 팀' },
   { id: 'd9dcfd11-3779-4fe4-bd8d-263db7ce661b', name: '디자인 팀' },
   { id: 'e7a1b2c3-0000-4000-a000-000000000003', name: '엔지니어링 팀' },
 ];
 
-const ALL_MEMBERS = [
+const MOCK_MEMBERS = [
   { id: 'u1', name: '김지우', color: '#FF902F', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
   { id: 'u2', name: '박서연', color: '#34D399', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
   { id: 'u3', name: '이도윤', color: '#38BDF8', team: 'c3a83ad9-10b3-4850-bbd1-abbcbc9dacd7' },
@@ -55,6 +59,43 @@ function clearDraft() {
 
 export default function CreateMeetingModal({ open, onClose }) {
   const draft = useRef(loadDraft());
+  const { user } = useAuthStore();
+  const isDemo = !user || user.id?.startsWith('mock-');
+
+  // 데모 사용자: 목 데이터 / 실제 사용자: Supabase에서 로드
+  const [TEAMS, setTeams] = useState(isDemo ? MOCK_TEAMS : []);
+  const [ALL_MEMBERS, setAllMembers] = useState(isDemo ? MOCK_MEMBERS : []);
+
+  useEffect(() => {
+    if (!open || isDemo || !SUPABASE_ENABLED) return;
+    async function loadTeamsAndMembers() {
+      try {
+        const { data: teamsData } = await supabase
+          .from('teams')
+          .select('id, name')
+          .order('name');
+        const { data: membersData } = await supabase
+          .from('users')
+          .select('id, name, avatar_color, team_members(team_id)');
+
+        if (teamsData) setTeams(teamsData);
+        if (membersData) {
+          const normalized = membersData.flatMap((u) =>
+            (u.team_members || []).map((tm) => ({
+              id: u.id,
+              name: u.name,
+              color: u.avatar_color || '#723CEB',
+              team: tm.team_id,
+            }))
+          );
+          setAllMembers(normalized);
+        }
+      } catch (err) {
+        console.warn('[CreateMeetingModal] 팀/멤버 로드 실패:', err);
+      }
+    }
+    loadTeamsAndMembers();
+  }, [open, isDemo]);
 
   const [title, setTitle] = useState(draft.current?.title || '');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -71,7 +112,7 @@ export default function CreateMeetingModal({ open, onClose }) {
         setSelectedTeams(saved.selectedTeams || []);
         setSelectedMembers(saved.selectedMembers || []);
         setAgendas(saved.agendas?.length ? saved.agendas : [{ title: '', duration_minutes: 10 }]);
-        setScheduledDate(saved.scheduledDate || new Date().toISOString().slice(0, 10));
+        setScheduledDate(saved.scheduledDate || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })());
         setScheduledTime(saved.scheduledTime || '');
         setDuration(saved.duration || 30);
       }
@@ -99,7 +140,10 @@ export default function CreateMeetingModal({ open, onClose }) {
   const [agendas, setAgendas] = useState(
     draft.current?.agendas?.length ? draft.current.agendas : [{ title: '', duration_minutes: 10 }]
   );
-  const [scheduledDate, setScheduledDate] = useState(draft.current?.scheduledDate || (() => new Date().toISOString().slice(0, 10)));
+  const [scheduledDate, setScheduledDate] = useState(draft.current?.scheduledDate || (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }));
   const [scheduledTime, setScheduledTime] = useState(draft.current?.scheduledTime || '');
   const [showTimeSuggestions, setShowTimeSuggestions] = useState(false);
   const [duration, setDuration] = useState(draft.current?.duration || 30);
@@ -199,7 +243,7 @@ export default function CreateMeetingModal({ open, onClose }) {
     setSelectedTeams([]);
     setSelectedMembers([]);
     setAgendas([{ title: '', duration_minutes: 10 }]);
-    setScheduledDate(new Date().toISOString().slice(0, 10));
+    setScheduledDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })());
     setScheduledTime('');
     setDuration(30);
     setFiles([]);
@@ -265,6 +309,7 @@ export default function CreateMeetingModal({ open, onClose }) {
         title: title.trim(),
         team_id: selectedTeams[0] || null,
         agendas: cleaned,
+        participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
       });
       await startMeeting(meeting.id);
       clearDraft();

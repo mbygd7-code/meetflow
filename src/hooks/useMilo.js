@@ -191,17 +191,30 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
       MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION?.test(afterQuote) ||
       (!!quotedAiId && quotedAiId !== 'milo');
 
-    // 자동 개입 OFF → 직접 호출(@멘션)만 허용
-    if (!autoIntervene && !mentioned && !directEmployeeMention) return;
+    // 직접 요청 감지 ("~해줘", "~찾아줘" 등)
+    const isDirectRequest = MILO_INTERVENTION_TRIGGERS.REQUEST?.test(afterQuote);
 
-    if (!mentioned && !directEmployeeMention) {
+    // 자동 개입 OFF → 직접 호출(@멘션) 또는 직접 요청만 허용
+    if (!autoIntervene && !mentioned && !directEmployeeMention && !isDirectRequest) {
+      runningRef.current = false;
+      return;
+    }
+
+    // 직접 요청은 멘션처럼 쿨다운/턴 제한 건너뜀
+    if (!mentioned && !directEmployeeMention && !isDirectRequest) {
       if (!alwaysRespond) {
         // 기존 로직: 개입 횟수/쿨다운/최소 턴 체크
-        if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) return;
+        if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) {
+          runningRef.current = false;
+          return;
+        }
 
         // performance.now()는 단조 증가 보장 (시스템 클럭 변경 영향 받지 않음)
         const sinceLastMs = performance.now() - lastInterventionRef.current;
-        if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) return;
+        if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) {
+          runningRef.current = false;
+          return;
+        }
 
         // 마지막 밀로(milo) 응답 이후 사람 턴만 카운트
         let humanTurnsSinceMilo = 0;
@@ -209,7 +222,10 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           if (messages[i].is_ai && (messages[i].ai_employee === 'milo' || !messages[i].ai_employee)) break;
           if (!messages[i].is_ai) humanTurnsSinceMilo++;
         }
-        if (humanTurnsSinceMilo < cfg.minTurnsBefore) return;
+        if (humanTurnsSinceMilo < cfg.minTurnsBefore) {
+          runningRef.current = false;
+          return;
+        }
       }
       // alwaysRespond 모드: 위 제한을 모두 스킵
     }
@@ -219,11 +235,15 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
       alwaysRespond ||
       mentioned ||
       directEmployeeMention ||
+      isDirectRequest ||
       MILO_INTERVENTION_TRIGGERS.GUESS.test(lastMsg.content) ||
       MILO_INTERVENTION_TRIGGERS.AGREEMENT.test(lastMsg.content) ||
       MILO_INTERVENTION_TRIGGERS.DEADLINE.test(lastMsg.content);
 
-    if (!shouldConsider) return;
+    if (!shouldConsider) {
+      runningRef.current = false;
+      return;
+    }
 
     // 비동기 분석
     const run = async () => {
@@ -287,8 +307,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
             miloPrompt += '\n\n## 중요: 1:1 회의 모드입니다. 사용자의 모든 메시지에 반드시 should_respond: true로 응답하세요. 짧은 인사나 간단한 질문에도 친절하게 응답합니다.';
           }
           // @밀로 직접 호출 시: 침묵 금지 — 반드시 응답
-          if (mentioned) {
-            miloPrompt += '\n\n## 직접 호출 모드 (최우선)\n사용자가 당신을 직접 @밀로(또는 "밀로 ...") 로 호출했습니다. **반드시 should_respond: true로 응답하세요**. 질문이 모호하면 "무엇을 도와드릴까요?" 처럼 되물어 명확히 하세요. "침묵도 선택지" 원칙은 이 경우 적용되지 않습니다.';
+          if (mentioned || isDirectRequest) {
+            miloPrompt += '\n\n## 직접 호출 모드 (최우선)\n사용자가 직접 요청했습니다. **반드시 should_respond: true로 응답하세요**. 요청 내용에 맞는 구체적 결과를 즉시 제시하세요. "침묵도 선택지" 원칙은 이 경우 적용되지 않습니다.';
           }
           const miloModelId = getEmployeeModelId('milo');
           const miloOverrides = getEmployeeOverrides['milo'] || {};
@@ -303,18 +323,28 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           const humanNames = [...new Set(
             messages.filter((m) => !m.is_ai && m.user?.name).map((m) => m.user.name)
           )];
-          result = await analyzeMilo({
-            messages,
-            agenda,
-            preset,
-            context: { routedEmployees, participants: humanNames },
-            miloSettings,
-            compressedContext: compressedContextRef.current,
-            googleDocsSummary: miloOverrides.googleDocsSummary || null,
-            skipKnowledge: !mentioned, // @밀로 직접 호출 시에만 지식 검색 활성화 (자동 개입은 라우팅만)
-            signal: chainAbort.signal,
-          });
-          if (chainAbort.signal.aborted) return; // 어젠다 변경으로 취소됨
+          try {
+            result = await analyzeMilo({
+              messages,
+              agenda,
+              preset,
+              context: { routedEmployees, participants: humanNames },
+              miloSettings,
+              compressedContext: compressedContextRef.current,
+              googleDocsSummary: miloOverrides.googleDocsSummary || null,
+              skipKnowledge: !mentioned && !isDirectRequest,
+              signal: chainAbort.signal,
+            });
+          } catch (apiErr) {
+            console.warn('[useMilo] API call failed, falling back to mock:', apiErr?.message);
+            result = mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond || mentioned);
+          }
+          if (chainAbort.signal.aborted) return;
+          // API가 should_respond: false 반환했지만 직접 호출/요청인 경우 → mock 폴백
+          if ((!result || !result.should_respond) && (mentioned || alwaysRespond || isDirectRequest)) {
+            console.log('[useMilo] API returned no response on direct call, using mock fallback');
+            result = mockMiloResponse(messages, agenda, routedEmployees, true);
+          }
           if (result) result.ai_employee = 'milo';
           onThinking?.(false, null);
         } else {
