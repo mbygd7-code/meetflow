@@ -291,12 +291,23 @@ ${preset || 'default'}
     // 마지막 사용자 메시지에서 검색 요청 키워드 감지
     const lastUserMsg = (messages || []).filter((m: any) => !m.is_ai).pop()?.content || '';
     const searchKeywords = /검색|찾아|서치|search|조사|리서치|트렌드|최신|경쟁사|사례|레퍼런스/i;
-    const wantsSearch = searchKeywords.test(lastUserMsg);
+    // 직전 AI 메시지가 "~하겠습니다" 약속으로 끝났고 사용자가 짧게 확인만 했다면 → 검색 유지
+    const lastAiMsg = (messages || []).filter((m: any) => m.is_ai).pop()?.content || '';
+    const aiPromisedSearch = /(검색하여|검색하겠|찾아보겠|조사하겠|수집한\s*후|수집해|분석에\s*즉시|정리해\s*드리|작성해\s*드리)/.test(lastAiMsg);
+    const userShortConfirm = lastUserMsg.length < 30 && /(네|응|좋아|그래|진행|시작|해주세요|부탁|ok|okay|yes)/i.test(lastUserMsg);
+    // 직전 사용자 요청 중 가장 "검색 의도가 강한" 메시지를 역추적 (최근 10개 이내)
+    const recentUserMsgs = (messages || []).filter((m: any) => !m.is_ai).slice(-10);
+    const searchIntentMsg = [...recentUserMsgs].reverse().find((m: any) => searchKeywords.test(m.content || ''))?.content || '';
+    const wantsSearch =
+      searchKeywords.test(lastUserMsg) ||
+      (aiPromisedSearch && userShortConfirm) ||
+      (aiPromisedSearch && !!searchIntentMsg);
 
     if (GOOGLE_CSE_ID && GOOGLE_API_KEY && wantsSearch) {
       try {
-        // 검색 쿼리: 마지막 메시지에서 핵심 키워드 추출 (간단하게)
-        const cleanQuery = lastUserMsg
+        // 검색 쿼리 원본: 현재 메시지에 의도 키워드 있으면 그대로, 아니면 역추적한 의도 메시지 사용
+        const sourceMsg = searchKeywords.test(lastUserMsg) ? lastUserMsg : (searchIntentMsg || lastUserMsg);
+        const cleanQuery = sourceMsg
           .replace(/검색해줘|찾아줘|서치해줘|알려줘|보여줘|해줘|해 줘/g, '')
           .replace(/@\S+/g, '')
           .trim()
