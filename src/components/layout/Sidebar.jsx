@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   CheckSquare,
-  FileText,
   Settings,
   Shield,
   LogOut,
@@ -15,17 +14,20 @@ import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { Loader2 } from 'lucide-react';
 
-function getNavItems(isAdmin) {
-  const items = [
+// 상단 작업 메뉴 — 주 업무 흐름 (마이보드 / 회의 / 태스크)
+function getPrimaryNavItems() {
+  return [
     { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
-    ...(isAdmin ? [
-      { to: '/admin', label: '관리자', icon: Shield },
-    ] : []),
     { to: '/meetings', label: '회의', icon: MessageSquare },
     { to: '/tasks', label: '태스크', icon: CheckSquare },
-    { to: '/summaries', label: '회의록', icon: FileText },
-    { to: '/settings', label: '설정', icon: Settings },
   ];
+}
+
+// 하단 시스템 메뉴 — 관리자 · 설정 (낮은 빈도, 유틸리티성)
+function getSecondaryNavItems(isAdmin) {
+  const items = [];
+  if (isAdmin) items.push({ to: '/admin', label: '관리자', icon: Shield });
+  items.push({ to: '/settings', label: '설정', icon: Settings });
   return items;
 }
 
@@ -33,7 +35,8 @@ export default function Sidebar({ mobile = false, onClose }) {
   const { user, signOut, isAdmin } = useAuthStore();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const navItems = getNavItems(isAdmin());
+  const primaryNavItems = getPrimaryNavItems();
+  const secondaryNavItems = getSecondaryNavItems(isAdmin());
   const activeMeetingId = useMeetingStore((s) => s.activeMeetingId);
   const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
   const isMeetingPage = pathname.startsWith('/meetings/');
@@ -63,7 +66,8 @@ export default function Sidebar({ mobile = false, onClose }) {
           </button>
         </div>
         <nav className="flex flex-col gap-0.5 flex-1 mt-2">
-          {navItems.map(({ to, label, icon: Icon, end }) => {
+          {/* 상단 주 메뉴 */}
+          {primaryNavItems.map(({ to, label, icon: Icon, end }) => {
             const isSummaryNav = to === '/summaries';
             const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
             return (
@@ -81,6 +85,21 @@ export default function Sidebar({ mobile = false, onClose }) {
               </NavLink>
             );
           })}
+
+          {/* 하단 시스템 메뉴 (관리자 · 설정) — flex-1 spacer로 밀어냄 */}
+          <div className="flex-1" />
+          <div className="pt-2 mt-2" style={{ borderTop: '1px solid var(--sidebar-divider)' }}>
+            {secondaryNavItems.map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={to} to={to} end={end} onClick={handleNavClick}
+                className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${isActive ? 'font-medium' : ''}`}
+                style={({ isActive }) => ({ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)', background: isActive ? 'var(--sidebar-active-bg)' : undefined })}
+              >
+                <Icon size={18} strokeWidth={2} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </div>
         </nav>
         <div className="pt-3 mt-3" style={{ borderTop: '1px solid var(--sidebar-divider)' }}>
           <div className="flex items-center gap-3 px-2 py-2 rounded-md">
@@ -123,13 +142,12 @@ export default function Sidebar({ mobile = false, onClose }) {
       )}
 
       <nav className="flex flex-col gap-0.5 flex-1 mt-2">
-        {navItems.map(({ to, label, icon: Icon, end }) => {
-          // 회의 버튼 + 활성 회의 있으면 → 채팅방으로 바로 이동 + 깜박임
+        {/* 상단: 주 메뉴 (마이보드 / 회의 / 태스크) */}
+        {primaryNavItems.map(({ to, label, icon: Icon, end }) => {
           const isMeetingNav = to === '/meetings';
           const hasActiveMeeting = isMeetingNav && activeMeetingId;
           const targetTo = hasActiveMeeting ? `/meetings/${activeMeetingId}` : to;
 
-          // 회의록 버튼 + 백그라운드 생성 중
           const isSummaryNav = to === '/summaries';
           const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
 
@@ -181,6 +199,51 @@ export default function Sidebar({ mobile = false, onClose }) {
             </NavLink>
           );
         })}
+
+        {/* 중간 spacer — 하단 시스템 메뉴를 밀어냄 */}
+        <div className="flex-1" />
+
+        {/* 하단: 시스템 메뉴 (관리자 · 설정) */}
+        <div
+          className="pt-2 mt-2 flex flex-col gap-0.5"
+          style={{ borderTop: '1px solid var(--sidebar-divider)' }}
+        >
+          {secondaryNavItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={handleNavClick}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 lg:px-4 py-2.5 rounded-md text-sm transition-all duration-200 ${
+                  isActive ? 'font-medium' : ''
+                }`
+              }
+              style={({ isActive }) => ({
+                color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-text-muted)',
+                background: isActive ? 'var(--sidebar-active-bg)' : undefined,
+              })}
+              onMouseEnter={(e) => {
+                const active = e.currentTarget.getAttribute('aria-current') === 'page';
+                if (!active) {
+                  e.currentTarget.style.background = 'var(--sidebar-hover)';
+                  e.currentTarget.style.color = 'var(--sidebar-text)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                const active = e.currentTarget.getAttribute('aria-current') === 'page';
+                if (!active) {
+                  e.currentTarget.style.background = '';
+                  e.currentTarget.style.color = 'var(--sidebar-text-muted)';
+                }
+              }}
+            >
+              <Icon size={18} strokeWidth={2} className="shrink-0" />
+              <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">
+                {label}
+              </span>
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       {/* 하단 유저 */}

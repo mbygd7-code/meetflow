@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext, Link } from 'react-router-dom';
 import {
   Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight,
-  Sparkles, Coins, MessageSquare, Trophy, TrendingUp,
+  Sparkles, Coins, MessageSquare,
 } from 'lucide-react';
 import { Card, MetricCard, Badge, SectionPanel } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
@@ -10,6 +10,7 @@ import { useMeetingStore } from '@/stores/meetingStore';
 import { useTaskStore } from '@/stores/taskStore';
 import EmployeeTable from '@/components/admin/EmployeeTable';
 import TeamOverview from '@/components/admin/TeamOverview';
+import EmployeeTaskOverview from '@/components/admin/EmployeeTaskOverview';
 import { format, parseISO } from 'date-fns';
 import WeeklyChart from '@/components/ui/WeeklyChart';
 
@@ -121,32 +122,7 @@ export default function AdminDashboardPage() {
     }));
   }, [employees]);
 
-  // ── 종합 기여도 랭킹 (완수율 50% + 완수량 30% + 담당량 20%) ──
-  // 완수율: 품질 (맡은 일을 얼마나 잘 해내나)
-  // 완수량: 실행력 (실제로 얼마나 끝냈나) — done_tasks 정규화
-  // 담당량: 책임 범위 (얼마나 많이 맡고 있나) — total_tasks 정규화
-  const topContributors = useMemo(() => {
-    if (employees.length === 0) return [];
-    const maxDone = Math.max(...employees.map((e) => e.done_tasks || 0), 1);
-    const maxTotal = Math.max(...employees.map((e) => e.total_tasks || 0), 1);
-
-    return [...employees]
-      .map((e) => {
-        const completion = e.completion_rate || 0;                        // 0~100
-        const execution = ((e.done_tasks || 0) / maxDone) * 100;          // 0~100
-        const responsibility = ((e.total_tasks || 0) / maxTotal) * 100;   // 0~100
-        const score = Math.round(completion * 0.5 + execution * 0.3 + responsibility * 0.2);
-        return {
-          ...e,
-          _score: score,
-          _completion: completion,
-          _execution: Math.round(execution),
-          _responsibility: Math.round(responsibility),
-        };
-      })
-      .sort((a, b) => b._score - a._score)
-      .slice(0, 10);
-  }, [employees]);
+  // (종합 기여도 랭킹은 EmployeeTable 내부에서 직접 계산·정렬)
 
   const weeklyData = [
     { label: '월', value: 3 }, { label: '화', value: 5 }, { label: '수', value: 2 },
@@ -284,8 +260,19 @@ export default function AdminDashboardPage() {
           </SectionPanel>
         )}
 
-        {/* ═══ 섹션 4: 직원 평가 테이블 ═══ */}
-        <SectionPanel title="직원 평가" subtitle="태스크 완수율 기준 정렬">
+        {/* ═══ 섹션 4: 직원 현재 업무 현황 ═══ */}
+        <SectionPanel
+          title="직원 현재 업무"
+          subtitle="누가 무엇을 진행 중인지, 지연·마감 임박 태스크 한눈에"
+        >
+          <EmployeeTaskOverview employees={employees} tasks={tasks} />
+        </SectionPanel>
+
+        {/* ═══ 섹션 5: 직원 평가 & 기여도 랭킹 (통합) ═══ */}
+        <SectionPanel
+          title="직원 평가 & 기여도 (팀 내 순위)"
+          subtitle="완수율·완수량·담당량으로 본 상대 평가 · 개인 균형 평가는 직원 상세에서 확인"
+        >
           <div className="bg-bg-tertiary rounded-[7px] p-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -298,105 +285,6 @@ export default function AdminDashboardPage() {
             )}
           </div>
         </SectionPanel>
-
-        {/* ═══ 섹션 5: 종합 기여도 랭킹 (완수율 50% + 완수량 30% + 담당량 20%) ═══ */}
-        {topContributors.length > 0 && (
-          <SectionPanel
-            title="종합 기여도 랭킹"
-            subtitle="완수율(품질) 50% + 완수량(실행력) 30% + 담당량(책임) 20% · 상위 10명"
-          >
-            {/* 가중치 범례 */}
-            <div className="flex items-center gap-3 mb-3 px-1 text-[10px] text-txt-muted">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-status-success" />
-                완수율 (품질)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-brand-purple" />
-                완수량 (실행력)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-brand-orange" />
-                담당량 (책임)
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              {topContributors.map((m, i) => {
-                const score = m._score;
-                const rankColor = i === 0 ? 'bg-brand-orange text-white'
-                  : i === 1 ? 'bg-brand-purple text-white'
-                    : i === 2 ? 'bg-brand-yellow text-txt-primary'
-                      : 'bg-bg-tertiary text-txt-muted';
-                return (
-                  <div
-                    key={m.user_id}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-bg-tertiary/50 transition-colors"
-                  >
-                    {/* 순위 */}
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${rankColor}`}>
-                      {i < 3 ? <Trophy size={12} /> : i + 1}
-                    </span>
-
-                    {/* 아바타 + 이름 + 팀 */}
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                      style={{ backgroundColor: m.avatar_color || '#723CEB' }}
-                    >
-                      {m.user_name?.[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-txt-primary truncate">{m.user_name}</p>
-                      <p className="text-[10px] text-txt-muted truncate">{m.team || '미지정'}</p>
-                    </div>
-
-                    {/* 세부 지표 (데스크톱 전용) */}
-                    <div className="hidden lg:flex items-center gap-2 text-[10px] text-txt-muted">
-                      <span title="완수율" className="flex items-center gap-0.5">
-                        <CheckCircle2 size={10} className="text-status-success" />
-                        {m._completion}%
-                      </span>
-                      <span title="완수 태스크 수" className="flex items-center gap-0.5">
-                        <Trophy size={10} className="text-brand-purple" />
-                        {m.done_tasks || 0}건 완수
-                      </span>
-                      <span title="담당 태스크 총량" className="flex items-center gap-0.5">
-                        <TrendingUp size={10} className="text-brand-orange" />
-                        {m.total_tasks || 0}건 담당
-                      </span>
-                    </div>
-
-                    {/* 종합 점수 스택 바 (품질 · 실행력 · 책임 비율 반영) */}
-                    <div
-                      className="w-20 md:w-32 h-1.5 bg-bg-primary rounded-full overflow-hidden flex"
-                      title={`완수율 ${m._completion}% · 완수량 ${m._execution}% · 담당량 ${m._responsibility}%`}
-                    >
-                      <div
-                        className="h-full bg-status-success transition-all"
-                        style={{ width: `${m._completion * 0.5}%` }}
-                      />
-                      <div
-                        className="h-full bg-brand-purple transition-all"
-                        style={{ width: `${m._execution * 0.3}%` }}
-                      />
-                      <div
-                        className="h-full bg-brand-orange transition-all"
-                        style={{ width: `${m._responsibility * 0.2}%` }}
-                      />
-                    </div>
-
-                    {/* 종합 점수 */}
-                    <span className={`text-xs font-bold w-10 text-right shrink-0 ${
-                      score >= 70 ? 'text-status-success' : score >= 40 ? 'text-brand-orange' : 'text-status-error'
-                    }`}>
-                      {score}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </SectionPanel>
-        )}
 
         {/* ═══ 섹션 6: 최근 완료 회의 ═══ */}
         <SectionPanel title="최근 완료 회의" subtitle="최근 5건">

@@ -20,9 +20,9 @@ const PAGE_TITLES = {
 export const SidebarContext = createContext();
 export const useSidebar = () => useContext(SidebarContext);
 
+// 회의록은 회의 페이지 상단 버튼으로 진입 — 모바일 탭바에서도 제거
 const BASE_MOBILE_TABS = [
   { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
-  { to: '/summaries', label: '회의록', icon: FileText },
   { to: '/tasks', label: '태스크', icon: CheckSquare },
   { to: '/meetings', label: '회의', icon: MessageSquare },
 ];

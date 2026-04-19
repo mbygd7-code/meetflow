@@ -11,6 +11,7 @@ import { getOverallGrade, gradeToStyle } from '@/utils/gradeUtils';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import TaskSlidePanel from '@/components/task/TaskSlidePanel';
+import MyTaskCard from '@/components/task/MyTaskCard';
 
 // ── 참여도 점수 계산 ──
 function calcParticipationScore(msgCount, meetingCount) {
@@ -373,7 +374,7 @@ export default function EmployeeDetailPage() {
               </div>
               <p className="text-sm text-txt-muted">{profile.email}</p>
               <p className="text-[11px] text-txt-muted mt-0.5">
-                가입일: {profile.created_at ? format(parseISO(profile.created_at), 'yyyy.MM.dd') : '-'}
+                계정 생성일: {profile.created_at ? format(parseISO(profile.created_at), 'yyyy.MM.dd') : '-'}
               </p>
             </div>
 
@@ -401,8 +402,8 @@ export default function EmployeeDetailPage() {
 
         {/* ═══ 섹션 2: 종합 평가 ═══ */}
         <SectionPanel
-          title="종합 평가"
-          subtitle="참여도·완수율·리더십·적극성·발언 태도 기반"
+          title="종합 평가 (개인 균형 평가)"
+          subtitle="참여도·완수율·리더십·적극성·발언 태도 5지표 가중 평균 · 관리자 대시보드의 기여도와 다른 관점"
           action={
             <button
               onClick={handleGenerateReport}
@@ -535,132 +536,42 @@ export default function EmployeeDetailPage() {
           )}
         </SectionPanel>
 
-        <SectionPanel title="배정 태스크" subtitle={`총 ${stats.totalTasks}건 · 완료 ${stats.doneTasks}건`}>
-          {tasks.length === 0 ? (
-            <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
-          ) : (
-            <div className="space-y-2">
-              {tasks.map((task) => {
-                const isOverdue = task.due_date && task.status !== 'done' &&
-                  differenceInDays(new Date(), parseISO(task.due_date)) > 0;
-                return (
-                  <Card key={task.id} className="!p-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${
-                        task.status === 'done' ? 'bg-status-success' :
-                        task.status === 'in_progress' ? 'bg-brand-purple' :
-                        isOverdue ? 'bg-status-error' : 'bg-txt-muted'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${
-                          task.status === 'done' ? 'text-txt-muted line-through' : 'text-txt-primary'
-                        }`}>
-                          {task.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {task.due_date && (
-                            <span className={`text-[10px] flex items-center gap-0.5 ${
-                              isOverdue ? 'text-status-error' : 'text-txt-muted'
-                            }`}>
-                              <Clock size={9} />
-                              {format(parseISO(task.due_date), 'MM/dd')}
-                              {isOverdue && ' (초과)'}
-                            </span>
-                          )}
-                          <Badge variant={
-                            task.priority === 'urgent' ? 'danger' :
-                            task.priority === 'high' ? 'warning' :
-                            'outline'
-                          }>
-                            {task.priority === 'urgent' ? '긴급' :
-                             task.priority === 'high' ? '높음' :
-                             task.priority === 'medium' ? '보통' : '낮음'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Badge variant={
-                        task.status === 'done' ? 'success' :
-                        task.status === 'in_progress' ? 'info' :
-                        task.status === 'cancelled' ? 'danger' : 'outline'
-                      }>
-                        {task.status === 'done' ? '완료' :
-                         task.status === 'in_progress' ? '진행 중' :
-                         task.status === 'cancelled' ? '취소' : '대기'}
-                      </Badge>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </SectionPanel>
-
       </div>
       {/* 메인 콘텐츠 끝 */}
 
-      {/* ═══ 오른쪽 사이드바: 태스크 리스트 ═══ */}
-      <aside className="hidden lg:block w-[300px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 lg:overflow-y-auto lg:max-h-[calc(100vh-120px)] scrollbar-hide relative">
+      {/* ═══ 오른쪽 사이드바: 배정 태스크 (MyTaskCard 재사용) ═══ */}
+      <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 lg:overflow-y-auto lg:max-h-[calc(100vh-120px)] scrollbar-hide relative">
         {/* 태스크 상세 슬라이드 패널 */}
         <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
 
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-txt-primary">{profile?.name}의 태스크</h2>
-          <span className="text-xs text-txt-muted">{stats.doneTasks}/{stats.totalTasks} 완료</span>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-semibold text-txt-primary">
+              {profile?.name}의 태스크
+            </h2>
+            <p className="text-[10px] text-txt-muted mt-0.5">
+              총 {stats.totalTasks}건 · 완료 {stats.doneTasks}건
+              {stats.overdueTasks > 0 && (
+                <> · <span className="text-status-error">지연 {stats.overdueTasks}건</span></>
+              )}
+            </p>
+          </div>
         </div>
-        <div className="space-y-2.5">
-          {tasks.length === 0 ? (
-            <p className="text-sm text-txt-muted text-center py-6">배정된 태스크가 없습니다</p>
-          ) : (
-            tasks.map((task) => {
-              const isOverdue = task.due_date && task.status !== 'done' &&
-                differenceInDays(new Date(), parseISO(task.due_date)) > 0;
-              return (
-                <div
-                  key={task.id}
-                  onClick={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
-                  className={`bg-[var(--card-bg)] rounded-[6px] border p-3 transition-all cursor-pointer ${
-                    selectedTask?.id === task.id
-                      ? 'border-brand-purple bg-brand-purple/5'
-                      : 'border-border-subtle hover:border-border-hover-strong'
-                  }`}>
-                  <div className="flex items-start gap-2">
-                    <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
-                      task.status === 'done'
-                        ? 'border-status-success bg-status-success'
-                        : task.status === 'in_progress'
-                          ? 'border-brand-purple'
-                          : 'border-txt-muted'
-                    }`}>
-                      {task.status === 'done' && <CheckCircle2 size={10} className="text-white" />}
-                      {task.status === 'in_progress' && <div className="w-1.5 h-1.5 rounded-full bg-brand-purple" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium leading-snug line-clamp-2 ${
-                        task.status === 'done' ? 'text-txt-muted line-through' : 'text-txt-primary'
-                      }`}>{task.title}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        {task.due_date && (
-                          <span className={`text-[11px] ${isOverdue ? 'text-status-error font-semibold' : 'text-txt-muted'}`}>
-                            {isOverdue ? 'D+' + differenceInDays(new Date(), parseISO(task.due_date)) : format(parseISO(task.due_date), 'MM/dd')}
-                          </span>
-                        )}
-                        <span className={`text-[10px] font-medium ${
-                          task.priority === 'urgent' ? 'text-status-error' :
-                          task.priority === 'high' ? 'text-brand-orange' :
-                          'text-txt-muted'
-                        }`}>
-                          {task.priority === 'urgent' ? '긴급' :
-                           task.priority === 'high' ? '높음' :
-                           task.priority === 'medium' ? '보통' : '낮음'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+
+        {tasks.length === 0 ? (
+          <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
+        ) : (
+          <div className="space-y-2">
+            {tasks.map((task) => (
+              <MyTaskCard
+                key={task.id}
+                task={task}
+                selected={selectedTask?.id === task.id}
+                onSelect={(t) => setSelectedTask(selectedTask?.id === t.id ? null : t)}
+              />
+            ))}
+          </div>
+        )}
       </aside>
 
       {/* ── AI 리포트 모달 ── */}

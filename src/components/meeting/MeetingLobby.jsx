@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { Plus, Search, X, FileText, ArrowRight } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
@@ -35,6 +36,28 @@ export default function MeetingLobby({ pageTitle }) {
   const { meetings, deleteMeeting } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
 
+  // 사용자가 수동으로 탭을 선택했는지 추적 (수동 선택 후엔 자동 전환 안 함)
+  const userSelectedRef = useRef(false);
+
+  // 탭별 카운트 (자동 전환용)
+  const tabCounts = useMemo(() => {
+    const c = { active: 0, scheduled: 0, completed: 0 };
+    for (const m of meetings) {
+      if (c[m.status] != null) c[m.status]++;
+    }
+    return c;
+  }, [meetings]);
+
+  // 최초 진입 + 데이터 로드 완료 시:
+  // 진행 중 0 → 예정 / 예정 0 → 완료 순서로 활성 탭 자동 전환
+  useEffect(() => {
+    if (userSelectedRef.current) return;
+    if (tabCounts.active === 0) {
+      if (tabCounts.scheduled > 0) setTab('scheduled');
+      else if (tabCounts.completed > 0) setTab('completed');
+    }
+  }, [tabCounts]);
+
   const filtered = useMemo(() => {
     let list = meetings.filter((m) => m.status === tab);
     if (searchQuery.trim()) {
@@ -64,7 +87,7 @@ export default function MeetingLobby({ pageTitle }) {
   return (
     <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           {pageTitle && (
             <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
@@ -73,9 +96,19 @@ export default function MeetingLobby({ pageTitle }) {
             팀과 함께 회의를 진행하거나 새 회의를 만드세요
           </p>
         </div>
-        <Button variant="gradient" icon={Plus} size="md" onClick={() => setModalOpen(true)}>
-          새 회의
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="gradient" icon={Plus} size="md" onClick={() => setModalOpen(true)}>
+            새 회의
+          </Button>
+          <Link
+            to="/summaries"
+            className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white bg-brand-purple shadow-md hover:opacity-90 hover:shadow-lg transition-all"
+          >
+            <FileText size={16} strokeWidth={2.4} />
+            <span>회의록 보기</span>
+            <ArrowRight size={14} strokeWidth={2.4} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
       </div>
 
       {/* 메인 패널 */}
@@ -89,7 +122,12 @@ export default function MeetingLobby({ pageTitle }) {
               return (
                 <button
                   key={t.id}
-                  onClick={() => { setTab(t.id); setCompletedMonths(1); setSearchQuery(''); }}
+                  onClick={() => {
+                    userSelectedRef.current = true;
+                    setTab(t.id);
+                    setCompletedMonths(1);
+                    setSearchQuery('');
+                  }}
                   className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
                     active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
                   }`}

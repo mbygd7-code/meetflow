@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const myActiveTasks = myTaskStats.active;
   const taskCounts = myTaskStats.counts;
 
-  // ─── 오늘의 초점 (우선순위·마감·진행중 가중치) ───
+  // ─── 오늘의 업무 (우선순위·마감·진행중 가중치 기반 상위 N건) ───
   const focusTasks = useMemo(() => {
     const PRIORITY_WEIGHT = { urgent: 0, high: 1, medium: 2, low: 3 };
     const now = new Date();
@@ -85,10 +85,23 @@ export default function DashboardPage() {
   }, [myActiveTasks]);
 
   // ─── 회의 분류 ───
-  const todayMeetings = useMemo(
-    () => meetings.filter((m) => m.status === 'active' || m.status === 'scheduled'),
-    [meetings]
-  );
+  // 활성(진행중) 또는 예정된 회의 — 단, 예정인데 시간이 이미 지났고 시작 안 된 회의는 제외
+  // (MeetingCard의 scheduledPassed 로직과 동일: scheduled_at 우선, 없으면 created_at)
+  const todayMeetings = useMemo(() => {
+    const now = Date.now();
+    return meetings.filter((m) => {
+      if (m.status === 'active') return true;
+      if (m.status === 'scheduled') {
+        const effective = m.scheduled_at || m.created_at;
+        if (!effective) return true; // 시간 정보 전혀 없으면 포함
+        const when = new Date(effective).getTime();
+        if (isNaN(when)) return true;
+        // 10분 이상 지난 회의는 "놓친 회의"로 보고 오늘 일정에서 제외
+        return (now - when) <= 10 * 60 * 1000;
+      }
+      return false;
+    });
+  }, [meetings]);
 
   const recentSummaries = useMemo(
     () =>
@@ -132,9 +145,9 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* ═══ 오늘의 초점 ═══ */}
+        {/* ═══ 오늘의 업무 ═══ */}
         <SectionPanel
-          title="오늘의 초점"
+          title="오늘의 업무"
           subtitle={focusTasks.length > 0 ? '가장 먼저 처리하면 좋을 업무' : '아직 할당된 업무가 없어요'}
           action={
             <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
@@ -356,7 +369,7 @@ export default function DashboardPage() {
 }
 
 // ═══════════════════════════════════════════════════
-// 오늘의 초점 카드 — 가장 급한 태스크 1~2건 하이라이트
+// 오늘의 업무 카드 — 가장 급한 태스크 1~2건 하이라이트
 // ═══════════════════════════════════════════════════
 function FocusCard({ task, onClick }) {
   const dday = getDueDateStatus(task.due_date);
