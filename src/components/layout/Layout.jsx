@@ -39,7 +39,7 @@ function MobileTabBar() {
       style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
     >
       {tabs.map(({ to, label, icon: Icon, end }) => {
-        const isSummaryGenerating = to === '/summaries' && !!summaryGeneratingId;
+        const isSummaryGenerating = to === '/meetings' && !!summaryGeneratingId;
         return (
           <NavLink
             key={to}
@@ -60,7 +60,7 @@ function MobileTabBar() {
             ) : (
               <Icon size={22} strokeWidth={1.8} />
             )}
-            <span>{isSummaryGenerating ? '작성 중...' : label}</span>
+            <span>{isSummaryGenerating ? '회의록 작성중...' : label}</span>
           </NavLink>
         );
       })}

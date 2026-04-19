@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
   Loader, Clock, Users, MessageSquare,
-  ChevronDown, ChevronUp, Copy, Check, FileText,
+  ChevronDown, ChevronUp, Copy, Check, FileText, RefreshCw, AlertCircle,
 } from 'lucide-react';
 import { Card, Badge, EmptyState } from '@/components/ui';
 import MiloAvatar from '@/components/milo/MiloAvatar';
@@ -11,35 +11,15 @@ import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { supabase } from '@/lib/supabase';
+import { generateSummary } from '@/lib/claude';
 import { safeFormatDate } from '@/utils/formatters';
 import { getPriorityInfo } from '@/lib/taskConstants';
+import { useToastStore } from '@/stores/toastStore';
 import SummaryAgendaList from './SummaryAgendaList';
 import MeetingMetaBar from './MeetingMetaBar';
 import MeetingParticipants from './MeetingParticipants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
-
-// 데모 요약
-const DEMO_SUMMARY = {
-  decisions: [
-    { title: '온보딩 3단계 개선 A/B 테스트 진행', detail: '팀 초대 플로우를 2가지 버전으로 실험', owner: '박서연' },
-    { title: '결과 집계 기준: 7일 이탈률', detail: '기존 대비 15% 개선을 기준선으로 설정', owner: '이도윤' },
-  ],
-  discussions: [
-    { title: '개선안 디자인 책임자', detail: '박서연, 이도윤 공동 담당 가능성 논의', status: 'open' },
-    { title: '테스트 시작 시점', detail: '다음 주 월요일 릴리즈 후 즉시 시작 검토', status: 'open' },
-  ],
-  deferred: [
-    { title: '팀 초대 플로우의 UX 전면 리뉴얼', reason: '다음 스프린트에서 별도 논의' },
-  ],
-  action_items: [
-    { title: '개선안 A/B 와이어프레임 작성', assignee_hint: '박서연', priority: 'high', due_hint: 'D-3' },
-    { title: '성공 지표 대시보드 구성', assignee_hint: '이도윤', priority: 'medium', due_hint: 'D-7' },
-    { title: '실험 결과 발표 자료 준비', assignee_hint: '김지우', priority: 'low', due_hint: 'D-14' },
-  ],
-  milo_insights: '이번 회의는 데이터 중심 결정이 잘 이뤄진 논의였어요. 다만 팀 초대 플로우의 장기 방향성에 대한 정렬이 아직 부족해 보여, 다음 리뷰에서 별도로 다룰 가치가 있습니다.',
-  key_quotes: [],
-};
 
 function Section({ icon: Icon, title, color, children, count, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -93,6 +73,8 @@ export default function MeetingSummary() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const addToast = useToastStore((s) => s.addToast);
 
   useEffect(() => {
     async function loadSummary() {
@@ -113,11 +95,48 @@ export default function MeetingSummary() {
         const stored = JSON.parse(localStorage.getItem('meetflow-summaries') || '{}');
         if (stored[id]) { setSummary(stored[id]); setLoading(false); return; }
       } catch {}
-      setSummary(DEMO_SUMMARY);
+      // 실제 요약이 없으면 null 유지 — 가짜 데모 데이터로 속이지 않는다
+      setSummary(null);
       setLoading(false);
     }
     if (id) loadSummary();
   }, [id]);
+
+  // 요약 (재)생성 — 실제 대화 기록 기반
+  const handleGenerateSummary = async () => {
+    if (!meeting || generating) return;
+    if (!messages || messages.length < 2) {
+      addToast('대화 내용이 너무 적어 요약을 생성할 수 없습니다.', 'error');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const result = await generateSummary({
+        meetingId: id,
+        messages,
+        agendas: meeting.agendas || [],
+      });
+      // Edge Function이 DB에 저장하므로 다시 읽기
+      if (SUPABASE_ENABLED) {
+        const { data } = await supabase
+          .from('meeting_summaries')
+          .select('*')
+          .eq('meeting_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        setSummary(data || result);
+      } else {
+        setSummary(result);
+      }
+      addToast('요약이 생성되었습니다.', 'success');
+    } catch (err) {
+      console.error('[handleGenerateSummary]', err);
+      addToast('요약 생성에 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   // 회의 통계 계산 — 소요시간은 meeting.ended_at-started_at 우선, fallback으로 메시지 기반
   const stats = useMemo(() => {
@@ -251,7 +270,45 @@ export default function MeetingSummary() {
   }
 
   if (!summary) {
-    return <div className="p-6 text-center text-txt-secondary">요약 데이터가 없습니다.</div>;
+    return (
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <Link
+          to="/summaries"
+          className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          회의록 목록으로
+        </Link>
+        <div className="mb-4">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <h1 className="text-2xl font-semibold text-txt-primary">{meeting.title}</h1>
+            <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
+              {meeting.status === 'completed' ? '완료' : meeting.status}
+            </Badge>
+          </div>
+        </div>
+        <EmptyState
+          icon={AlertCircle}
+          title="아직 생성된 요약이 없어요"
+          description={
+            messages && messages.length >= 2
+              ? '실제 대화 기록을 바탕으로 요약을 생성할 수 있습니다. 가짜/샘플 데이터는 표시하지 않습니다.'
+              : '대화 내용이 부족해 요약을 생성할 수 없습니다. 회의 기록이 있는지 확인해주세요.'
+          }
+          actions={
+            messages && messages.length >= 2
+              ? [{
+                  label: generating ? '생성 중...' : '요약 생성하기',
+                  icon: generating ? Loader : Sparkles,
+                  onClick: handleGenerateSummary,
+                  disabled: generating,
+                  variant: 'primary',
+                }]
+              : []
+          }
+        />
+      </div>
+    );
   }
 
   return (
@@ -479,6 +536,17 @@ export default function MeetingSummary() {
           <FileText size={14} />
           인쇄 / PDF
         </button>
+        {messages && messages.length >= 2 && (
+          <button
+            onClick={handleGenerateSummary}
+            disabled={generating}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors disabled:opacity-50"
+            title="대화 기록을 다시 분석해 요약을 새로 생성합니다"
+          >
+            {generating ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {generating ? '재생성 중...' : '요약 재생성'}
+          </button>
+        )}
       </div>
     </div>
   );

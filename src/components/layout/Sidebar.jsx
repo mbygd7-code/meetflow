@@ -68,8 +68,8 @@ export default function Sidebar({ mobile = false, onClose }) {
         <nav className="flex flex-col gap-0.5 flex-1 mt-2">
           {/* 상단 주 메뉴 */}
           {primaryNavItems.map(({ to, label, icon: Icon, end }) => {
-            const isSummaryNav = to === '/summaries';
-            const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
+            const isMeetingNav = to === '/meetings';
+            const isSummaryGenerating = isMeetingNav && !!summaryGeneratingId;
             return (
               <NavLink
                 key={to} to={to} end={end} onClick={handleNavClick}
@@ -81,7 +81,7 @@ export default function Sidebar({ mobile = false, onClose }) {
                 ) : (
                   <Icon size={18} strokeWidth={2} />
                 )}
-                <span>{isSummaryGenerating ? '작성 중...' : label}</span>
+                <span>{isSummaryGenerating ? '회의록 작성중...' : label}</span>
               </NavLink>
             );
           })}
@@ -145,11 +145,11 @@ export default function Sidebar({ mobile = false, onClose }) {
         {/* 상단: 주 메뉴 (마이보드 / 회의 / 태스크) */}
         {primaryNavItems.map(({ to, label, icon: Icon, end }) => {
           const isMeetingNav = to === '/meetings';
-          const hasActiveMeeting = isMeetingNav && activeMeetingId;
+          // 회의록 작성중일 때는 /meetings 네비가 "회의록 작성중" 상태를 보여줌.
+          // 생성 중에는 활성 회의로 리다이렉트하지 않고 회의 로비로 보냄 (사용자가 로비에서 재입장 결정).
+          const isSummaryGenerating = isMeetingNav && !!summaryGeneratingId;
+          const hasActiveMeeting = isMeetingNav && activeMeetingId && !isSummaryGenerating;
           const targetTo = hasActiveMeeting ? `/meetings/${activeMeetingId}` : to;
-
-          const isSummaryNav = to === '/summaries';
-          const isSummaryGenerating = isSummaryNav && !!summaryGeneratingId;
 
           return (
             <NavLink
@@ -194,7 +194,7 @@ export default function Sidebar({ mobile = false, onClose }) {
                 )}
               </span>
               <span className="hidden group-hover/sidebar:inline lg:inline whitespace-nowrap">
-                {isSummaryGenerating ? '작성 중...' : label}
+                {isSummaryGenerating ? '회의록 작성중...' : label}
               </span>
             </NavLink>
           );

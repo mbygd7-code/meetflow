@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, X, FileText, ArrowRight } from 'lucide-react';
+import { Plus, Search, X, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
+import { useMeetingStore } from '@/stores/meetingStore';
 import MeetingCard from './MeetingCard';
 import CreateMeetingModal from './CreateMeetingModal';
 
@@ -35,6 +36,7 @@ export default function MeetingLobby({ pageTitle }) {
   const [completedMonths, setCompletedMonths] = useState(1);
   const { meetings, deleteMeeting } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
+  const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
 
   // 사용자가 수동으로 탭을 선택했는지 추적 (수동 선택 후엔 자동 전환 안 함)
   const userSelectedRef = useRef(false);
@@ -102,10 +104,19 @@ export default function MeetingLobby({ pageTitle }) {
           </Button>
           <Link
             to="/summaries"
-            className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white bg-brand-purple shadow-md hover:opacity-90 hover:shadow-lg transition-all"
+            className={`group inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white shadow-md hover:opacity-90 hover:shadow-lg transition-all ${
+              summaryGeneratingId
+                ? 'bg-gradient-to-r from-brand-purple to-brand-purple-deep animate-pulse-subtle'
+                : 'bg-brand-purple'
+            }`}
+            title={summaryGeneratingId ? '요약을 생성 중입니다. 클릭하면 목록으로 이동합니다.' : '회의록 목록으로'}
           >
-            <FileText size={16} strokeWidth={2.4} />
-            <span>회의록 보기</span>
+            {summaryGeneratingId ? (
+              <Loader2 size={16} strokeWidth={2.4} className="animate-spin" />
+            ) : (
+              <FileText size={16} strokeWidth={2.4} />
+            )}
+            <span>{summaryGeneratingId ? '회의록 작성중...' : '회의록 보기'}</span>
             <ArrowRight size={14} strokeWidth={2.4} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
