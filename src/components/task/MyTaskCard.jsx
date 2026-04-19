@@ -26,10 +26,22 @@ export default function MyTaskCard({ task, selected, onSelect }) {
   const assigneeColor = task.assignee?.color || '#723CEB';
   const assigneeInitial = assigneeName ? getInitials(assigneeName)[0] : '?';
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect?.(task);
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={`${task.title} — ${dday?.text || '기한 없음'}`}
       className={`
         bg-[var(--card-bg)] rounded-[8px] border transition-all cursor-pointer
+        focus:outline-none focus:ring-2 focus:ring-brand-purple/40 focus:border-brand-purple
         ${selected
           ? 'border-brand-purple bg-brand-purple/5'
           : 'border-border-subtle hover:border-border-hover-strong'
@@ -37,6 +49,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
         ${isDone ? 'opacity-70' : ''}
       `}
       onClick={() => onSelect?.(task)}
+      onKeyDown={handleKeyDown}
     >
       <div className="p-3 space-y-2">
         {/* 상단: 상태 아이콘 + 제목 + D-Day */}

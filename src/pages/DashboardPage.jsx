@@ -19,10 +19,16 @@ import { DASHBOARD_LIMITS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
-  const [selectedTask, setSelectedTask] = useState(null);
+  // id만 저장 — Realtime 업데이트 시 항상 store의 최신 객체를 조회
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
   const { tasks } = useTaskStore();
+
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null),
+    [selectedTaskId, tasks]
+  );
 
   const today = format(new Date(), 'yyyy년 MM월 dd일 EEEE', { locale: ko });
 
@@ -104,10 +110,10 @@ export default function DashboardPage() {
 
   // ─── 태스크 선택 토글 (useCallback으로 렌더 간 안정화) ───
   const handleSelectTask = useCallback((task) => {
-    setSelectedTask((cur) => (cur?.id === task.id ? null : task));
+    setSelectedTaskId((cur) => (cur === task.id ? null : task.id));
   }, []);
 
-  const handleCloseTask = useCallback(() => setSelectedTask(null), []);
+  const handleCloseTask = useCallback(() => setSelectedTaskId(null), []);
 
   return (
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
@@ -209,7 +215,7 @@ export default function DashboardPage() {
                   진행 중인 태스크 <span className="text-txt-primary font-semibold">{taskCounts.inProgress}건</span>,
                   대기 중 <span className="text-txt-primary font-semibold">{taskCounts.todo}건</span>이에요.
                   {taskCounts.done > 0 && (
-                    <> 최근 <span className="text-status-success font-semibold">{taskCounts.done}건</span>을 완료했습니다.</>
+                    <> 지금까지 <span className="text-status-success font-semibold">{taskCounts.done}건</span>을 완료했습니다.</>
                   )}
                 </>
               ) : (
@@ -260,9 +266,50 @@ export default function DashboardPage() {
             )}
           </SectionPanel>
         </div>
+
+        {/* ═══ 모바일 전용: 내 태스크 ═══ */}
+        <SectionPanel
+          className="lg:hidden"
+          title="내 태스크"
+          subtitle={
+            myActiveTasks.length > 0
+              ? `진행 ${taskCounts.inProgress} · 대기 ${taskCounts.todo}${taskCounts.done > 0 ? ` · 완료 ${taskCounts.done}` : ''}`
+              : undefined
+          }
+          action={
+            <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+              전체 <ArrowRight size={11} />
+            </Link>
+          }
+        >
+          {myActiveTasks.length === 0 ? (
+            <EmptyState
+              icon={CircleDot}
+              title="담당 태스크가 없어요"
+              description={
+                todayMeetings.length > 0
+                  ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
+                  : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
+              }
+              actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+              compact
+            />
+          ) : (
+            <div className="space-y-2">
+              {myActiveTasks.map((t) => (
+                <MyTaskCard
+                  key={t.id}
+                  task={t}
+                  selected={selectedTaskId === t.id}
+                  onSelect={handleSelectTask}
+                />
+              ))}
+            </div>
+          )}
+        </SectionPanel>
       </div>
 
-      {/* ═══ 오른쪽: 내 태스크 ═══ */}
+      {/* ═══ 데스크톱 오른쪽: 내 태스크 ═══ */}
       <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 relative">
         <TaskSlidePanel task={selectedTask} onClose={handleCloseTask} />
 
@@ -297,7 +344,7 @@ export default function DashboardPage() {
               <MyTaskCard
                 key={t.id}
                 task={t}
-                selected={selectedTask?.id === t.id}
+                selected={selectedTaskId === t.id}
                 onSelect={handleSelectTask}
               />
             ))}
