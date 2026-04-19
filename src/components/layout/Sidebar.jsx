@@ -104,13 +104,21 @@ export default function Sidebar({ mobile = false, onClose }) {
       className={`group/sidebar h-full flex flex-col shrink-0 w-[56px] hover:w-48 lg:w-48 transition-all duration-200 z-30 relative border-r border-border-subtle ${isMeetingPage ? 'pt-0' : 'pt-2'} pb-2 px-2 lg:p-3`}
       style={{ background: 'var(--sidebar-bg)' }}
     >
-      {/* 회의 페이지: TopBar가 숨겨지므로 사이드바 상단에 로고 표시 */}
+      {/* 회의 페이지: TopBar가 숨겨지므로 사이드바 상단에 로고 표시 (모든 데스크톱 너비) */}
       {isMeetingPage && (
-        <div className="hidden md:flex lg:hidden items-center gap-3 px-1 h-14 shrink-0">
+        <div
+          className="hidden md:flex items-center gap-3 px-1 h-14 shrink-0 border-b border-border-subtle"
+          style={{ borderColor: 'var(--sidebar-divider)' }}
+        >
           <div className="w-10 h-10 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center shrink-0">
             <Sparkles size={20} className="text-white" strokeWidth={2.5} />
           </div>
-          <span className="hidden group-hover/sidebar:inline text-lg font-bold tracking-tight whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
+          <span
+            className="text-lg font-bold tracking-tight whitespace-nowrap hidden group-hover/sidebar:inline lg:inline"
+            style={{ color: 'var(--sidebar-text)' }}
+          >
+            MeetFlow
+          </span>
         </div>
       )}
 

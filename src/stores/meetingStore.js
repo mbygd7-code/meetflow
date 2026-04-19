@@ -12,6 +12,7 @@ const MOCK_MEETINGS = [
     status: 'active',
     team_id: 'team-1',
     created_by: 'mock-1',
+    creator: { id: 'mock-1', name: '김지우', color: '#FF902F' },
     started_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
     ended_at: null,
     scheduled_at: new Date().toISOString(),
@@ -33,6 +34,7 @@ const MOCK_MEETINGS = [
     status: 'scheduled',
     team_id: 'team-1',
     created_by: 'mock-1',
+    creator: { id: 'mock-1', name: '박서연', color: '#34D399' },
     scheduled_at: new Date(Date.now() + 86400 * 1000).toISOString(),
     started_at: null,
     ended_at: null,
@@ -52,6 +54,7 @@ const MOCK_MEETINGS = [
     status: 'completed',
     team_id: 'team-1',
     created_by: 'mock-1',
+    creator: { id: 'mock-1', name: '이도윤', color: '#38BDF8' },
     started_at: new Date(Date.now() - 2 * 86400 * 1000).toISOString(),
     ended_at: new Date(Date.now() - 2 * 86400 * 1000 + 45 * 60 * 1000).toISOString(),
     scheduled_at: new Date(Date.now() - 2 * 86400 * 1000).toISOString(),
@@ -100,11 +103,18 @@ export const useMeetingStore = create((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('meetings')
-        .select('*, agendas(*)')
+        .select('*, agendas(*), creator:users!meetings_created_by_fkey(id, name, avatar_color)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      set({ meetings: data || [], loading: false });
+      // creator 정규화 (avatar_color → color)
+      const normalized = (data || []).map((m) => ({
+        ...m,
+        creator: m.creator
+          ? { id: m.creator.id, name: m.creator.name, color: m.creator.avatar_color || '#723CEB' }
+          : null,
+      }));
+      set({ meetings: normalized, loading: false });
     } catch (err) {
       console.error('[meetingStore] init error:', err);
       set({ error: err.message, loading: false });

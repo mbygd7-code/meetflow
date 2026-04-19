@@ -83,3 +83,9 @@ export const DASHBOARD_LIMITS = {
   TODAY_MEETINGS: 3,    // "오늘의 일정" 표시 최대 건수
   RECENT_SUMMARIES: 4,  // "최근 회의록" 표시 최대 건수
 };
+
+/**
+ * "마감 임박" 기준 (일수) — 이 값 이하로 남은 active 태스크를 카운트.
+ * 마이보드·태스크 페이지 모두에서 동일 기준 사용.
+ */
+export const URGENT_DUE_DAYS = 2;

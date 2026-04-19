@@ -1,23 +1,21 @@
-import { useEffect, useRef } from 'react';
+// 태스크 상세 슬라이드 패널 (단일 표준 — TaskDetailModal 대체)
+// 읽기 + 간단한 인라인 편집(상태/우선순위) 지원
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  X, Clock, User, Calendar, Flag, MessageSquare, CheckCircle2, Circle, Loader,
-  Globe, Layout, Zap, FileText, Tag,
+  X, Clock, User, Calendar, Flag, MessageSquare, CheckCircle2, ExternalLink,
+  Globe, Layout, Zap, Tag, Sparkles, Pencil, Save,
 } from 'lucide-react';
-import { Badge } from '@/components/ui';
-import { format, parseISO, differenceInDays } from 'date-fns';
-
-const PRIORITY_MAP = {
-  urgent: { label: '긴급', color: 'text-status-error', bg: 'bg-status-error/10' },
-  high: { label: '높음', color: 'text-brand-orange', bg: 'bg-brand-orange/10' },
-  medium: { label: '보통', color: 'text-txt-secondary', bg: 'bg-bg-tertiary' },
-  low: { label: '낮음', color: 'text-txt-muted', bg: 'bg-bg-tertiary' },
-};
-
-const STATUS_MAP = {
-  done: { label: '완료', icon: CheckCircle2, color: 'text-status-success', bg: 'bg-status-success/10' },
-  in_progress: { label: '진행 중', icon: Loader, color: 'text-brand-purple', bg: 'bg-brand-purple/10' },
-  todo: { label: '대기', icon: Circle, color: 'text-txt-muted', bg: 'bg-bg-tertiary' },
-};
+import { Badge, Avatar } from '@/components/ui';
+import { useTaskStore } from '@/stores/taskStore';
+import { safeFormatDate, getInitials } from '@/utils/formatters';
+import {
+  getPriorityInfo,
+  getStatusInfo,
+  PRIORITY_MAP,
+  STATUS_MAP,
+} from '@/lib/taskConstants';
+import { differenceInDays, parseISO } from 'date-fns';
 
 function InfoRow({ icon: Icon, label, children }) {
   return (
@@ -33,10 +31,34 @@ function InfoRow({ icon: Icon, label, children }) {
 
 export default function TaskSlidePanel({ task, onClose }) {
   const panelRef = useRef(null);
+  const updateTask = useTaskStore((s) => s.updateTask);
+
+  // 간단한 인라인 편집 상태 (제목/상태/우선순위/마감)
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    status: 'todo',
+    priority: 'medium',
+    due_date: '',
+  });
+
+  useEffect(() => {
+    if (!task) {
+      setEditing(false);
+      return;
+    }
+    setForm({
+      title: task.title || '',
+      status: task.status || 'todo',
+      priority: task.priority || 'medium',
+      due_date: task.due_date || '',
+    });
+    setEditing(false);
+  }, [task?.id]);
 
   useEffect(() => {
     if (!task) return;
-    const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose?.(); };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
   }, [task, onClose]);
@@ -44,26 +66,59 @@ export default function TaskSlidePanel({ task, onClose }) {
   useEffect(() => {
     if (!task) return;
     const handleClickOutside = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) onClose();
+      if (panelRef.current && !panelRef.current.contains(e.target)) onClose?.();
     };
-    setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 100);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const t = setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 100);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [task, onClose]);
 
   if (!task) return null;
 
-  const priority = PRIORITY_MAP[task.priority] || PRIORITY_MAP.medium;
-  const status = STATUS_MAP[task.status] || STATUS_MAP.todo;
+  const priority = getPriorityInfo(task.priority);
+  const status = getStatusInfo(task.status);
   const StatusIcon = status.icon;
+
   const isOverdue = task.due_date && task.status !== 'done' &&
     differenceInDays(new Date(), parseISO(task.due_date)) > 0;
-  const daysLeft = task.due_date ? differenceInDays(parseISO(task.due_date), new Date()) : null;
+  const daysLeft = task.due_date
+    ? differenceInDays(parseISO(task.due_date), new Date())
+    : null;
+
+  // assignee null-safe
+  const assigneeName = task.assignee?.name || task.assignee_name || null;
+  const assigneeColor = task.assignee?.color || '#723CEB';
+
+  // 서브태스크
+  const subtasks = task.subtasks || [];
+  const subtasksDone = subtasks.filter((s) => s.done).length;
+  const subtasksTotal = subtasks.length;
+  const progress = subtasksTotal > 0 ? Math.round((subtasksDone / subtasksTotal) * 100) : 0;
+
+  const handleSave = () => {
+    updateTask(task.id, form);
+    setEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setForm({
+      title: task.title || '',
+      status: task.status || 'todo',
+      priority: task.priority || 'medium',
+      due_date: task.due_date || '',
+    });
+    setEditing(false);
+  };
 
   return (
     <div
       ref={panelRef}
-      className="fixed w-[320px] bg-[var(--bg-secondary)] border border-border-default rounded-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.15)] animate-slide-left z-50"
-      style={{ maxHeight: 'calc(100vh - 140px)', top: '80px', right: 'calc(300px + 40px)' }}
+      role="dialog"
+      aria-label="태스크 상세"
+      className="fixed w-[340px] bg-[var(--bg-secondary)] border border-border-default rounded-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.15)] animate-slide-left z-50"
+      style={{ maxHeight: 'calc(100vh - 140px)', top: '80px', right: '24px' }}
     >
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
@@ -74,87 +129,207 @@ export default function TaskSlidePanel({ task, onClose }) {
           <Badge variant={task.status === 'done' ? 'success' : task.status === 'in_progress' ? 'info' : 'outline'}>
             {status.label}
           </Badge>
+          {task.ai_suggested && (
+            <Badge variant="purple" className="!text-[9px]">
+              <Sparkles size={9} strokeWidth={2.4} /> AI
+            </Badge>
+          )}
         </div>
-        <button onClick={onClose} className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
-          <X size={15} />
-        </button>
+        <div className="flex items-center gap-1">
+          {editing ? (
+            <>
+              <button
+                onClick={handleCancelEdit}
+                className="px-2 py-1 rounded text-[11px] text-txt-muted hover:text-txt-primary"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSave}
+                className="p-1.5 rounded-md text-brand-purple hover:bg-brand-purple/10 transition-colors"
+                aria-label="저장"
+              >
+                <Save size={14} />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="p-1.5 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+              aria-label="편집"
+            >
+              <Pencil size={14} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="닫기"
+          >
+            <X size={15} />
+          </button>
+        </div>
       </div>
 
       {/* 본문 */}
-      <div className="p-4 space-y-4 overflow-y-auto scrollbar-hide" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+      <div
+        className="p-4 space-y-4 overflow-y-auto scrollbar-hide"
+        style={{ maxHeight: 'calc(100vh - 220px)' }}
+      >
         {/* 제목 */}
-        <h3 className="text-[15px] font-semibold text-txt-primary leading-snug">{task.title}</h3>
+        {editing ? (
+          <input
+            type="text"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            className="w-full text-[15px] font-semibold text-txt-primary leading-snug bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1.5 focus:outline-none focus:border-brand-purple/50"
+            autoFocus
+          />
+        ) : (
+          <h3 className="text-[15px] font-semibold text-txt-primary leading-snug">{task.title}</h3>
+        )}
 
         {/* ── 기본 정보 ── */}
         <div className="space-y-2">
           <InfoRow icon={Flag} label="우선순위">
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${priority.bg} ${priority.color}`}>
-              {priority.label}
-            </span>
+            {editing ? (
+              <select
+                value={form.priority}
+                onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                className="bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-purple/50"
+              >
+                {Object.entries(PRIORITY_MAP).map(([key, p]) => (
+                  <option key={key} value={key}>{p.label}</option>
+                ))}
+              </select>
+            ) : (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${priority.bg} ${priority.tone} border ${priority.border}`}>
+                {priority.label}
+              </span>
+            )}
           </InfoRow>
 
-          {task.due_date && (
-            <InfoRow icon={Calendar} label="마감일">
+          <InfoRow icon={StatusIcon} label="상태">
+            {editing ? (
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-purple/50"
+              >
+                {Object.entries(STATUS_MAP).map(([key, s]) => (
+                  <option key={key} value={key}>{s.label}</option>
+                ))}
+              </select>
+            ) : (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${status.bg} ${status.color}`}>
+                {status.label}
+              </span>
+            )}
+          </InfoRow>
+
+          <InfoRow icon={Calendar} label="마감일">
+            {editing ? (
+              <input
+                type="date"
+                value={form.due_date || ''}
+                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                className="bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-xs focus:outline-none focus:border-brand-purple/50"
+              />
+            ) : task.due_date ? (
               <span className={`font-medium ${isOverdue ? 'text-status-error' : ''}`}>
-                {format(parseISO(task.due_date), 'yyyy.MM.dd')}
-                {isOverdue && ` (${Math.abs(daysLeft)}일 초과)`}
+                {safeFormatDate(task.due_date, 'yyyy.MM.dd', '-')}
+                {isOverdue && daysLeft !== null && ` (${Math.abs(daysLeft)}일 초과)`}
                 {!isOverdue && daysLeft !== null && daysLeft >= 0 && ` (D-${daysLeft})`}
               </span>
-            </InfoRow>
-          )}
+            ) : (
+              <span className="text-txt-muted">미정</span>
+            )}
+          </InfoRow>
 
-          {task.assignee_name && (
+          {assigneeName && (
             <InfoRow icon={User} label="담당자">
-              <span className="font-medium">{task.assignee_name}</span>
+              <div className="inline-flex items-center gap-1.5">
+                <Avatar
+                  name={assigneeName}
+                  color={assigneeColor}
+                  size="sm"
+                  className="!w-5 !h-5 !text-[9px]"
+                  label={getInitials(assigneeName)[0]}
+                />
+                <span className="font-medium">{assigneeName}</span>
+              </div>
             </InfoRow>
           )}
 
           {task.created_at && (
             <InfoRow icon={Clock} label="생성일">
-              <span className="text-txt-secondary">{format(parseISO(task.created_at), 'yyyy.MM.dd')}</span>
+              <span className="text-txt-secondary">
+                {safeFormatDate(task.created_at, 'yyyy.MM.dd', '-')}
+              </span>
             </InfoRow>
           )}
 
-          {task.meeting_title && (
+          {task.meeting_id && task.meeting_title && (
             <InfoRow icon={MessageSquare} label="연관 회의">
-              <span className="text-txt-secondary">{task.meeting_title}</span>
+              <Link
+                to={`/summaries/${task.meeting_id}`}
+                className="inline-flex items-center gap-1 text-brand-purple hover:underline"
+              >
+                {task.meeting_title}
+                <ExternalLink size={10} />
+              </Link>
             </InfoRow>
           )}
         </div>
 
         {/* ── 프로젝트 상세 ── */}
-        <div className="border-t border-border-divider pt-3 space-y-2">
-          <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-1">프로젝트 상세</p>
+        {(task.service_name || task.page_name || task.feature_name || task.tags?.length) && (
+          <div className="border-t border-border-divider pt-3 space-y-2">
+            <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-1">
+              프로젝트 상세
+            </p>
 
-          <InfoRow icon={Globe} label="서비스">
-            <span className="text-txt-secondary">{task.service_name || '킨더보드'}</span>
-          </InfoRow>
+            {task.service_name && (
+              <InfoRow icon={Globe} label="서비스">
+                <span className="text-txt-secondary">{task.service_name}</span>
+              </InfoRow>
+            )}
 
-          <InfoRow icon={Layout} label="페이지">
-            <span className="text-txt-secondary">{task.page_name || '-'}</span>
-          </InfoRow>
+            {task.page_name && task.page_name !== '-' && (
+              <InfoRow icon={Layout} label="페이지">
+                <span className="text-txt-secondary">{task.page_name}</span>
+              </InfoRow>
+            )}
 
-          <InfoRow icon={Zap} label="기능">
-            <span className="text-txt-secondary">{task.feature_name || '-'}</span>
-          </InfoRow>
+            {task.feature_name && (
+              <InfoRow icon={Zap} label="기능">
+                <span className="text-txt-secondary">{task.feature_name}</span>
+              </InfoRow>
+            )}
 
-          {task.tags && task.tags.length > 0 && (
-            <InfoRow icon={Tag} label="태그">
-              <div className="flex flex-wrap gap-1">
-                {task.tags.map((tag, i) => (
-                  <span key={i} className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </InfoRow>
-          )}
-        </div>
+            {task.tags?.length > 0 && (
+              <InfoRow icon={Tag} label="태그">
+                <div className="flex flex-wrap gap-1">
+                  {task.tags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </InfoRow>
+            )}
+          </div>
+        )}
 
         {/* ── 설명 ── */}
         {task.description && (
           <div className="border-t border-border-divider pt-3">
-            <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-2">설명</p>
+            <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-2">
+              설명
+            </p>
             <p className="text-xs text-txt-secondary leading-relaxed bg-bg-tertiary rounded-md p-3 whitespace-pre-wrap">
               {task.description}
             </p>
@@ -162,18 +337,35 @@ export default function TaskSlidePanel({ task, onClose }) {
         )}
 
         {/* ── 서브태스크 ── */}
-        {task.subtasks && task.subtasks.length > 0 && (
+        {subtasksTotal > 0 && (
           <div className="border-t border-border-divider pt-3">
-            <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-2">서브태스크</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider">
+                서브태스크
+              </p>
+              <span className="text-[10px] text-txt-secondary font-semibold">
+                {subtasksDone}/{subtasksTotal} · {progress}%
+              </span>
+            </div>
+            <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden mb-2">
+              <div
+                className="h-full bg-brand-purple transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
             <div className="space-y-1.5">
-              {task.subtasks.map((sub, i) => (
+              {subtasks.map((sub, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs">
-                  <div className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center ${
-                    sub.done ? 'bg-status-success border-status-success' : 'border-txt-muted'
-                  }`}>
+                  <div
+                    className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center ${
+                      sub.done ? 'bg-status-success border-status-success' : 'border-txt-muted'
+                    }`}
+                  >
                     {sub.done && <CheckCircle2 size={8} className="text-white" />}
                   </div>
-                  <span className={sub.done ? 'text-txt-muted line-through' : 'text-txt-primary'}>{sub.title}</span>
+                  <span className={sub.done ? 'text-txt-muted line-through' : 'text-txt-primary'}>
+                    {sub.title}
+                  </span>
                 </div>
               ))}
             </div>

@@ -15,7 +15,7 @@ import MyTaskCard from '@/components/task/MyTaskCard';
 import TaskSlidePanel from '@/components/task/TaskSlidePanel';
 import EmptyState from '@/components/ui/EmptyState';
 import { getDueDateStatus, safeFormatDate } from '@/utils/formatters';
-import { DASHBOARD_LIMITS } from '@/lib/taskConstants';
+import { DASHBOARD_LIMITS, URGENT_DUE_DAYS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
@@ -59,7 +59,7 @@ export default function DashboardPage() {
       if (t.due_date) {
         const d = differenceInDays(parseISO(t.due_date), now);
         if (d < 0) counts.overdue++;
-        else if (d <= 2) counts.dueSoon++;
+        else if (d <= URGENT_DUE_DAYS) counts.dueSoon++;
       }
     }
     return { active, counts };

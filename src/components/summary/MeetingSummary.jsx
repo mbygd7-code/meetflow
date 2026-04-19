@@ -1,17 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
-  Loader, Clock, Users, MessageSquare, BarChart3, AlertTriangle, Target,
+  Loader, Clock, Users, MessageSquare,
   ChevronDown, ChevronUp, Copy, Check, FileText,
 } from 'lucide-react';
-import { Card, Badge, Avatar } from '@/components/ui';
+import { Card, Badge, EmptyState } from '@/components/ui';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { supabase } from '@/lib/supabase';
-import { formatDate } from '@/utils/formatters';
+import { safeFormatDate } from '@/utils/formatters';
+import { getPriorityInfo } from '@/lib/taskConstants';
+import SummaryAgendaList from './SummaryAgendaList';
+import MeetingMetaBar from './MeetingMetaBar';
+import MeetingParticipants from './MeetingParticipants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -61,6 +65,14 @@ function Section({ icon: Icon, title, color, children, count, defaultOpen = true
   );
 }
 
+function formatDurationLabel(minutes) {
+  if (!minutes || minutes <= 0) return '-';
+  if (minutes < 60) return `${minutes}분`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+}
+
 function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-purple' }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-tertiary/50">
@@ -107,25 +119,97 @@ export default function MeetingSummary() {
     if (id) loadSummary();
   }, [id]);
 
-  // 회의 통계 계산
-  const stats = (() => {
+  // 회의 통계 계산 — 소요시간은 meeting.ended_at-started_at 우선, fallback으로 메시지 기반
+  const stats = useMemo(() => {
     if (!messages?.length) return null;
     const humanMsgs = messages.filter((m) => !m.is_ai);
     const aiMsgs = messages.filter((m) => m.is_ai);
-    const participants = [...new Set(humanMsgs.map((m) => m.user?.name).filter(Boolean))];
-    const aiEmployees = [...new Set(aiMsgs.map((m) => m.ai_employee).filter(Boolean))];
-    const startTime = messages[0]?.created_at;
-    const endTime = messages[messages.length - 1]?.created_at;
-    const durationMin = startTime && endTime
-      ? Math.round((new Date(endTime) - new Date(startTime)) / 60000) : 0;
-    return { humanMsgs: humanMsgs.length, aiMsgs: aiMsgs.length, participants, aiEmployees, durationMin, total: messages.length };
-  })();
+
+    // 참가자 이름 + 메시지 수
+    const humanCounts = {};
+    for (const m of humanMsgs) {
+      const name = m.user?.name;
+      if (name) humanCounts[name] = (humanCounts[name] || 0) + 1;
+    }
+    const participants = Object.keys(humanCounts);
+
+    // AI 직원 ID + 메시지 수
+    const aiCounts = {};
+    for (const m of aiMsgs) {
+      const id = m.ai_employee;
+      if (id) aiCounts[id] = (aiCounts[id] || 0) + 1;
+    }
+    const aiEmployees = Object.keys(aiCounts);
+
+    // 소요시간: meeting.started_at/ended_at 우선
+    let durationMin = 0;
+    if (meeting?.started_at && meeting?.ended_at) {
+      durationMin = Math.max(
+        0,
+        Math.round((new Date(meeting.ended_at) - new Date(meeting.started_at)) / 60000)
+      );
+    } else if (messages.length >= 2) {
+      // fallback: 메시지 기반. 단 하루(1440분)를 초과하면 이상치로 보고 0 처리
+      const start = new Date(messages[0].created_at);
+      const end = new Date(messages[messages.length - 1].created_at);
+      const raw = Math.round((end - start) / 60000);
+      durationMin = raw > 0 && raw < 1440 ? raw : 0;
+    }
+
+    return {
+      humanMsgs: humanMsgs.length,
+      aiMsgs: aiMsgs.length,
+      participants,
+      humanCounts,
+      aiEmployees,
+      aiCounts,
+      durationMin,
+      total: messages.length,
+    };
+  }, [messages, meeting?.started_at, meeting?.ended_at]);
+
+  // 어젠다별 통계 — 메시지의 agenda_id를 기반으로 계산
+  //  - messageCount: 해당 어젠다에 속한 메시지 수 (focus %)
+  //  - actualDurationMin: 해당 어젠다의 첫/마지막 메시지 간격 (1440분 넘으면 이상치 0)
+  //  - completed/active/pending 상태 그대로 전달
+  //  - unrelated: 메시지 0건이면 '진행 안됨'으로 표시
+  const agendaStats = useMemo(() => {
+    const agendas = meeting?.agendas || [];
+    if (!agendas.length) return [];
+    const totalMsgs = messages?.length || 0;
+
+    return agendas.map((a) => {
+      const linked = (messages || []).filter((m) => m.agenda_id === a.id);
+      const messageCount = linked.length;
+      const focusPct = totalMsgs > 0 ? Math.round((messageCount / totalMsgs) * 100) : 0;
+
+      let actualDurationMin = 0;
+      if (linked.length >= 2) {
+        const start = new Date(linked[0].created_at);
+        const end = new Date(linked[linked.length - 1].created_at);
+        const raw = Math.round((end - start) / 60000);
+        actualDurationMin = raw > 0 && raw < 1440 ? raw : 0;
+      }
+
+      // 진행 판단: status=completed 이거나 메시지가 있으면 '진행됨'
+      const wasExecuted = a.status === 'completed' || messageCount > 0;
+
+      return {
+        ...a,
+        messageCount,
+        focusPct,
+        actualDurationMin,
+        wasExecuted,
+      };
+    });
+  }, [meeting?.agendas, messages]);
 
   // 마크다운 내보내기
   const exportMarkdown = () => {
     if (!summary || !meeting) return;
     let md = `# ${meeting.title}\n`;
-    md += `**일시**: ${formatDate(meeting.started_at || meeting.created_at, 'yyyy.MM.dd HH:mm')}\n`;
+    md += `**일시**: ${safeFormatDate(meeting.started_at || meeting.created_at, 'yyyy.MM.dd HH:mm', '-')}\n`;
+    if (meeting.creator?.name) md += `**요청자**: ${meeting.creator.name}\n`;
     if (stats) md += `**소요시간**: ${stats.durationMin}분 | **참가자**: ${stats.participants.join(', ')} | **메시지**: ${stats.total}건\n`;
     md += `\n---\n\n`;
     if (summary.milo_insights) md += `## Milo 인사이트\n${summary.milo_insights}\n\n`;
@@ -182,35 +266,50 @@ export default function MeetingSummary() {
       </Link>
 
       {/* 헤더 */}
-      <div className="mb-5">
+      <div className="mb-4">
         <div className="flex items-center gap-3 mb-2 flex-wrap">
           <h1 className="text-2xl font-semibold text-txt-primary">{meeting.title}</h1>
           <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
             {meeting.status === 'completed' ? '완료' : meeting.status}
           </Badge>
         </div>
-        <div className="flex items-center gap-3 text-xs text-txt-secondary flex-wrap">
-          <span>{formatDate(meeting.started_at || meeting.created_at, 'yyyy.MM.dd HH:mm')}</span>
-          <span className="text-border-default">|</span>
-          <span>{meeting.agendas?.length || 0}개 어젠다</span>
-          <span className="text-border-default">|</span>
-          <span>{stats?.participants.length || meeting.participants?.length || 0}명 참여</span>
-          {stats?.durationMin > 0 && (
-            <>
-              <span className="text-border-default">|</span>
-              <span>{stats.durationMin}분 소요</span>
-            </>
-          )}
-        </div>
+      </div>
+
+      {/* 메타 바: 요청자 + 시간 타임라인 + 수치 */}
+      <div className="mb-5">
+        <MeetingMetaBar
+          meeting={meeting}
+          participantCount={stats?.participants.length || meeting.participants?.length || 0}
+          durationMin={stats?.durationMin}
+        />
       </div>
 
       {/* 회의 통계 바 */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
-          <StatCard icon={Clock} label="소요시간" value={`${stats.durationMin}분`} color="text-brand-orange" />
-          <StatCard icon={MessageSquare} label="총 메시지" value={stats.total} sub={`사람 ${stats.humanMsgs} · AI ${stats.aiMsgs}`} />
-          <StatCard icon={Users} label="참가자" value={stats.participants.length} sub={stats.participants.slice(0, 3).join(', ')} />
-          <StatCard icon={Sparkles} label="AI 전문가" value={stats.aiEmployees.length} sub={stats.aiEmployees.map((id) => AI_EMPLOYEES.find((e) => e.id === id)?.nameKo || id).join(', ')} color="text-brand-purple" />
+          <StatCard
+            icon={Clock}
+            label="소요시간"
+            value={formatDurationLabel(stats.durationMin)}
+            color="text-brand-orange"
+          />
+          <StatCard
+            icon={MessageSquare}
+            label="총 메시지"
+            value={stats.total}
+            sub={`사람 ${stats.humanMsgs} · AI ${stats.aiMsgs}`}
+          />
+          <StatCard
+            icon={Users}
+            label="참가자"
+            value={stats.participants.length}
+          />
+          <StatCard
+            icon={Sparkles}
+            label="AI 전문가"
+            value={stats.aiEmployees.length}
+            color="text-brand-purple"
+          />
         </div>
       )}
 
@@ -232,99 +331,135 @@ export default function MeetingSummary() {
         </Card>
       )}
 
-      {/* 참여 AI 전문가 요약 */}
-      {stats?.aiEmployees.length > 0 && (
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <span className="text-[10px] text-txt-muted uppercase tracking-wider font-medium">참여 전문가</span>
-          {stats.aiEmployees.map((id) => {
-            const emp = AI_EMPLOYEES.find((e) => e.id === id);
-            if (!emp) return null;
-            const count = messages.filter((m) => m.ai_employee === id).length;
-            return (
-              <div key={id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bg-tertiary border border-border-subtle">
-                <MiloAvatar employeeId={id} size="sm" />
-                <span className="text-[11px] font-medium text-txt-primary">{emp.nameKo}</span>
-                <span className="text-[10px] text-txt-muted">{count}건</span>
-              </div>
-            );
-          })}
-        </div>
+      {/* 어젠다 리스트 */}
+      <SummaryAgendaList agendas={agendaStats} />
+
+      {/* 참여자 (사람 + AI) */}
+      {stats && (
+        <MeetingParticipants
+          humanNames={stats.participants}
+          humanCounts={stats.humanCounts}
+          aiEmployees={stats.aiEmployees}
+          aiCounts={stats.aiCounts}
+        />
       )}
 
       {/* 4섹션 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
         {/* 결정 사항 */}
         <Section icon={CheckCircle2} title="결정 사항" color="bg-status-success/15 text-status-success" count={summary.decisions?.length}>
-          <ul className="space-y-3">
-            {(summary.decisions || []).map((d, i) => (
-              <li key={i} className="flex gap-2">
-                <CheckCircle2 size={14} className="text-status-success mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-txt-primary">{d.title}</p>
-                  <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>
-                  {d.owner && <span className="text-[10px] text-brand-purple mt-0.5 inline-block">담당: {d.owner}</span>}
-                </div>
-              </li>
-            ))}
-            {!summary.decisions?.length && <p className="text-xs text-txt-muted">결정 사항 없음</p>}
-          </ul>
+          {summary.decisions?.length ? (
+            <ul className="space-y-3">
+              {summary.decisions.map((d, i) => (
+                <li key={i} className="flex gap-2">
+                  <CheckCircle2 size={14} className="text-status-success mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-txt-primary">{d.title}</p>
+                    {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
+                    {d.owner && <span className="text-[10px] text-brand-purple mt-0.5 inline-block">담당: {d.owner}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={CheckCircle2}
+              title="결정 사항이 없어요"
+              description="이번 회의에서 확정된 결정이 없습니다."
+              compact
+            />
+          )}
         </Section>
 
         {/* 논의 중 */}
         <Section icon={MessageCircle} title="논의 중" color="bg-brand-yellow/15 text-brand-yellow" count={summary.discussions?.length}>
-          <ul className="space-y-3">
-            {(summary.discussions || []).map((d, i) => (
-              <li key={i} className="flex gap-2">
-                <MessageCircle size={14} className="text-brand-yellow mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-txt-primary">{d.title}</p>
-                  <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>
-                </div>
-              </li>
-            ))}
-            {!summary.discussions?.length && <p className="text-xs text-txt-muted">논의 중인 항목 없음</p>}
-          </ul>
+          {summary.discussions?.length ? (
+            <ul className="space-y-3">
+              {summary.discussions.map((d, i) => (
+                <li key={i} className="flex gap-2">
+                  <MessageCircle size={14} className="text-brand-yellow mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-txt-primary">{d.title}</p>
+                    {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={MessageCircle}
+              title="논의 중인 항목이 없어요"
+              description="아직 결론 나지 않은 주제가 없습니다."
+              compact
+            />
+          )}
         </Section>
 
         {/* 보류 */}
-        <Section icon={PauseCircle} title="보류" color="bg-txt-secondary/15 text-txt-secondary" count={summary.deferred?.length} defaultOpen={false}>
-          <ul className="space-y-3">
-            {(summary.deferred || []).map((d, i) => (
-              <li key={i} className="flex gap-2">
-                <PauseCircle size={14} className="text-txt-muted mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-txt-primary">{d.title}</p>
-                  <p className="text-xs text-txt-muted mt-0.5">{d.reason}</p>
-                </div>
-              </li>
-            ))}
-            {!summary.deferred?.length && <p className="text-xs text-txt-muted">보류 항목 없음</p>}
-          </ul>
+        <Section
+          icon={PauseCircle}
+          title="보류"
+          color="bg-txt-secondary/15 text-txt-secondary"
+          count={summary.deferred?.length}
+          defaultOpen={!!summary.deferred?.length}
+        >
+          {summary.deferred?.length ? (
+            <ul className="space-y-3">
+              {summary.deferred.map((d, i) => (
+                <li key={i} className="flex gap-2">
+                  <PauseCircle size={14} className="text-txt-muted mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-txt-primary">{d.title}</p>
+                    {d.reason && <p className="text-xs text-txt-muted mt-0.5">{d.reason}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={PauseCircle}
+              title="보류 항목이 없어요"
+              description="다음으로 미룬 주제가 없습니다."
+              compact
+            />
+          )}
         </Section>
 
         {/* 후속 태스크 */}
         <Section icon={ListTodo} title="후속 태스크" color="bg-brand-purple/15 text-brand-purple" count={summary.action_items?.length}>
-          <ul className="space-y-2.5">
-            {(summary.action_items || []).map((a, i) => (
-              <li key={i} className="flex items-start gap-2.5 p-2.5 rounded-md bg-bg-tertiary/40 border border-border-subtle">
-                <div className="w-4 h-4 rounded border-2 border-border-default mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-txt-primary">{a.title}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-[11px] text-txt-secondary">{a.assignee_hint}</span>
-                    <span className="text-[10px] text-txt-muted">{a.due_hint}</span>
-                    <Badge
-                      variant={a.priority === 'urgent' || a.priority === 'high' ? 'danger' : a.priority === 'medium' ? 'purple' : 'outline'}
-                      className="!text-[9px] !px-1.5 !py-0"
-                    >
-                      {a.priority}
-                    </Badge>
-                  </div>
-                </div>
-              </li>
-            ))}
-            {!summary.action_items?.length && <p className="text-xs text-txt-muted">후속 태스크 없음</p>}
-          </ul>
+          {summary.action_items?.length ? (
+            <ul className="space-y-2.5">
+              {summary.action_items.map((a, i) => {
+                const pri = getPriorityInfo(a.priority);
+                return (
+                  <li key={i} className="flex items-start gap-2.5 p-2.5 rounded-md bg-bg-tertiary/40 border border-border-subtle">
+                    <div className="w-4 h-4 rounded border-2 border-border-default mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-txt-primary">{a.title}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {a.assignee_hint && (
+                          <span className="text-[11px] text-txt-secondary">{a.assignee_hint}</span>
+                        )}
+                        {a.due_hint && (
+                          <span className="text-[10px] text-txt-muted">{a.due_hint}</span>
+                        )}
+                        <span className={`text-[10px] font-medium inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${pri.bg} ${pri.tone} ${pri.border}`}>
+                          {pri.label}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={ListTodo}
+              title="후속 태스크가 없어요"
+              description="이번 회의에서 추출된 할 일이 없습니다."
+              compact
+            />
+          )}
         </Section>
       </div>
 
