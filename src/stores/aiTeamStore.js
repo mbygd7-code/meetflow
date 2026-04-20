@@ -440,12 +440,13 @@ async function saveOverridesToDB(overrides) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
+      // maybeSingle: 0행이어도 406 없이 null 반환 (팀 없는 사용자 대응)
       const { data: membership } = await supabase
         .from('team_members')
         .select('team_id')
         .eq('user_id', session.user.id)
         .limit(1)
-        .single();
+        .maybeSingle();
       if (!membership) return;
       await supabase
         .from('teams')
@@ -463,18 +464,19 @@ async function loadOverridesFromDB() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
+    // maybeSingle: 0행이어도 406 없이 null 반환 (팀 없는 사용자 대응)
     const { data: membership } = await supabase
       .from('team_members')
       .select('team_id')
       .eq('user_id', session.user.id)
       .limit(1)
-      .single();
+      .maybeSingle();
     if (!membership) return null;
     const { data: team } = await supabase
       .from('teams')
       .select('ai_overrides')
       .eq('id', membership.team_id)
-      .single();
+      .maybeSingle();
     return team?.ai_overrides || null;
   } catch {
     return null;

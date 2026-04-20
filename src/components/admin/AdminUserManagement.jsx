@@ -70,11 +70,12 @@ export default function AdminUserManagement() {
         return;
       }
 
+      // maybeSingle: 이메일이 없을 때도 406 에러 없이 null 반환
       const { data: targetUser, error: findErr } = await supabase
         .from('users')
         .select('id, email, name')
         .eq('email', newEmail.trim())
-        .single();
+        .maybeSingle();
 
       if (findErr || !targetUser) {
         addToast('등록되지 않은 이메일입니다. 가입된 사용자만 추가할 수 있습니다.', 'error');

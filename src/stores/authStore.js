@@ -22,11 +22,12 @@ function isRecoveryFromJwt(accessToken) {
 async function fetchUserRole(userId) {
   if (!userId || !import.meta.env.VITE_SUPABASE_URL) return 'member';
   try {
+    // maybeSingle: 0행(사용자 없음)이어도 406 없이 null 반환
     const { data, error } = await supabase
       .from('users')
       .select('role')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     if (error) return 'member';
     return data?.role || 'member';
   } catch {

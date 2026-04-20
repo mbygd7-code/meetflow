@@ -861,13 +861,13 @@ export default function SettingsPage() {
       }
 
       try {
-        // 유저가 속한 팀 찾기
+        // 유저가 속한 팀 찾기 (팀 없는 사용자 대응: maybeSingle)
         const { data: membership } = await supabase
           .from('team_members')
           .select('team_id')
           .eq('user_id', user.id)
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (!membership) {
           setSlackStatus('disconnected');
@@ -878,12 +878,12 @@ export default function SettingsPage() {
 
         setTeamId(membership.team_id);
 
-        // 팀 정보 조회
+        // 팀 정보 조회 (maybeSingle: 팀 삭제된 경우에도 안전)
         const { data: team } = await supabase
           .from('teams')
           .select('slack_channel_id, notion_database_id')
           .eq('id', membership.team_id)
-          .single();
+          .maybeSingle();
 
         if (team) {
           setSlackChannel(team.slack_channel_id || '');

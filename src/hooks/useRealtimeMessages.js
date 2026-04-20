@@ -120,12 +120,13 @@ export function useRealtimeMessages(meetingId) {
         async (payload) => {
           const msg = payload.new;
           // Realtime payload에는 JOIN 데이터가 없으므로 user 정보 보강
+          // maybeSingle: 탈퇴한 사용자의 메시지여도 에러 없이 null
           if (msg.user_id && !msg.user) {
             const { data: userData } = await supabase
               .from('users')
               .select('id, name, avatar_color')
               .eq('id', msg.user_id)
-              .single();
+              .maybeSingle();
             msg.user = userData;
           }
           setMessages((prev) => {

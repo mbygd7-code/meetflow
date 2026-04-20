@@ -70,25 +70,54 @@ export default function CreateMeetingModal({ open, onClose }) {
     if (!open || isDemo || !SUPABASE_ENABLED) return;
     async function loadTeamsAndMembers() {
       try {
-        const { data: teamsData } = await supabase
-          .from('teams')
-          .select('id, name')
-          .order('name');
-        const { data: membersData } = await supabase
-          .from('users')
-          .select('id, name, avatar_color, team_members(team_id)');
+        // 3개 쿼리를 병렬로: 팀, 유저, 팀 멤버십 (JOIN 대신 별도 쿼리로 RLS 영향 최소화)
+        const [teamsRes, usersRes, tmRes] = await Promise.all([
+          supabase.from('teams').select('id, name').order('name'),
+          supabase.from('users').select('id, name, avatar_color, email'),
+          supabase.from('team_members').select('user_id, team_id'),
+        ]);
 
-        if (teamsData) setTeams(teamsData);
-        if (membersData) {
-          const normalized = membersData.flatMap((u) =>
-            (u.team_members || []).map((tm) => ({
-              id: u.id,
-              name: u.name,
-              color: u.avatar_color || '#723CEB',
-              team: tm.team_id,
-            }))
-          );
+        console.log('[CreateMeetingModal] 로드 결과:', {
+          teams: teamsRes.data?.length || 0,
+          teamsError: teamsRes.error,
+          users: usersRes.data?.length || 0,
+          usersError: usersRes.error,
+          teamMembers: tmRes.data?.length || 0,
+          tmError: tmRes.error,
+        });
+
+        // 팀 세팅 (중복 제거)
+        if (teamsRes.data) {
+          const seen = new Set();
+          const uniqueTeams = teamsRes.data.filter((t) => {
+            const key = `${t.name}:${t.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setTeams(uniqueTeams);
+        }
+
+        // 유저 + 팀 멤버십 병합
+        if (usersRes.data) {
+          const tmByUser = new Map();
+          (tmRes.data || []).forEach((tm) => {
+            if (!tmByUser.has(tm.user_id)) tmByUser.set(tm.user_id, []);
+            tmByUser.get(tm.user_id).push(tm.team_id);
+          });
+
+          const normalized = usersRes.data.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            color: u.avatar_color || '#723CEB',
+            team: tmByUser.get(u.id)?.[0] || null,  // 대표 팀
+            teamIds: tmByUser.get(u.id) || [],       // 전체 팀
+          }));
           setAllMembers(normalized);
+          console.log('[CreateMeetingModal] 정규화된 멤버:', normalized.length, normalized.map((m) => m.name));
+        } else if (usersRes.error) {
+          console.error('[CreateMeetingModal] users 쿼리 실패:', usersRes.error);
         }
       } catch (err) {
         console.warn('[CreateMeetingModal] 팀/멤버 로드 실패:', err);

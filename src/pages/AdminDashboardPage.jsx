@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext, Link } from 'react-router-dom';
 import {
   Users, Calendar, CheckCircle2, Clock, Shield, FileText, ArrowRight,
-  Sparkles, Coins, MessageSquare,
+  Sparkles, Coins, MessageSquare, UsersRound, Settings2,
 } from 'lucide-react';
 import { Card, MetricCard, Badge, SectionPanel } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +11,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import EmployeeTable from '@/components/admin/EmployeeTable';
 import TeamOverview from '@/components/admin/TeamOverview';
 import EmployeeTaskOverview from '@/components/admin/EmployeeTaskOverview';
+import TeamManagementModal from '@/components/admin/TeamManagementModal';
 import { format, parseISO } from 'date-fns';
 import WeeklyChart from '@/components/ui/WeeklyChart';
 
@@ -25,6 +26,9 @@ export default function AdminDashboardPage() {
   const [employees, setEmployees] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  // 팀 관리 모달 상태
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [teamModalTab, setTeamModalTab] = useState('teams');
 
   const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -160,13 +164,65 @@ export default function AdminDashboardPage() {
 
         {/* ═══ 섹션 1: 전체 메트릭 ═══ */}
         <SectionPanel>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            <MetricCard label="총 직원 수" value={stats.totalEmployees} icon={Users} />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+            {/* 팀 수 — 클릭 시 팀 관리 모달 */}
+            <button
+              onClick={() => { setTeamModalTab('teams'); setTeamModalOpen(true); }}
+              className="rounded-[6px] p-5 transition-all duration-200 bg-bg-secondary border border-border-subtle hover:border-brand-purple/40 hover:shadow-glow text-left group"
+            >
+              <div className="flex items-start justify-between">
+                <p className="text-xs uppercase tracking-wider mb-3 text-txt-muted">팀 수</p>
+                <UsersRound size={16} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
+              </div>
+              <p className="text-[32px] font-bold leading-none text-txt-primary">{teams.length}</p>
+              <p className="text-[10px] text-brand-purple mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                <Settings2 size={9} /> 관리하기
+              </p>
+            </button>
+
+            {/* 직원 수 — 클릭 시 팀 관리 모달 (멤버 뷰) */}
+            <button
+              onClick={() => { setTeamModalTab('members'); setTeamModalOpen(true); }}
+              className="rounded-[6px] p-5 transition-all duration-200 bg-bg-secondary border border-border-subtle hover:border-brand-purple/40 hover:shadow-glow text-left group"
+            >
+              <div className="flex items-start justify-between">
+                <p className="text-xs uppercase tracking-wider mb-3 text-txt-muted">직원 수</p>
+                <Users size={16} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
+              </div>
+              <p className="text-[32px] font-bold leading-none text-txt-primary">{stats.totalEmployees}</p>
+              <p className="text-[10px] text-brand-purple mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                <Settings2 size={9} /> 팀 배정
+              </p>
+            </button>
+
             <MetricCard label="전체 회의" value={stats.totalMeetings} change={`완료 ${stats.completedMeetings}건`} icon={Calendar} />
             <MetricCard label="태스크 완수율" value={`${stats.completionRate}%`} change={`완료 ${stats.doneTasks}건`} variant="gradient" icon={CheckCircle2} />
             <MetricCard label="평균 회의 시간" value={stats.avgDuration} icon={Clock} />
           </div>
         </SectionPanel>
+
+        {/* 팀 관리 모달 */}
+        <TeamManagementModal
+          open={teamModalOpen}
+          onClose={() => {
+            setTeamModalOpen(false);
+            // 닫을 때 팀 데이터 리로드 (변경사항 반영)
+            if (SUPABASE_ENABLED) {
+              supabase.from('teams').select('id, name, team_members(user_id)').then(({ data }) => {
+                if (data) {
+                  setTeams(data.map((t) => ({
+                    id: t.id,
+                    name: t.name,
+                    member_count: t.team_members?.length || 0,
+                    active_meetings: meetings.filter((m) => m.team_id === t.id && m.status === 'active').length,
+                    completed_meetings: meetings.filter((m) => m.team_id === t.id && m.status === 'completed').length,
+                  })));
+                }
+              });
+            }
+          }}
+          initialTab={teamModalTab}
+        />
 
         {/* ═══ 섹션 2: 운영 트렌드 (2컬럼) ═══ */}
         <SectionPanel title="운영 트렌드" subtitle="주간 활동 + 팀별 회의 현황">
