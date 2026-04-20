@@ -47,9 +47,20 @@ const DEFAULT_SETTINGS = {
   knowledgeFiles: [],                // [{ id, name, size, content, addedAt }]
 };
 
+// 사용자별 localStorage 키 (계정 전환 시 데이터 누수 방지)
+function getUserScopedKey() {
+  try {
+    const lastUserId = localStorage.getItem('meetflow-last-user-id');
+    return lastUserId ? `${STORAGE_KEY}:${lastUserId}` : STORAGE_KEY;
+  } catch {
+    return STORAGE_KEY;
+  }
+}
+
 function loadFromStorage() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getUserScopedKey();
+    const raw = localStorage.getItem(key);
     if (!raw) return DEFAULT_SETTINGS;
     const saved = JSON.parse(raw);
     // 새로 추가된 필드 보존을 위해 defaults와 머지
@@ -61,8 +72,8 @@ function loadFromStorage() {
 
 function saveToStorage(state) {
   try {
-    // content가 큰 knowledgeFiles는 별도 처리 — 파일 내용 포함 저장
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const key = getUserScopedKey();
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (e) {
     console.warn('[miloStore] localStorage save failed:', e);
   }

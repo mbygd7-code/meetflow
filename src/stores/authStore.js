@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { clearOnLogout, handleUserChange } from '@/lib/sessionCleanup';
 
 // JWT 페이로드에서 AMR(Authentication Methods Reference) 확인
 function isRecoveryFromJwt(accessToken) {
@@ -67,6 +68,10 @@ export const useAuthStore = create((set, get) => ({
         }
         if (_event === 'INITIAL_SESSION') return;
 
+        // ★ 사용자 변경 감지: 이전 사용자와 다르면 localStorage 정리
+        const newUserId = newSession?.user?.id || null;
+        handleUserChange(newUserId);
+
         // 동기적으로 user 세팅 (role 없이 먼저)
         set({
           session: newSession,
@@ -85,6 +90,9 @@ export const useAuthStore = create((set, get) => ({
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      // ★ 앱 초기 로드 시에도 사용자 변경 감지 (브라우저 재시작 후 다른 계정으로 로그인한 경우)
+      handleUserChange(session?.user?.id || null);
 
       const recoveryDetected = isRecoveryFromJwt(session?.access_token);
       const role = session?.user
@@ -109,12 +117,20 @@ export const useAuthStore = create((set, get) => ({
       set({ error: error.message, loading: false });
       return { error };
     }
+    // ★ 로그인 성공 시 사용자 변경 감지 & 이전 데이터 정리
+    const cleared = handleUserChange(data.user?.id || null);
     const role = await fetchUserRole(data.user?.id);
     set({
       session: data.session,
       user: buildUser(data.user, role),
       loading: false,
     });
+    // ★ 다른 사용자로 전환된 경우: 페이지 리로드로 Zustand 메모리 상태까지 초기화
+    if (cleared && typeof window !== 'undefined') {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 200);
+    }
     return { data };
   },
 
@@ -153,7 +169,16 @@ export const useAuthStore = create((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    // ★ 로그아웃 시 모든 meetflow localStorage/sessionStorage 정리
+    clearOnLogout();
     set({ session: null, user: null });
+    // 페이지 새로고침으로 Zustand 스토어 상태까지 완전 초기화 (잔재 상태 방지)
+    // → 다른 계정 로그인 시 이전 메모리 상태가 일시적으로 보이는 것 방지
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 100);
+    }
   },
 
   mockSignIn: (email, role = 'member') => {
@@ -171,6 +196,8 @@ export const useAuthStore = create((set, get) => ({
       name: email?.split('@')[0] || 'Demo User',
       role: finalRole,
     };
+    // ★ 데모 로그인도 사용자 변경 감지
+    handleUserChange(mockUser.id);
     set({ user: mockUser, session: { user: mockUser }, loading: false });
   },
 }));

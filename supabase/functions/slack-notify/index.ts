@@ -244,6 +244,43 @@ serve(async (req) => {
         });
         break;
       }
+
+      case 'meeting_cancelled': {
+        // 회의 취소 알림 (자동/수동 통합)
+        // payload: { title, team_id, scheduled_at, cancelled_by, auto_cancel, reason }
+        if (!payload.team_id) break;
+        const { data: team } = await supabase
+          .from('teams')
+          .select('slack_channel_id')
+          .eq('id', payload.team_id)
+          .single();
+        if (!team?.slack_channel_id) break;
+
+        const isAuto = !!payload.auto_cancel;
+        const icon = isAuto ? '⏰' : '🚫';
+        const headline = isAuto
+          ? '예정 시간 경과로 회의가 자동 취소되었습니다'
+          : '회의가 취소되었습니다';
+        const scheduledLabel = payload.scheduled_at
+          ? new Date(payload.scheduled_at).toLocaleString('ko-KR', {
+              month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+            })
+          : null;
+
+        const lines: string[] = [
+          `${icon} *${headline}*`,
+          `• 회의: *${payload.title || '제목 없음'}*`,
+        ];
+        if (scheduledLabel) lines.push(`• 예정: ${scheduledLabel}`);
+        if (isAuto) {
+          lines.push(`• 사유: ${payload.reason || '24시간 경과, 시작 안 됨'}`);
+        } else if (payload.cancelled_by) {
+          lines.push(`• 취소자: ${payload.cancelled_by}`);
+        }
+
+        await postSlack(team.slack_channel_id, { text: lines.join('\n') });
+        break;
+      }
     }
 
     return new Response(JSON.stringify({ ok: true }), {

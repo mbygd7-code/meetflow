@@ -272,9 +272,12 @@ ${preset || 'default'}
 **선별 규칙**:
 - 명확한 단일 도메인 질문 → 1명만
 - 상반된 관점이나 보완이 필요한 경우 → 최대 2명
-- 전문가 개입이 불필요한 경우 (인사, 간단한 확인 등) → 빈 배열 []
+- **단순 정보/이미지/링크 검색 요청** ("~찾아줘", "~검색해줘", "~알려줘" 류) → 빈 배열 [] (Milo가 직접 답변)
+- 인사, 간단한 확인 → 빈 배열 []
+- 단순 사실 확인 (회사 정보, 팀원, 날짜 등) → 빈 배열 [] (Milo가 RAG로 답변)
 - **절대 3명 이상 선별 금지**
 - 애매하면 빈 배열
+- **중요**: 사용자가 구체적 답(이미지/링크/정보)을 원하는데 전문가의 의견·제안이 필요없으면 **절대 전문가 호출하지 마라**
 
 ## 과제
 위 대화 흐름을 검토하고 Milo가 개입할지 판단하라. 개입이 필요하면 짧은 코멘트만 작성 (2~3문장).
@@ -285,9 +288,10 @@ ${preset || 'default'}
 절대로 자신을 3인칭으로 언급하지 마라. "제가", "저는"을 사용하라.`;
 
     // ── 웹 검색 (Google Custom Search) — 요청 시에만 실행 ──
+    // GOOGLE_SEARCH_SECRET 우선, 없으면 GOOGLE_SHEETS_API_KEY 폴백 (하위호환)
     let searchSection = '';
     const GOOGLE_CSE_ID = Deno.env.get('GOOGLE_CSE_ID');
-    const GOOGLE_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+    const GOOGLE_API_KEY = Deno.env.get('GOOGLE_SEARCH_SECRET') || Deno.env.get('GOOGLE_SHEETS_API_KEY');
     // 마지막 사용자 메시지에서 검색 요청 키워드 감지
     const lastUserMsg = (messages || []).filter((m: any) => !m.is_ai).pop()?.content || '';
     const searchKeywords = /검색|찾아|서치|search|조사|리서치|트렌드|최신|경쟁사|사례|레퍼런스/i;
@@ -307,33 +311,91 @@ ${preset || 'default'}
       try {
         // 검색 쿼리 원본: 현재 메시지에 의도 키워드 있으면 그대로, 아니면 역추적한 의도 메시지 사용
         const sourceMsg = searchKeywords.test(lastUserMsg) ? lastUserMsg : (searchIntentMsg || lastUserMsg);
+
+        // ── 이미지 요청 감지 (확장된 키워드 + 컨텍스트 기반) ──
+        // 단어 경계 없이 포함 여부만 체크 (한국어/영어 모두 커버)
+        const imageKeywords = /이미지|사진|그림|일러스트|삽화|아이콘|로고|photo|image|picture|illustration|icon/i;
+        const wantsImage = imageKeywords.test(sourceMsg);
+
+        // 쿼리 정제: 명령어 제거 + 불필요한 단어 제거
+        // 이미지 검색인 경우 "이미지/사진/그림" 단어는 쿼리에 남겨둠 (검색 정확도 ↑)
         const cleanQuery = sourceMsg
-          .replace(/검색해줘|찾아줘|서치해줘|알려줘|보여줘|해줘|해 줘/g, '')
+          .replace(/검색해줘|찾아줘|서치해줘|알려줘|보여줘|해줘|해 줘|찾아|검색|서치/g, '')
           .replace(/@\S+/g, '')
+          .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 80);
         const queries = cleanQuery ? [cleanQuery] : [];
-        console.log('[milo-analyze] Search triggered, query:', cleanQuery);
+        console.log('[milo-analyze] Search triggered:', JSON.stringify({
+          query: cleanQuery,
+          mode: wantsImage ? 'IMAGE' : 'WEB',
+          sourceMsg: sourceMsg.slice(0, 100),
+        }));
 
         if (queries.length > 0) {
           const searchResults: string[] = [];
+          let actualUsedImage = wantsImage; // 최종적으로 이미지 검색이 사용됐는지 추적
           for (const q of queries) {
             try {
               const ctrl = new AbortController();
               setTimeout(() => ctrl.abort(), 5000);
-              const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(q)}&num=3&lr=lang_ko`;
-              console.log('[milo-analyze] Fetching:', searchUrl.replace(GOOGLE_API_KEY, 'KEY***'));
-              const res = await fetch(searchUrl, { signal: ctrl.signal });
+              // 이미지 검색 시도 → 실패 시 일반 검색으로 폴백
+              const buildUrl = (useImage: boolean) => {
+                const params = new URLSearchParams({
+                  key: GOOGLE_API_KEY!,
+                  cx: GOOGLE_CSE_ID!,
+                  q: q,
+                  num: '5', // 이미지는 여러 개 보여주는 게 좋음
+                });
+                if (useImage) {
+                  params.set('searchType', 'image');
+                  params.set('safe', 'active'); // 세이프서치
+                } else {
+                  params.set('lr', 'lang_ko'); // 웹 검색은 한국어 우선
+                }
+                return `https://www.googleapis.com/customsearch/v1?${params.toString()}`;
+              };
+
+              let searchUrl = buildUrl(wantsImage);
+              console.log('[milo-analyze] Fetching:', searchUrl.replace(GOOGLE_API_KEY!, 'KEY***'), wantsImage ? '[IMAGE]' : '[WEB]');
+              let res = await fetch(searchUrl, { signal: ctrl.signal });
+
+              // 이미지 검색이 400 (CSE 이미지 미지원) 또는 다른 에러로 실패 시 일반 검색으로 폴백
+              if (wantsImage && !res.ok) {
+                const errBody = await res.text();
+                console.warn('[milo-analyze] Image search failed:', res.status, errBody.slice(0, 200));
+                console.warn('[milo-analyze] → Falling back to web search');
+                actualUsedImage = false;
+                searchUrl = buildUrl(false);
+                res = await fetch(searchUrl, { signal: ctrl.signal });
+              }
+
               console.log('[milo-analyze] Search response status:', res.status);
               if (res.ok) {
                 const data = await res.json();
-                const items = (data.items || []).slice(0, 3);
-                console.log('[milo-analyze] Search results count:', items.length);
+                const items = (data.items || []).slice(0, 5);
+                console.log('[milo-analyze] Search results count:', items.length, actualUsedImage ? '(image)' : '(web)');
                 if (items.length > 0) {
-                  searchResults.push(`검색어: "${q}"`);
+                  searchResults.push(`검색어: "${q}" ${actualUsedImage ? '(이미지 검색)' : '(웹 검색)'}`);
                   items.forEach((item: any, i: number) => {
-                    const thumb = item.pagemap?.cse_thumbnail?.[0]?.src || '';
-                    searchResults.push(`${i + 1}. [${item.title}](${item.link})${thumb ? ` ![thumb](${thumb})` : ''}\n   ${(item.snippet || '').slice(0, 150)}`);
+                    if (actualUsedImage) {
+                      // 이미지 검색 결과: image.thumbnailLink (썸네일), contextLink (출처 페이지)
+                      const imageUrl = item.link; // 실제 이미지 URL
+                      const thumbUrl = item.image?.thumbnailLink || imageUrl;
+                      const contextUrl = item.image?.contextLink || imageUrl;
+                      searchResults.push(
+                        `${i + 1}. [${item.title || '이미지'}](${imageUrl})\n` +
+                        `   ![이미지](${thumbUrl})\n` +
+                        `   출처: ${contextUrl}`
+                      );
+                    } else {
+                      // 웹 검색 결과
+                      const thumb = item.pagemap?.cse_thumbnail?.[0]?.src || '';
+                      searchResults.push(
+                        `${i + 1}. [${item.title}](${item.link})${thumb ? ` ![thumb](${thumb})` : ''}\n` +
+                        `   ${(item.snippet || '').slice(0, 150)}`
+                      );
+                    }
                   });
                 }
               } else {
@@ -345,7 +407,27 @@ ${preset || 'default'}
             }
           }
           if (searchResults.length > 0) {
-            searchSection = `\n\n## 웹 검색 결과 (실시간)\n응답에 관련 링크를 [제목](URL) 형식으로 인용하세요.\n\n${searchResults.join('\n')}\n`;
+            const isImageResults = searchResults[0].includes('(이미지 검색)');
+            searchSection = `\n\n## 📸 ${isImageResults ? 'Google 이미지 검색' : 'Google 웹 검색'} 결과 (실시간)
+
+🚨 **절대 규칙**:
+1. **반드시 아래 URL을 [제목](URL) 형식으로 본문에 인용하라** (최소 3~5개)
+2. **search_sources 배열에도 {title, url, thumbnail}을 반드시 채워라** (카드 UI 렌더링용)
+3. **장황한 설명 금지** — "~검색 결과입니다" + 링크 나열만
+4. **"여기서 찾아보세요"류 추상적 안내 금지** — 실제 검색된 링크만 제시
+5. **다른 전문가 의견 기다리지 말고 바로 답변** (사용자는 링크만 원함)
+${isImageResults ? '6. **이미지 검색 결과**: URL은 실제 이미지 파일을 가리킵니다 (jpg, png 등). 썸네일은 ![이미지](URL) 형식으로 인용 가능.' : ''}
+
+응답 템플릿:
+"@OO님, '검색어' ${isImageResults ? '이미지 검색 결과' : '검색 결과'}입니다.
+
+- [제목1](URL1)
+- [제목2](URL2)
+- [제목3](URL3)"
+
+---
+
+${searchResults.join('\n')}\n`;
           }
         }
       } catch (e) {

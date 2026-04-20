@@ -395,9 +395,21 @@ function migrateLegacyIds(state) {
   return state;
 }
 
+// 현재 로그인한 사용자 ID를 기반으로 localStorage 키 생성
+// 이유: 같은 브라우저에서 계정 전환 시 데이터 누수 방지
+function getUserScopedKey() {
+  try {
+    const lastUserId = localStorage.getItem('meetflow-last-user-id');
+    return lastUserId ? `${STORAGE_KEY}:${lastUserId}` : STORAGE_KEY;
+  } catch {
+    return STORAGE_KEY;
+  }
+}
+
 function loadFromStorage() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getUserScopedKey();
+    const raw = localStorage.getItem(key);
     if (!raw) return DEFAULT_STATE;
     const parsed = JSON.parse(raw);
     const merged = { ...DEFAULT_STATE, ...parsed };
@@ -409,7 +421,8 @@ function loadFromStorage() {
 
 function saveToStorage(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const key = getUserScopedKey();
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (e) {
     console.warn('[aiTeamStore] save failed:', e);
   }

@@ -282,15 +282,43 @@ export function useMeeting() {
     [user, createMeeting]
   );
 
-  // 회의 삭제
+  // 회의 삭제 (취소) — Slack 알림 포함
+  // options.autoCancel: 자동 취소 여부 (기본 false = 수동)
+  // options.reason: 자동 취소 사유 (선택)
   const deleteMeeting = useCallback(
-    async (id) => {
+    async (id, options = {}) => {
+      const { autoCancel = false, reason = null } = options;
+
+      // Slack 알림용 회의 정보 먼저 스냅샷 (DELETE 후엔 조회 불가)
+      const meeting = useMeetingStore.getState().meetings.find((m) => m.id === id);
+
       if (canUseDB) {
+        // Slack 취소 알림 — DB 삭제 전에 발송 (팀 채널 조회는 slack-notify 내부에서)
+        if (meeting?.team_id) {
+          try {
+            await supabase.functions.invoke('slack-notify', {
+              body: {
+                event: 'meeting_cancelled',
+                payload: {
+                  title: meeting.title,
+                  team_id: meeting.team_id,
+                  scheduled_at: meeting.scheduled_at,
+                  cancelled_by: user?.name || '사용자',
+                  auto_cancel: autoCancel,
+                  reason: reason || (autoCancel ? '24시간 경과, 시작 안 됨' : null),
+                },
+              },
+            });
+          } catch (err) {
+            console.warn('[deleteMeeting] Slack 취소 알림 실패:', err);
+          }
+        }
+
         await supabase.from('meetings').delete().eq('id', id);
       }
       removeMeeting(id);
     },
-    [removeMeeting]
+    [removeMeeting, user, canUseDB]
   );
 
   return {

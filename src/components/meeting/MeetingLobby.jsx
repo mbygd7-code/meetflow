@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, X, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
+import { useAutoCancelMeetings } from '@/hooks/useAutoCancelMeetings';
 import { useToastStore } from '@/stores/toastStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import MeetingCard from './MeetingCard';
@@ -37,6 +38,9 @@ export default function MeetingLobby({ pageTitle }) {
   const { meetings, deleteMeeting } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
   const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
+
+  // 24시간 경과한 예정 회의 자동 취소 (Slack 알림 포함)
+  useAutoCancelMeetings();
 
   // 사용자가 수동으로 탭을 선택했는지 추적 (수동 선택 후엔 자동 전환 안 함)
   const userSelectedRef = useRef(false);
