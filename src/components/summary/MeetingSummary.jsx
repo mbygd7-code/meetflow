@@ -4,6 +4,7 @@ import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
   Loader, Clock, Users, MessageSquare,
   ChevronDown, ChevronUp, Copy, Check, FileText, RefreshCw, AlertCircle,
+  Quote,
 } from 'lucide-react';
 import { Card, Badge, EmptyState } from '@/components/ui';
 import MiloAvatar from '@/components/milo/MiloAvatar';
@@ -20,6 +21,48 @@ import MeetingMetaBar from './MeetingMetaBar';
 import MeetingParticipants from './MeetingParticipants';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+
+// V3: 결정/논의 항목의 근거 메시지 찾기 (텍스트 겹침 기반)
+function findSourceMessage(item, messages) {
+  if (!item || !messages?.length) return null;
+  const needle = `${item.title || ''} ${item.detail || item.reason || ''}`.toLowerCase().trim();
+  if (needle.length < 10) return null;
+  // 문장 단위로 쪼개어 앞 30자 프로브 후 각 메시지 content와 비교
+  const probes = needle
+    .split(/[.!?。,\s]+/)
+    .filter((s) => s.length >= 8)
+    .slice(0, 6);
+  let best = { msg: null, score: 0 };
+  for (const m of messages) {
+    const content = (m.content || '').toLowerCase();
+    if (content.length < 10) continue;
+    let score = 0;
+    for (const p of probes) {
+      if (content.includes(p)) score += p.length;
+    }
+    // 역방향: 메시지 내용 일부가 needle에 포함
+    const short = content.length > 30 ? content.slice(0, 30) : content;
+    if (needle.includes(short) && short.length >= 10) score += short.length;
+    if (score > best.score) best = { msg: m, score };
+  }
+  // 최소 점수 기준 (너무 느슨한 매칭 방지)
+  return best.score >= 15 ? best.msg : null;
+}
+
+function SourceLink({ meetingId, item, messages }) {
+  const msg = useMemo(() => findSourceMessage(item, messages), [item, messages]);
+  if (!msg) return null;
+  return (
+    <Link
+      to={`/meetings/${meetingId}#msg-${encodeURIComponent(msg.id)}`}
+      className="inline-flex items-center gap-1 text-[10px] text-brand-purple hover:text-brand-purple-deep transition-colors mt-1"
+      title="원본 대화로 이동"
+    >
+      <Quote size={10} strokeWidth={2.4} />
+      원본 대화 보기
+    </Link>
+  );
+}
 
 function Section({ icon: Icon, title, color, children, count, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -410,10 +453,13 @@ export default function MeetingSummary() {
               {summary.decisions.map((d, i) => (
                 <li key={i} className="flex gap-2">
                   <CheckCircle2 size={14} className="text-status-success mt-0.5 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
-                    {d.owner && <span className="text-[10px] text-brand-purple mt-0.5 inline-block">담당: {d.owner}</span>}
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {d.owner && <span className="text-[10px] text-brand-purple">담당: {d.owner}</span>}
+                      <SourceLink meetingId={id} item={d} messages={messages} />
+                    </div>
                   </div>
                 </li>
               ))}
@@ -435,9 +481,10 @@ export default function MeetingSummary() {
               {summary.discussions.map((d, i) => (
                 <li key={i} className="flex gap-2">
                   <MessageCircle size={14} className="text-brand-yellow mt-0.5 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
+                    <SourceLink meetingId={id} item={d} messages={messages} />
                   </div>
                 </li>
               ))}
@@ -465,9 +512,10 @@ export default function MeetingSummary() {
               {summary.deferred.map((d, i) => (
                 <li key={i} className="flex gap-2">
                   <PauseCircle size={14} className="text-txt-muted mt-0.5 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.reason && <p className="text-xs text-txt-muted mt-0.5">{d.reason}</p>}
+                    <SourceLink meetingId={id} item={d} messages={messages} />
                   </div>
                 </li>
               ))}

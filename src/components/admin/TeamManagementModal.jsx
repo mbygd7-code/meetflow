@@ -190,11 +190,19 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
     }
     setInviting(true);
     try {
+      // 현재 세션 토큰을 명시적으로 주입 (일부 브라우저/환경에서 자동 헤더가 빠지는 케이스 대비)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('로그인 세션이 없습니다. 로그아웃 후 다시 로그인해주세요.');
+      }
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email,
           name: inviteName.trim() || null,
           teamId: inviteTeamId || null,
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
       if (error) throw error;
@@ -221,8 +229,15 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
     if (!confirm(`"${userName}" 직원 계정을 삭제하시겠습니까?\n로그인 계정과 모든 팀 연결이 제거됩니다. (되돌릴 수 없음)`)) return;
     setDeletingUserId(userId);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('로그인 세션이 없습니다. 로그아웃 후 다시 로그인해주세요.');
+      }
       const { data, error } = await supabase.functions.invoke('delete-user', {
         body: { userId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

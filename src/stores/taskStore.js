@@ -274,7 +274,7 @@ export const useTaskStore = create((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('tasks')
-        .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color)')
+        .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -282,7 +282,12 @@ export const useTaskStore = create((set, get) => ({
       const normalized = (data || []).map((t) => ({
         ...t,
         assignee: t.assignee
-          ? { id: t.assignee.id, name: t.assignee.name, color: t.assignee.avatar_color || '#723CEB' }
+          ? {
+              id: t.assignee.id,
+              name: t.assignee.name,
+              color: t.assignee.avatar_color || '#723CEB',
+              slack_user_id: t.assignee.slack_user_id || null,
+            }
           : null,
         assignee_name: t.assignee?.name || t.assignee_name || null,
       }));
@@ -300,9 +305,42 @@ export const useTaskStore = create((set, get) => ({
         console.log('[taskStore] INSERT:', payload.new.id);
         get().addTask(payload.new);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tasks' }, async (payload) => {
         console.log('[taskStore] UPDATE:', payload.new.id);
-        get().updateTask(payload.new.id, payload.new);
+        const newRow = payload.new;
+        // Realtime payload는 JOIN 데이터(assignee)가 없음.
+        // assignee_id가 바뀐 경우 → 전체 행 재조회해서 assignee 정보 갱신
+        const existing = get().tasks.find((t) => t.id === newRow.id);
+        const assigneeChanged = existing && existing.assignee_id !== newRow.assignee_id;
+        if (assigneeChanged) {
+          try {
+            const { data } = await supabase
+              .from('tasks')
+              .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)')
+              .eq('id', newRow.id)
+              .maybeSingle();
+            if (data) {
+              const normalized = {
+                ...data,
+                assignee: data.assignee
+                  ? {
+                      id: data.assignee.id,
+                      name: data.assignee.name,
+                      color: data.assignee.avatar_color || '#723CEB',
+                      slack_user_id: data.assignee.slack_user_id || null,
+                    }
+                  : null,
+                assignee_name: data.assignee?.name || data.assignee_name || null,
+              };
+              get().updateTask(newRow.id, normalized);
+              return;
+            }
+          } catch (err) {
+            console.warn('[taskStore] refetch failed, using payload only:', err);
+          }
+        }
+        // 일반 업데이트: spread 머지 (assignee는 기존 값 유지)
+        get().updateTask(newRow.id, newRow);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tasks' }, (payload) => {
         console.log('[taskStore] DELETE:', payload.old.id);

@@ -78,7 +78,7 @@ function extractActionItems(content) {
   return items;
 }
 
-export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, reactions = {} }) {
+export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, reactions = {}, readonly = false }) {
   const [copied, setCopied] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
   const [quoteExpanded, setQuoteExpanded] = useState(false);
@@ -213,8 +213,8 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
           )}
 
           <div
-            onClick={handleQuote}
-            className={`px-4 py-3 text-sm leading-relaxed cursor-pointer ${
+            onClick={readonly ? undefined : handleQuote}
+            className={`px-4 py-3 text-sm leading-relaxed ${readonly ? '' : 'cursor-pointer'} ${
               isQuestion
                 ? 'text-txt-primary bg-brand-orange/10 border border-brand-orange/25 rounded-xl rounded-tl-sm hover:border-brand-orange/40'
                 : isAi
@@ -300,7 +300,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
             )}
           </div>
           {/* AI 액션 버튼 (단계 선택) */}
-          {isAi && (() => {
+          {isAi && !readonly && (() => {
             const actions = extractActionItems(displayContent);
             if (actions.length === 0) return null;
             return (
@@ -328,6 +328,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
             <button onClick={handleCopy} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="복사">
               {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
             </button>
+            {!readonly && (<>
             <button onClick={(e) => { e.stopPropagation(); handleQuote(); }} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="인용 답글">
               <Reply size={16} />
             </button>
@@ -355,6 +356,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                 </div>
               )}
             </div>
+            </>)}
             </div>
           </div>
         </div>

@@ -14,15 +14,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// V10: 사용자 ID(U...)를 DM 채널 ID(D...)로 해석
+// Slack chat.postMessage는 일부 봇 설정에서 U-ID를 직접 받지 못하므로,
+// conversations.open으로 IM 채널을 명시적으로 확보하는 것이 안정적.
+// 스코프 요구사항: im:write
+const imChannelCache = new Map<string, string>();
+async function resolveSlackChannel(target: string): Promise<string> {
+  if (!target) return target;
+  // C/D/G로 시작하면 이미 채널 ID → 그대로 사용
+  if (/^[CDG]/i.test(target)) return target;
+  // U로 시작하면 사용자 → IM 채널 오픈
+  if (!/^U/i.test(target)) return target; // 알 수 없는 형식은 그대로 시도
+  if (imChannelCache.has(target)) return imChannelCache.get(target)!;
+  try {
+    const res = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ users: target }),
+    });
+    const data = await res.json();
+    if (!data?.ok) {
+      console.error('[slack-notify] conversations.open failed:', data?.error, 'for user:', target);
+      return target; // fallback — chat.postMessage가 에러를 반환하도록 맡김
+    }
+    const channelId = data.channel?.id || target;
+    imChannelCache.set(target, channelId);
+    return channelId;
+  } catch (err) {
+    console.error('[slack-notify] conversations.open exception:', err);
+    return target;
+  }
+}
+
 async function postSlack(channel: string, payload: any) {
-  return fetch('https://slack.com/api/chat.postMessage', {
+  const resolved = await resolveSlackChannel(channel);
+  const res = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
     },
-    body: JSON.stringify({ channel, ...payload }),
+    body: JSON.stringify({ channel: resolved, ...payload }),
   });
+  // 실패 시 로그 (기존에는 fire-and-forget)
+  try {
+    const data = await res.clone().json();
+    if (!data?.ok) {
+      console.error('[slack-notify] chat.postMessage failed:', data?.error, 'channel:', resolved);
+    }
+  } catch {}
+  return res;
 }
 
 async function uploadFileToSlack(channel: string, file: any, threadTs?: string) {
