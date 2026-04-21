@@ -16,22 +16,34 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
     navigate(`/meetings/${meeting.id}`);
   };
 
+  // 회의 시각 (완료/예정 구분 없이 실제 datetime)
+  const meetingAt =
+    meeting.ended_at ||
+    meeting.started_at ||
+    meeting.scheduled_at ||
+    meeting.created_at;
+
   // 시간 레이블 — 상태별 분기 + null 안전 fallback
   const timeLabel = () => {
     if (isActive && meeting.started_at) return `진행 ${formatElapsed(meeting.started_at)}`;
     if (isScheduled) {
-      const when = meeting.scheduled_at || meeting.created_at;
-      return safeFormatDate(when, 'MM/dd HH:mm', '시간 미정');
+      return safeFormatDate(meeting.scheduled_at || meeting.created_at, 'HH:mm', '시간 미정');
     }
     if (isCompleted) {
-      const end = meeting.ended_at || meeting.started_at;
-      return end ? formatRelative(end) : '';
+      return safeFormatDate(meetingAt, 'HH:mm', '');
     }
     return '';
   };
 
-  // 날짜만 별도 표시 (scheduled일 때 유용)
-  const dateLabel = isScheduled ? safeFormatDate(meeting.scheduled_at, 'MM/dd (EEE)', '') : '';
+  // 날짜 레이블 (예정 · 완료 둘 다 실제 날짜 표시)
+  const dateLabel = isScheduled
+    ? safeFormatDate(meeting.scheduled_at || meeting.created_at, 'MM/dd (EEE)', '')
+    : isCompleted
+    ? safeFormatDate(meetingAt, 'MM/dd (EEE)', '')
+    : '';
+
+  // 완료 회의의 보조 상대 시각 ("1일 전")
+  const relativeLabel = isCompleted ? formatRelative(meetingAt) : '';
 
   // 진행 중 회의: 미참석 직원 (online !== true인 참여자)
   const absentParticipants = isActive
@@ -112,22 +124,28 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
 
       {/* 시간 — 강조 표시 */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
-        {isScheduled && dateLabel && (
+        {/* 예정/완료 공통: 실제 날짜 (MM/dd 요일) */}
+        {(isScheduled || isCompleted) && dateLabel && (
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-txt-primary">
-            <Calendar size={14} strokeWidth={2.2} className="text-brand-purple" />
+            <Calendar size={14} strokeWidth={2.2} className={isCompleted ? 'text-txt-muted' : 'text-brand-purple'} />
             {dateLabel}
           </span>
         )}
+        {/* 시각 (HH:mm) 또는 진행 경과 */}
         <span className={`inline-flex items-center gap-1.5 ${
-          isScheduled && dateLabel ? 'text-xs text-txt-secondary' : 'text-sm font-semibold text-txt-primary'
+          (isScheduled || isCompleted) && dateLabel ? 'text-xs text-txt-secondary' : 'text-sm font-semibold text-txt-primary'
         }`}>
           <Clock
-            size={isScheduled && dateLabel ? 12 : 14}
+            size={(isScheduled || isCompleted) && dateLabel ? 12 : 14}
             strokeWidth={2.2}
-            className={isScheduled && dateLabel ? '' : 'text-brand-orange'}
+            className={(isScheduled || isCompleted) && dateLabel ? '' : 'text-brand-orange'}
           />
           {timeLabel() || '시간 미정'}
         </span>
+        {/* 완료: 보조 상대 시각 */}
+        {isCompleted && relativeLabel && (
+          <span className="text-[11px] text-txt-muted">· {relativeLabel}</span>
+        )}
       </div>
 
       {/* 요청자 */}
