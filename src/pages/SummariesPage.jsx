@@ -1,10 +1,28 @@
+import { useMemo, useState } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
-import { FileText, Loader2, Sparkles } from 'lucide-react';
+import { FileText, Loader2, Sparkles, Search, X } from 'lucide-react';
 import { Card, Badge, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { formatDate } from '@/utils/formatters';
 import MeetingSummary from '@/components/summary/MeetingSummary';
+
+// 기간 필터 옵션 — 기준 시각 대비 N일 이내
+const RANGE_OPTIONS = [
+  { id: 'day', label: '오늘', days: 1 },
+  { id: 'week', label: '이번 주', days: 7 },
+  { id: 'month', label: '이번 달', days: 30 },
+  { id: 'all', label: '전체', days: null },
+];
+
+function isWithinRange(dateStr, days) {
+  if (!dateStr) return false;
+  if (days == null) return true;
+  const now = Date.now();
+  const t = new Date(dateStr).getTime();
+  if (isNaN(t)) return false;
+  return now - t <= days * 24 * 60 * 60 * 1000 && t <= now;
+}
 
 function GeneratingSummaryCard({ meeting }) {
   return (
@@ -39,13 +57,51 @@ function SummaryList() {
   const { meetings } = useMeeting();
   const { pageTitle } = useOutletContext() || {};
   const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
+  const [range, setRange] = useState('all');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const generatingMeeting = summaryGeneratingId
     ? meetings.find((m) => m.id === summaryGeneratingId)
     : null;
-  // 생성 중인 회의는 completed로 이미 전환되었을 수 있으므로 중복 방지
-  const completed = meetings
-    .filter((m) => m.status === 'completed')
-    .filter((m) => m.id !== summaryGeneratingId);
+
+  // 완료된 회의 전체 (필터 적용 전) — 카운트 합산/빈 상태 판단에 사용
+  const allCompleted = useMemo(
+    () => meetings.filter((m) => m.status === 'completed' && m.id !== summaryGeneratingId),
+    [meetings, summaryGeneratingId]
+  );
+
+  // 기간 필터 + 검색 필터 적용
+  const filtered = useMemo(() => {
+    const rangeCfg = RANGE_OPTIONS.find((r) => r.id === range);
+    const days = rangeCfg?.days;
+    let list = allCompleted.filter((m) => {
+      const key = m.ended_at || m.started_at || m.created_at;
+      return isWithinRange(key, days);
+    });
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((m) => m.title?.toLowerCase().includes(q));
+    }
+    // 최신순 정렬
+    return [...list].sort((a, b) => {
+      const ta = new Date(a.ended_at || a.started_at || a.created_at).getTime();
+      const tb = new Date(b.ended_at || b.started_at || b.created_at).getTime();
+      return tb - ta;
+    });
+  }, [allCompleted, range, searchQuery]);
+
+  // 각 기간별 카운트 (탭에 숫자 표시용)
+  const rangeCounts = useMemo(() => {
+    const counts = {};
+    for (const r of RANGE_OPTIONS) {
+      counts[r.id] = allCompleted.filter((m) => {
+        const key = m.ended_at || m.started_at || m.created_at;
+        return isWithinRange(key, r.days);
+      }).length;
+    }
+    return counts;
+  }, [allCompleted]);
 
   return (
     <div className="p-3 md:p-4 lg:p-4 max-w-5xl space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
@@ -54,7 +110,7 @@ function SummaryList() {
           <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
         )}
         <p className="text-sm text-txt-secondary">
-          종료된 회의의 AI 요약을 확인하세요
+          종료된 회의의 AI 요약을 확인하세요 · 총 <span className="text-txt-primary font-semibold">{allCompleted.length}</span>건
         </p>
       </div>
 
@@ -63,38 +119,98 @@ function SummaryList() {
         <GeneratingSummaryCard meeting={generatingMeeting} />
       )}
 
-      <SectionPanel>
-        {completed.length === 0 && !summaryGeneratingId ? (
-          <div className="text-center py-16">
-            <FileText size={28} className="mx-auto text-txt-muted mb-3" />
-            <p className="text-sm text-txt-secondary">아직 완료된 회의가 없습니다.</p>
+      <SectionPanel flush>
+        {/* 탭(기간 필터) + 검색 */}
+        <div className="flex items-center justify-between px-4 lg:px-6 pt-4 border-b border-border-divider">
+          <div className="flex gap-1 flex-wrap">
+            {RANGE_OPTIONS.map((r) => {
+              const active = range === r.id;
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setRange(r.id)}
+                  className={`relative px-3 py-2 text-sm font-medium transition-colors ${
+                    active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
+                  }`}
+                >
+                  {r.label}
+                  <span className="ml-1.5 text-xs text-txt-muted">{rangeCounts[r.id] || 0}</span>
+                  {active && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-purple rounded-full" />
+                  )}
+                </button>
+              );
+            })}
           </div>
-        ) : completed.length === 0 ? (
-          <div className="text-center py-10 text-xs text-txt-muted">
-            이전에 완료된 회의록이 여기에 표시됩니다.
+
+          {/* 검색 */}
+          <div className="flex items-center gap-2 pb-2">
+            {searchOpen ? (
+              <div className="flex items-center gap-1 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle focus-within:border-brand-purple/50">
+                <Search size={14} className="text-txt-muted shrink-0" />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="회의록 검색..."
+                  className="bg-transparent text-sm text-txt-primary placeholder:text-txt-muted outline-none w-32 lg:w-48"
+                />
+                <button
+                  onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
+                  className="text-txt-muted hover:text-txt-primary"
+                  title="검색 닫기"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="p-2 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
+                title="검색"
+              >
+                <Search size={16} />
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {completed.map((m) => (
-              <Link key={m.id} to={`/summaries/${m.id}`}>
-                <Card className="hover:border-border-hover-strong !bg-bg-tertiary">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
-                        {m.title}
-                      </h3>
-                      <p className="text-xs text-txt-secondary">
-                        {formatDate(m.ended_at || m.started_at, 'yyyy.MM.dd HH:mm')} ·
-                        어젠다 {m.agendas?.length || 0}개 · 참여 {m.participants?.length || 0}명
-                      </p>
+        </div>
+
+        {/* 리스트 */}
+        <div className="p-4 lg:p-6">
+          {allCompleted.length === 0 && !summaryGeneratingId ? (
+            <div className="text-center py-16">
+              <FileText size={28} className="mx-auto text-txt-muted mb-3" />
+              <p className="text-sm text-txt-secondary">아직 완료된 회의가 없습니다.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-10 text-xs text-txt-muted">
+              {searchQuery
+                ? `"${searchQuery}" 에 해당하는 회의록이 없습니다.`
+                : '이 기간에 완료된 회의록이 없습니다.'}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((m) => (
+                <Link key={m.id} to={`/summaries/${m.id}`}>
+                  <Card className="hover:border-border-hover-strong !bg-bg-tertiary">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
+                          {m.title}
+                        </h3>
+                        <p className="text-xs text-txt-secondary">
+                          {formatDate(m.ended_at || m.started_at, 'yyyy.MM.dd HH:mm')} ·
+                          어젠다 {m.agendas?.length || 0}개 · 참여 {m.participants?.length || 0}명
+                        </p>
+                      </div>
+                      <Badge variant="outline">완료</Badge>
                     </div>
-                    <Badge variant="outline">완료</Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </SectionPanel>
     </div>
   );
