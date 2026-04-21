@@ -296,8 +296,16 @@ html[data-theme="light"] .summary-generating {
   position: absolute;
   inset: -3px;
   border-radius: 9999px;
-  border: 2px solid rgba(114, 60, 235, 0.35);
+  border: 2px solid transparent;
   animation: loader-ring 1.8s ease-out infinite;
+  /* 심볼의 오렌지→퍼플→딥퍼플 그라디언트를 그대로 이어받는 링 */
+  background: linear-gradient(135deg, #FF902F 0%, #723CEB 55%, #4C11CE 100%) border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0.5;
 }
 .loader-symbol::after {
   animation-delay: 0.7s;
