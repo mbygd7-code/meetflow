@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, Plus, X, Trash2, UserPlus, UserMinus, Check, Search, Edit2,
+  Mail, UserCog, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,6 +24,13 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  // 직원 초대 / 삭제
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteTeamId, setInviteTeamId] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const [memberSearch, setMemberSearch] = useState('');
 
   // 데이터 로드
   async function loadAll() {
@@ -173,6 +181,81 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
     }
   }
 
+  // 직원 초대 (Edge Function)
+  async function handleInviteUser() {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      addToast('올바른 이메일을 입력하세요', 'warning');
+      return;
+    }
+    setInviting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email,
+          name: inviteName.trim() || null,
+          teamId: inviteTeamId || null,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      addToast(`${email} 에게 초대 메일을 발송했습니다`, 'success');
+      setInviteEmail('');
+      setInviteName('');
+      setInviteTeamId('');
+      await loadAll();
+    } catch (err) {
+      console.error('[inviteUser]', err);
+      addToast('초대 실패: ' + (err.message || err), 'error');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  // 직원 삭제 (Edge Function)
+  async function handleDeleteUser(userId, userName) {
+    if (userId === user?.id) {
+      addToast('자기 자신은 삭제할 수 없습니다', 'warning');
+      return;
+    }
+    if (!confirm(`"${userName}" 직원 계정을 삭제하시겠습니까?\n로그인 계정과 모든 팀 연결이 제거됩니다. (되돌릴 수 없음)`)) return;
+    setDeletingUserId(userId);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      addToast(`"${userName}" 직원이 삭제되었습니다`, 'success');
+      await loadAll();
+    } catch (err) {
+      console.error('[deleteUser]', err);
+      addToast('삭제 실패: ' + (err.message || err), 'error');
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
+
+  // "멤버(전체 직원)" 탭 필터
+  const filteredAllMembers = useMemo(() => {
+    if (!memberSearch.trim()) return members;
+    const q = memberSearch.toLowerCase();
+    return members.filter(
+      (m) => m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)
+    );
+  }, [members, memberSearch]);
+
+  // 각 직원이 속한 팀 이름들
+  const userTeamsMap = useMemo(() => {
+    const map = {};
+    assignments.forEach((a) => {
+      if (!map[a.user_id]) map[a.user_id] = [];
+      const team = teams.find((t) => t.id === a.team_id);
+      if (team) map[a.user_id].push(team.name);
+    });
+    return map;
+  }, [assignments, teams]);
+
   if (!open) return null;
 
   const selectedTeam = teams.find((t) => t.id === selectedTeamId);
@@ -207,7 +290,155 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
           </button>
         </div>
 
-        {/* 본문 — 2컬럼 */}
+        {/* 탭 네비 */}
+        <div className="px-6 pt-3 border-b border-border-divider flex gap-1">
+          {[
+            { id: 'teams', label: '팀 관리', icon: Users },
+            { id: 'members', label: '직원 관리', icon: UserCog },
+          ].map((t) => {
+            const active = tab === t.id;
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
+                }`}
+              >
+                <Icon size={14} />
+                {t.label}
+                {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-purple rounded-full" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 본문 — 탭별 분기 */}
+        {tab === 'members' ? (
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* 초대 섹션 */}
+            <div className="p-5 border-b border-border-divider bg-bg-tertiary/30">
+              <div className="flex items-center gap-2 mb-3">
+                <Mail size={14} className="text-brand-purple" />
+                <h3 className="text-sm font-semibold text-txt-primary">새 직원 초대</h3>
+                <span className="text-[10px] text-txt-muted">
+                  이메일로 초대 링크가 발송됩니다
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="employee@company.com"
+                  className="md:col-span-5 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50"
+                />
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder="이름(선택)"
+                  className="md:col-span-3 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50"
+                />
+                <select
+                  value={inviteTeamId}
+                  onChange={(e) => setInviteTeamId(e.target.value)}
+                  className="md:col-span-2 bg-bg-tertiary border border-border-subtle rounded-md px-2 py-2 text-sm text-txt-primary focus:outline-none focus:border-brand-purple/50"
+                >
+                  <option value="">팀 없음</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleInviteUser}
+                  disabled={inviting || !inviteEmail.trim()}
+                  className="md:col-span-2 px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center justify-center gap-1"
+                >
+                  {inviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                  {inviting ? '발송 중' : '초대'}
+                </button>
+              </div>
+            </div>
+
+            {/* 전체 직원 리스트 */}
+            <div className="p-5 flex-1 overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-txt-primary">
+                  전체 직원 <span className="text-txt-muted">({members.length})</span>
+                </h3>
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted" />
+                  <input
+                    type="text"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="이름 또는 이메일 검색"
+                    className="bg-bg-tertiary border border-border-subtle rounded-md pl-8 pr-3 py-1.5 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50 w-64"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto -mx-2 px-2">
+                {loading ? (
+                  <p className="text-center text-xs text-txt-muted py-8">로딩 중...</p>
+                ) : filteredAllMembers.length === 0 ? (
+                  <p className="text-center text-xs text-txt-muted py-8">
+                    {memberSearch ? '검색 결과 없음' : '등록된 직원이 없습니다'}
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredAllMembers.map((m) => {
+                      const isSelf = m.id === user?.id;
+                      const deleting = deletingUserId === m.id;
+                      const userTeams = userTeamsMap[m.id] || [];
+                      return (
+                        <div
+                          key={m.id}
+                          className="group flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-bg-tertiary transition-colors border border-transparent hover:border-border-subtle"
+                        >
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                            style={{ backgroundColor: m.avatar_color || '#723CEB' }}
+                          >
+                            {m.name?.[0] || m.email?.[0]?.toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-txt-primary truncate">
+                                {m.name || m.email.split('@')[0]}
+                              </p>
+                              {m.role === 'admin' && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-brand-purple/15 text-brand-purple rounded">관리자</span>
+                              )}
+                              {isSelf && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-brand-orange/15 text-brand-orange rounded">본인</span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-txt-muted truncate">
+                              {m.email}
+                              {userTeams.length > 0 && (
+                                <span className="ml-2 text-txt-secondary">· {userTeams.join(', ')}</span>
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteUser(m.id, m.name || m.email)}
+                            disabled={isSelf || deleting}
+                            className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                            title={isSelf ? '자기 자신은 삭제할 수 없음' : '직원 삭제'}
+                          >
+                            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="flex-1 flex overflow-hidden">
           {/* 좌측: 팀 목록 */}
           <div className="w-[340px] border-r border-border-divider flex flex-col">
@@ -417,6 +648,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
             )}
           </div>
         </div>
+        )}
 
         {/* 푸터 */}
         <div className="px-6 py-3 border-t border-border-divider bg-bg-primary/30 flex items-center justify-between">
