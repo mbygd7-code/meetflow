@@ -66,8 +66,15 @@ function SummaryList() {
     : null;
 
   // 완료된 회의 전체 (필터 적용 전) — 카운트 합산/빈 상태 판단에 사용
+  // 메시지가 0건인 "빈 회의"는 목록에서 숨김 (회의록 오염 방지)
   const allCompleted = useMemo(
-    () => meetings.filter((m) => m.status === 'completed' && m.id !== summaryGeneratingId),
+    () =>
+      meetings.filter(
+        (m) =>
+          m.status === 'completed' &&
+          m.id !== summaryGeneratingId &&
+          (m.message_count ?? 0) > 0
+      ),
     [meetings, summaryGeneratingId]
   );
 

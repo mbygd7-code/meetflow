@@ -142,6 +142,32 @@ export function useMeeting() {
   // 회의 종료 + AI 요약 생성
   const endMeeting = useCallback(
     async (id, { messages = [], agendas = [] } = {}) => {
+      // ─── 빈 회의 판단 ───
+      // 사람 메시지가 한 개도 없으면 기록할 가치가 없으므로 회의를 자동 삭제하고 종료.
+      // (AI 인사말만 있거나 아무도 말하지 않은 회의 → 회의록 리스트 오염 방지)
+      const humanMessages = (messages || []).filter((m) => !m?.is_ai);
+      const isEmptyMeeting = humanMessages.length === 0;
+
+      if (isEmptyMeeting) {
+        console.log('[endMeeting] 빈 회의 — 자동 삭제합니다:', id);
+        try {
+          if (canUseDB) {
+            // FK 제약 회피: 자식 테이블부터 정리
+            await supabase.from('messages').delete().eq('meeting_id', id);
+            await supabase.from('agendas').delete().eq('meeting_id', id);
+            await supabase.from('meeting_summaries').delete().eq('meeting_id', id);
+            await supabase.from('meetings').delete().eq('id', id);
+          }
+        } catch (err) {
+          console.warn('[endMeeting] 빈 회의 삭제 중 일부 실패:', err.message);
+        }
+        // 로컬 state 에서도 제거
+        useMeetingStore.setState((s) => ({
+          meetings: s.meetings.filter((m) => m.id !== id),
+        }));
+        return null;
+      }
+
       const patch = { status: 'completed', ended_at: new Date().toISOString() };
       if (canUseDB) {
         await supabase.from('meetings').update(patch).eq('id', id);
