@@ -200,7 +200,11 @@ function SummaryList() {
                         </h3>
                         <p className="text-xs text-txt-secondary">
                           {formatDate(m.ended_at || m.started_at, 'yyyy.MM.dd HH:mm')} ·
-                          어젠다 {m.agendas?.length || 0}개 · 참여 {m.participants?.length || 0}명
+                          어젠다 {m.agendas?.length || 0}개 ·
+                          참여 {m.participant_count ?? m.participants?.length ?? 0}명
+                          {typeof m.message_count === 'number' && m.message_count > 0 && (
+                            <> · 메시지 {m.message_count}건</>
+                          )}
                         </p>
                       </div>
                       <Badge variant="outline">완료</Badge>

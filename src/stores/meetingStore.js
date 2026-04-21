@@ -103,17 +103,37 @@ export const useMeetingStore = create((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('meetings')
-        .select('*, agendas(*), creator:users!meetings_created_by_fkey(id, name, avatar_color)')
+        .select(`
+          *,
+          agendas(*),
+          creator:users!meetings_created_by_fkey(id, name, avatar_color),
+          messages(user_id, is_ai)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // creator 정규화 (avatar_color → color)
-      const normalized = (data || []).map((m) => ({
-        ...m,
-        creator: m.creator
-          ? { id: m.creator.id, name: m.creator.name, color: m.creator.avatar_color || '#723CEB' }
-          : null,
-      }));
+      // creator 정규화 + messages 기반 participant 수 계산
+      const normalized = (data || []).map((m) => {
+        const msgs = m.messages || [];
+        // 고유 사람 발신자 id 집합 (AI 제외)
+        const humanIds = new Set(
+          msgs.filter((x) => !x.is_ai && x.user_id).map((x) => x.user_id)
+        );
+        const aiIds = new Set(msgs.filter((x) => x.is_ai && x.user_id).map((x) => x.user_id));
+        return {
+          ...m,
+          creator: m.creator
+            ? { id: m.creator.id, name: m.creator.name, color: m.creator.avatar_color || '#723CEB' }
+            : null,
+          // participants: id만 있는 경량 배열 (이름 없이 count 용도)
+          participants: [...humanIds].map((id) => ({ id })),
+          participant_count: humanIds.size,
+          ai_participant_count: aiIds.size,
+          message_count: msgs.length,
+          // messages 배열은 카드 렌더에 불필요 → 메모리 절약 위해 제거
+          messages: undefined,
+        };
+      });
       set({ meetings: normalized, loading: false });
     } catch (err) {
       console.error('[meetingStore] init error:', err);
