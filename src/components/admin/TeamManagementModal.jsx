@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, Plus, X, Trash2, UserPlus, UserMinus, Check, Search, Edit2,
-  Mail, UserCog, Loader2, AlertCircle, ChevronRight,
+  Mail, UserCog, Loader2, AlertCircle, ChevronRight, KeyRound, Copy,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -53,6 +53,10 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
   const [inviteName, setInviteName] = useState('');
   const [inviteTeamId, setInviteTeamId] = useState('');
   const [inviteSlackId, setInviteSlackId] = useState('');
+  // ── 비밀번호 재설정 링크 ──
+  const [resetLinkLoadingId, setResetLinkLoadingId] = useState(null);
+  const [resetLinkModal, setResetLinkModal] = useState(null); // { email, link }
+  const [linkCopied, setLinkCopied] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [inviting, setInviting] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState(null);
@@ -358,6 +362,45 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
     }
   };
 
+  // ═══════ 비밀번호 재설정 링크 생성 (Edge Function) ═══════
+  // 초대 이메일이 도착하지 않았거나 링크 만료된 사용자를 관리자가 즉시 복구.
+  // 응답의 recoveryLink 를 Slack/카톡 등으로 직접 전달 → 사용자가 클릭 → 비밀번호 설정.
+  const handleGenerateResetLink = async (member) => {
+    setResetLinkLoadingId(member.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('로그인 세션이 없습니다.');
+      }
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { userId: member.id, email: member.email },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (!data?.recoveryLink) throw new Error('링크를 받지 못했습니다');
+      setResetLinkModal({ email: member.email, name: member.name, link: data.recoveryLink });
+      setLinkCopied(false);
+    } catch (err) {
+      console.error('[generateResetLink]', err);
+      addToast('링크 생성 실패: ' + (err.message || err), 'error');
+    } finally {
+      setResetLinkLoadingId(null);
+    }
+  };
+
+  const copyResetLink = async () => {
+    if (!resetLinkModal?.link) return;
+    try {
+      await navigator.clipboard.writeText(resetLinkModal.link);
+      setLinkCopied(true);
+      addToast('링크를 복사했습니다', 'success');
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      addToast('복사 실패 — 링크를 직접 선택해서 복사하세요', 'warning');
+    }
+  };
+
   // ═══════ 직원 삭제 (커스텀 다이얼로그) ═══════
   const handleDeleteUser = async () => {
     if (!confirmDeleteUser) return;
@@ -600,6 +643,17 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             title="직원 정보 편집"
                           >
                             <Edit2 size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => resetLinkLoadingId !== m.id && handleGenerateResetLink(m)}
+                            disabled={resetLinkLoadingId === m.id}
+                            className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-brand-orange hover:bg-brand-orange/10 rounded transition-all disabled:opacity-40"
+                            title="비밀번호 재설정 링크 생성 (초대 메일이 안 닿은 경우)"
+                          >
+                            {resetLinkLoadingId === m.id
+                              ? <Loader2 size={14} className="animate-spin" />
+                              : <KeyRound size={14} />}
                           </button>
 
                           <button
@@ -948,6 +1002,81 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
           onConfirm={handleDeleteUser}
           onCancel={() => setConfirmDeleteUser(null)}
         />
+      )}
+
+      {/* ═══ 비밀번호 재설정 링크 모달 ═══ */}
+      {resetLinkModal && (
+        <div
+          className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setResetLinkModal(null)}
+        >
+          <div
+            className="bg-bg-secondary border border-border-default rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-divider">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-orange/20 to-brand-purple/15 flex items-center justify-center">
+                  <KeyRound size={18} className="text-brand-orange" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-txt-primary">비밀번호 재설정 링크</h3>
+                  <p className="text-xs text-txt-secondary">
+                    {resetLinkModal.name || resetLinkModal.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setResetLinkModal(null)}
+                className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-brand-orange/10 border border-brand-orange/20 rounded-lg p-3 text-xs text-txt-secondary">
+                <strong className="text-brand-orange">⚠ 보안 주의:</strong> 이 링크를 클릭하면 누구나 비밀번호를 재설정할 수 있습니다.
+                반드시 **본인에게 직접**(Slack DM, 카카오톡 등) 전달하세요. 유효기간 약 1시간.
+              </div>
+
+              <div>
+                <label className="block text-xs text-txt-secondary mb-2">링크 (클릭해서 전체 선택)</label>
+                <textarea
+                  readOnly
+                  value={resetLinkModal.link}
+                  onFocus={(e) => e.target.select()}
+                  className="w-full h-24 px-3 py-2 text-xs font-mono bg-bg-primary border border-border-default rounded-md text-txt-primary resize-none break-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={copyResetLink}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-medium text-sm transition-colors ${
+                    linkCopied
+                      ? 'bg-status-success/20 text-status-success border border-status-success/30'
+                      : 'bg-brand-purple text-white hover:bg-brand-purple/90'
+                  }`}
+                >
+                  {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                  {linkCopied ? '복사됨' : '링크 복사'}
+                </button>
+                <button
+                  onClick={() => setResetLinkModal(null)}
+                  className="px-4 py-2.5 rounded-md text-sm text-txt-secondary border border-border-default hover:bg-bg-tertiary transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+
+              <p className="text-[11px] text-txt-muted pt-2 border-t border-border-divider">
+                💡 사용자가 링크 클릭 → 새 비밀번호 입력 → 자동 로그인 → 로그인 페이지로 이동합니다.
+                초대 이메일이 오지 않았거나 만료된 경우에도 이 방법으로 복구할 수 있습니다.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>,
     document.body
