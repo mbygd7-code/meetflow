@@ -368,17 +368,37 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
   const handleGenerateResetLink = async (member) => {
     setResetLinkLoadingId(member.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // 세션 최신화 — 만료된 토큰이면 refresh
+      let { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        throw new Error('로그인 세션이 없습니다.');
+        // 한 번 리프레시 시도
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        session = refreshed?.session;
       }
+      if (!session?.access_token) {
+        throw new Error('로그인 세션이 없습니다. 로그아웃 후 다시 로그인해주세요.');
+      }
+
+      // supabase.functions.invoke 가 자동으로 Authorization/apikey 헤더 세팅 — 커스텀 헤더 X
       const { data, error } = await supabase.functions.invoke('reset-user-password', {
         body: { userId: member.id, email: member.email },
-        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (error) throw error;
+
+      // 에러 발생 시 서버의 실제 메시지를 response.text()로 추출
+      if (error) {
+        let serverMsg = error.message || '서버 에러';
+        try {
+          if (error.context?.text) {
+            const body = await error.context.text();
+            const parsed = JSON.parse(body);
+            serverMsg = parsed?.error || body || serverMsg;
+          }
+        } catch {}
+        throw new Error(serverMsg);
+      }
       if (data?.error) throw new Error(data.error);
       if (!data?.recoveryLink) throw new Error('링크를 받지 못했습니다');
+
       setResetLinkModal({ email: member.email, name: member.name, link: data.recoveryLink });
       setLinkCopied(false);
     } catch (err) {
