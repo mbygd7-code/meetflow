@@ -102,7 +102,31 @@ export function useMeeting() {
         if (agendaErr) console.error('[createMeeting] agenda insert error:', agendaErr);
         insertedAgendas = savedAgendas || agendaRows.map((a, i) => ({ ...a, id: `local-${Date.now()}-${i}` }));
       }
-      // 참석자 정보 포함
+
+      // ═══ meeting_participants INSERT ═══
+      // 회의 생성자(host) + 초대된 사용자(participant) 등록
+      // AI 직원(ai-xxx, milo 등 UUID 형식 아닌 id)은 제외 — 실제 계정 사용자만
+      const isValidUuid = (id) =>
+        typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      const participantRows = [];
+      if (user?.id && isValidUuid(user.id)) {
+        participantRows.push({ meeting_id: meeting.id, user_id: user.id, role: 'host' });
+      }
+      for (const p of meetingParticipants || []) {
+        if (!p?.id || !isValidUuid(p.id)) continue;  // AI 직원 스킵
+        if (p.id === user?.id) continue;  // host와 중복 방지
+        participantRows.push({ meeting_id: meeting.id, user_id: p.id, role: 'participant' });
+      }
+
+      if (participantRows.length > 0) {
+        const { error: partErr } = await supabase
+          .from('meeting_participants')
+          .upsert(participantRows, { onConflict: 'meeting_id,user_id' });
+        if (partErr) console.error('[createMeeting] participants insert error:', partErr);
+      }
+
+      // 로컬 store에 참석자 정보 포함 (UI 렌더용)
       const participants = [
         { id: user?.id, name: user?.name || '사용자', color: '#723CEB' },
         ...(meetingParticipants || []),
