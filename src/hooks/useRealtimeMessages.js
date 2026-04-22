@@ -203,19 +203,31 @@ export function useRealtimeMessages(meetingId) {
 
     channelRef.current = channel;
 
-    // ═══════════ ③ 폴링 백업 (3초 간격) ═══════════
+    // ═══════════ ③ 폴링 백업 ═══════════
+    // Realtime 작동 여부에 따라 주기 자동 조절
+    //   - Realtime OK: 5초 (가벼운 체크)
+    //   - Realtime 실패: 1.5초 (체감 지연 최소화)
+    // setTimeout으로 재귀 호출 → 매번 최신 상태 반영
     let pollCount = 0;
-    pollRef.current = setInterval(async () => {
-      if (cancelled) return;
-      pollCount++;
-      const result = await fetchMessages({ incremental: true });
-      if (result?.addedCount > 0) {
-        console.log(`[useRealtimeMessages] ③ 폴링 #${pollCount} — 신규 ${result.addedCount}건 반영 (Realtime: ${realtimeOkRef.current ? '✓' : '✗'})`);
-      } else if (pollCount % 10 === 0) {
-        // 10회마다 한 번 상태 체크 로그
-        console.log(`[useRealtimeMessages] 폴링 #${pollCount} heartbeat — Realtime: ${realtimeOkRef.current ? '✓' : '✗'}, 메시지 수: ${messagesRef.current.length}`);
-      }
-    }, 3000);
+    let pollTimer = null;
+    async function scheduleNextPoll() {
+      const delay = realtimeOkRef.current ? 5000 : 1500;
+      pollTimer = setTimeout(async () => {
+        if (cancelled) return;
+        pollCount++;
+        const result = await fetchMessages({ incremental: true });
+        if (result?.addedCount > 0) {
+          console.log(`[useRealtimeMessages] ③ 폴링 #${pollCount} — 신규 ${result.addedCount}건 반영 (Realtime: ${realtimeOkRef.current ? '✓' : '✗'}, 간격: ${delay}ms)`);
+        } else if (pollCount % 20 === 0) {
+          console.log(`[useRealtimeMessages] 폴링 #${pollCount} heartbeat — Realtime: ${realtimeOkRef.current ? '✓' : '✗'}, 메시지 수: ${messagesRef.current.length}, 간격: ${delay}ms`);
+        }
+        if (!cancelled) scheduleNextPoll();
+      }, delay);
+    }
+    scheduleNextPoll();
+
+    // 이전 setInterval API 호환용 ref
+    pollRef.current = { clear: () => { if (pollTimer) clearTimeout(pollTimer); } };
 
     // ═══════════ 탭 가시성 / 포커스 ═══════════
     const onVisibility = () => {
@@ -241,7 +253,11 @@ export function useRealtimeMessages(meetingId) {
         channelRef.current = null;
       }
       if (pollRef.current) {
-        clearInterval(pollRef.current);
+        if (typeof pollRef.current.clear === 'function') {
+          pollRef.current.clear();
+        } else if (typeof pollRef.current === 'number') {
+          clearInterval(pollRef.current);
+        }
         pollRef.current = null;
       }
     };
