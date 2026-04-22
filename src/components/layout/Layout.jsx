@@ -1,6 +1,6 @@
 import { useState, createContext, useContext } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield, Loader2 } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield, Loader2, Users } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import Sidebar from './Sidebar';
@@ -11,6 +11,7 @@ const PAGE_TITLES = {
   '/': '마이보드',
   '/meetings': '회의',
   '/tasks': '태스크',
+  '/members': '멤버·태스크',
   '/summaries': '회의록',
   '/settings': '설정',
   '/admin': '관리자 대시보드',
@@ -21,9 +22,10 @@ export const SidebarContext = createContext();
 export const useSidebar = () => useContext(SidebarContext);
 
 // 회의록은 회의 페이지 상단 버튼으로 진입 — 모바일 탭바에서도 제거
+// /tasks → /members 통합
 const BASE_MOBILE_TABS = [
   { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
-  { to: '/tasks', label: '태스크', icon: CheckSquare },
+  { to: '/members', label: '멤버·태스크', icon: Users },
   { to: '/meetings', label: '회의', icon: MessageSquare },
 ];
 

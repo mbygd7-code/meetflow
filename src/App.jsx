@@ -18,6 +18,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 import TokenUsagePage from '@/pages/TokenUsagePage';
+import MembersPage from '@/pages/MembersPage';
 
 function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingRoomPage />} />
         <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/members" element={<MembersPage />} />
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/settings" element={<SettingsPage />} />

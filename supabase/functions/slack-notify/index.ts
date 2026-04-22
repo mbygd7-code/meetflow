@@ -8,6 +8,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SLACK_BOT_TOKEN = Deno.env.get('SLACK_BOT_TOKEN')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// MeetFlow 웹 주소 (Slack → 태스크 딥링크용)
+// 프로덕션 배포 시 Supabase Secrets에 APP_URL 등록 (예: https://meetflow.example.com)
+// 미설정 시 로컬 개발 기본값
+const APP_URL = (Deno.env.get('APP_URL') || 'http://localhost:5180').replace(/\/$/, '');
+
+// 태스크 상세 페이지 딥링크
+function taskUrl(taskId: string, commentId?: string): string {
+  const base = `${APP_URL}/members?member=all&task=${encodeURIComponent(taskId)}`;
+  return commentId ? `${base}&comment=${encodeURIComponent(commentId)}` : base;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,24 +59,27 @@ async function resolveSlackChannel(target: string): Promise<string> {
   }
 }
 
-async function postSlack(channel: string, payload: any) {
+async function postSlack(channel: string, payload: any): Promise<{ ok: boolean; error?: string; channel: string; ts?: string }> {
   const resolved = await resolveSlackChannel(channel);
-  const res = await fetch('https://slack.com/api/chat.postMessage', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
-    },
-    body: JSON.stringify({ channel: resolved, ...payload }),
-  });
-  // 실패 시 로그 (기존에는 fire-and-forget)
   try {
-    const data = await res.clone().json();
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ channel: resolved, ...payload }),
+    });
+    const data = await res.json();
     if (!data?.ok) {
       console.error('[slack-notify] chat.postMessage failed:', data?.error, 'channel:', resolved);
+      return { ok: false, error: data?.error || 'unknown', channel: resolved };
     }
-  } catch {}
-  return res;
+    return { ok: true, channel: resolved, ts: data.ts };
+  } catch (err) {
+    console.error('[slack-notify] exception:', err);
+    return { ok: false, error: String(err), channel: resolved };
+  }
 }
 
 async function uploadFileToSlack(channel: string, file: any, threadTs?: string) {
@@ -120,7 +133,108 @@ serve(async (req) => {
     const { event, payload } = await req.json();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+    // 발송 결과 추적 — 프론트엔드에서 실패 여부 확인 가능
+    let lastResult: { ok: boolean; error?: string; channel?: string } = { ok: true };
+
+    // 태스크 ID로 팀 채널 조회 (task → meeting → team → slack_channel_id)
+    // 수동 태스크(meeting_id 없음)는 null 반환
+    async function resolveTeamChannel(taskId: string): Promise<string | null> {
+      if (!taskId) return null;
+      const { data: task } = await supabase
+        .from('tasks')
+        .select('meeting_id')
+        .eq('id', taskId)
+        .maybeSingle();
+      if (!task?.meeting_id) return null;
+      const { data: meeting } = await supabase
+        .from('meetings')
+        .select('team_id')
+        .eq('id', task.meeting_id)
+        .maybeSingle();
+      if (!meeting?.team_id) return null;
+      const { data: team } = await supabase
+        .from('teams')
+        .select('slack_channel_id')
+        .eq('id', meeting.team_id)
+        .maybeSingle();
+      return team?.slack_channel_id || null;
+    }
+
     switch (event) {
+      case 'slack_test': {
+        // 테스트 DM + Slack 사용자/팀 정보 조회 — ID 유효성 검증용
+        // payload: { slack_id, name? }
+        if (!payload.slack_id) {
+          return new Response(JSON.stringify({ ok: false, error: 'slack_id 필요' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // 1) 봇이 설치된 워크스페이스(팀) 정보
+        let teamInfo: any = null;
+        try {
+          const r = await fetch('https://slack.com/api/auth.test', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
+          });
+          teamInfo = await r.json();
+        } catch {}
+
+        // 2) 입력한 Slack ID에 해당하는 사용자 정보 조회 (U-ID인 경우)
+        let userInfo: any = null;
+        if (/^U/i.test(payload.slack_id)) {
+          try {
+            const r = await fetch(
+              `https://slack.com/api/users.info?user=${encodeURIComponent(payload.slack_id)}`,
+              { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } }
+            );
+            userInfo = await r.json();
+          } catch {}
+        }
+
+        // 3) 테스트 DM 발송
+        lastResult = await postSlack(payload.slack_id, {
+          text: `✅ MeetFlow Slack 연동 테스트${payload.name ? ` (${payload.name}님)` : ''}`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `✅ *MeetFlow 연동 확인*\n이 메시지가 보이면 Slack DM 알림이 정상 동작합니다.\n앞으로 이 ID(\`${payload.slack_id}\`)로 태스크 알림을 받으실 수 있어요.`,
+              },
+            },
+          ],
+        });
+
+        // 4) 진단 정보 포함 응답
+        return new Response(
+          JSON.stringify({
+            ...lastResult,
+            event: 'slack_test',
+            diagnostics: {
+              bot_workspace: teamInfo?.ok ? {
+                team: teamInfo.team,
+                team_id: teamInfo.team_id,
+                bot_user_id: teamInfo.user_id,
+                bot_name: teamInfo.user,
+                url: teamInfo.url,
+              } : { ok: false, error: teamInfo?.error },
+              resolved_user: userInfo?.ok ? {
+                id: userInfo.user.id,
+                real_name: userInfo.user.real_name || userInfo.user.profile?.real_name,
+                display_name: userInfo.user.profile?.display_name || userInfo.user.name,
+                email: userInfo.user.profile?.email,
+                team_id: userInfo.user.team_id,
+                is_bot: userInfo.user.is_bot,
+              } : userInfo ? { ok: false, error: userInfo.error } : null,
+            },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+
       case 'meeting_start': {
         const { data: team } = await supabase
           .from('teams')
@@ -283,8 +397,325 @@ serve(async (req) => {
 
       case 'task_assigned': {
         if (!payload.assignee_slack_id) break;
-        await postSlack(payload.assignee_slack_id, {
-          text: `📌 새 태스크가 배정되었어요: *${payload.title}*\n마감: ${payload.due_date || '미정'}\n우선순위: ${payload.priority}`,
+        const asgLinkUrl = payload.task_id ? taskUrl(payload.task_id) : null;
+        const asgRole = String(payload.recipient_role || '');
+        const asgIsCreator = asgRole.includes('생성자');
+        const asgIsSelfAssignee = asgRole === '담당자(본인)';
+
+        let asgHeadline: string;
+        let asgSectionText: string;
+        if (asgIsSelfAssignee) {
+          asgHeadline = `🆕 내가 내게 배정한 태스크: ${payload.title}`;
+          asgSectionText = `🆕 *본인에게 태스크를 배정했어요.*\n*${payload.title}*\n마감: ${payload.due_date || '미정'} · 우선순위: ${payload.priority || '-'}`;
+        } else if (asgIsCreator) {
+          asgHeadline = `📝 내가 생성한 태스크: ${payload.title}`;
+          asgSectionText = `📝 *새 태스크를 생성했어요.*\n*${payload.title}*\n마감: ${payload.due_date || '미정'} · 우선순위: ${payload.priority || '-'}`;
+        } else {
+          asgHeadline = `📌 새 태스크가 배정되었어요: ${payload.title}`;
+          asgSectionText = `📌 *새 태스크가 배정되었어요*\n*${payload.title}*\n마감: ${payload.due_date || '미정'} · 우선순위: ${payload.priority || '-'}`;
+        }
+
+        const asgBlocks: any[] = [
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: asgSectionText },
+          },
+        ];
+        if (asgLinkUrl) {
+          asgBlocks.push({
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                style: 'primary',
+                text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+                url: asgLinkUrl,
+                action_id: 'open_task',
+              },
+            ],
+          });
+        }
+        lastResult = await postSlack(payload.assignee_slack_id, {
+          text: asgHeadline,
+          blocks: asgBlocks,
+        });
+        break;
+      }
+
+      case 'task_updated': {
+        // 태스크 필드/첨부/서브태스크 변경 요약 → 담당자 DM
+        // payload: { assignee_slack_id, task_title, task_id, editor_name, changes: string[] }
+        if (!payload.assignee_slack_id) break;
+        const changes = Array.isArray(payload.changes) ? payload.changes : [];
+        if (changes.length === 0) break;
+        const changeLines = changes.map((c: string) => `• ${c}`).join('\n');
+        const isSelfUpdate = String(payload.recipient_role || '').includes('본인');
+        const updHeadline = isSelfUpdate
+          ? `🔄 내가 수정한 태스크 기록: ${payload.task_title}`
+          : `🔄 *${payload.editor_name}*님이 태스크를 수정했어요: ${payload.task_title}`;
+        const updSectionText = isSelfUpdate
+          ? `🔄 *본인이 태스크를 수정했어요.*\n_${payload.recipient_role}_`
+          : `🔄 *${payload.editor_name}*님이 담당하신 태스크를 수정했어요.`;
+        const updLinkUrl = payload.task_id ? taskUrl(payload.task_id) : null;
+        const updBlocks: any[] = [
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: updSectionText },
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*태스크:* ${payload.task_title || '-'}\n*변경 내역:*\n${changeLines}`,
+            },
+          },
+        ];
+        if (updLinkUrl) {
+          updBlocks.push({
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+                url: updLinkUrl,
+                action_id: 'open_task',
+              },
+            ],
+          });
+        }
+        updBlocks.push({
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: '🤖 MeetFlow · 멤버 페이지에서 확인하세요' },
+          ],
+        });
+        lastResult = await postSlack(payload.assignee_slack_id, {
+          text: updHeadline,
+          blocks: updBlocks,
+        });
+        break;
+      }
+
+      case 'task_comment': {
+        // 댓글 작성 시 DM 알림 (담당자 + 작성자 본인)
+        // payload: { assignee_slack_id, task_title, task_id, commenter_name, content, recipient_role }
+        if (!payload.assignee_slack_id) break;
+        const preview = String(payload.content || '').slice(0, 300);
+        const role = String(payload.recipient_role || '');
+        const isAssignee = role.includes('담당자');
+        const isAuthor = role.includes('본인');  // 본인(작성자) 또는 담당자(본인)
+        const isPureAuthor = role === '작성자(본인)';  // 담당자 아닌 순수 작성자
+
+        // 헤드라인/본문: 역할별 3가지 톤
+        let headline: string;
+        let sectionText: string;
+        if (isPureAuthor) {
+          headline = `📝 내가 작성한 댓글 기록`;
+          sectionText = `📝 *본인이 작성한 댓글이 기록되었어요.*\n_작성자(본인)_`;
+        } else if (isAssignee && isAuthor) {
+          // 본인 태스크에 본인이 댓글
+          headline = `💬 내 태스크에 내가 댓글을 남겼어요`;
+          sectionText = `💬 *본인 담당 태스크에 본인이 댓글을 남겼어요.*\n_담당자(본인)_`;
+        } else {
+          // 타인이 내 태스크에 댓글
+          headline = `💬 *${payload.commenter_name}*님이 태스크에 댓글을 남겼어요`;
+          sectionText = `💬 *${payload.commenter_name}*님이 담당하신 태스크에 댓글을 남겼어요.`;
+        }
+        // action_id value: comment_id|recipient_slack_id (interaction에서 파싱)
+        const ackValue = `${payload.comment_id || ''}|${payload.assignee_slack_id}`;
+        const linkUrl = payload.task_id ? taskUrl(payload.task_id, payload.comment_id) : null;
+        const blocks: any[] = [
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: sectionText },
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*태스크:* ${payload.task_title || '-'}\n*댓글:*\n>${preview.replace(/\n/g, '\n>')}`,
+            },
+          },
+        ];
+
+        // 액션 버튼: "MeetFlow에서 열기" + (필요 시) "확인했어요"
+        const actionElements: any[] = [];
+        if (linkUrl) {
+          actionElements.push({
+            type: 'button',
+            text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+            url: linkUrl,
+            action_id: 'open_task',
+          });
+        }
+        // 담당자인 경우 확인 버튼 표시 (순수 작성자는 제외)
+        // - '담당자' → 버튼 O (타인이 쓴 댓글 확인)
+        // - '담당자(본인)' → 버튼 O (내가 쓰고 내가 담당자 — 본인 확인 의미)
+        // - '작성자(본인)' → 버튼 X (내 태스크 아님, 기록용)
+        if (!isPureAuthor && payload.comment_id) {
+          actionElements.push({
+            type: 'button',
+            style: 'primary',
+            text: { type: 'plain_text', text: '✅ 확인했어요', emoji: true },
+            action_id: 'ack_comment',
+            value: ackValue,
+          });
+        }
+        if (actionElements.length > 0) {
+          blocks.push({
+            type: 'actions',
+            block_id: `actions_${payload.comment_id || 'tc'}`,
+            elements: actionElements,
+          });
+        }
+        blocks.push({
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: '🤖 MeetFlow · 멤버 페이지에서 확인하세요' },
+          ],
+        });
+        lastResult = await postSlack(payload.assignee_slack_id, {
+          text: headline,
+          blocks,
+        });
+        break;
+      }
+
+      case 'task_assigned_broadcast': {
+        // 팀 채널에 요약 올리기 (Option C)
+        // payload: { task_id, task_title, assignee_slack_id?, assignee_name?, priority, due_date, editor_name }
+        const channel = await resolveTeamChannel(payload.task_id);
+        if (!channel) break;
+        const mention = payload.assignee_slack_id ? `<@${payload.assignee_slack_id}>` : payload.assignee_name || '담당자';
+        const bAsgLinkUrl = payload.task_id ? taskUrl(payload.task_id) : null;
+        const bAsgBlocks: any[] = [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `📌 *태스크 배정*\n*${payload.task_title}*\n담당자: ${mention}\n우선순위: ${payload.priority || '-'} · 마감: ${payload.due_date || '미정'}`,
+            },
+          },
+        ];
+        if (bAsgLinkUrl) {
+          bAsgBlocks.push({
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+                url: bAsgLinkUrl,
+                action_id: 'open_task',
+              },
+            ],
+          });
+        }
+        bAsgBlocks.push({
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: `${payload.editor_name || '관리자'}님이 배정 · MeetFlow` },
+          ],
+        });
+        lastResult = await postSlack(channel, {
+          text: `📌 ${payload.editor_name}님이 ${payload.assignee_name || '담당자'}에게 태스크 배정: ${payload.task_title}`,
+          blocks: bAsgBlocks,
+        });
+        break;
+      }
+
+      case 'task_updated_broadcast': {
+        // 팀 채널에 수정 요약
+        // payload: { task_id, task_title, assignee_slack_id?, assignee_name?, editor_name, changes[] }
+        const channel = await resolveTeamChannel(payload.task_id);
+        if (!channel) break;
+        const changes = Array.isArray(payload.changes) ? payload.changes : [];
+        if (changes.length === 0) break;
+        // 요약 한 줄: 변경 종류 개수
+        const changeSummary = changes.slice(0, 3).map((c: string) => `• ${c}`).join('\n');
+        const more = changes.length > 3 ? `\n_외 ${changes.length - 3}건_` : '';
+        const mention = payload.assignee_slack_id
+          ? `<@${payload.assignee_slack_id}>`
+          : payload.assignee_name || '';
+        const bUpdLinkUrl = payload.task_id ? taskUrl(payload.task_id) : null;
+        const bUpdBlocks: any[] = [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `🔄 *태스크 수정*\n*${payload.task_title}*${mention ? ` · 담당: ${mention}` : ''}\n${changeSummary}${more}`,
+            },
+          },
+        ];
+        if (bUpdLinkUrl) {
+          bUpdBlocks.push({
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+                url: bUpdLinkUrl,
+                action_id: 'open_task',
+              },
+            ],
+          });
+        }
+        bUpdBlocks.push({
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: `${payload.editor_name || '누군가'}님이 수정 · MeetFlow` },
+          ],
+        });
+        lastResult = await postSlack(channel, {
+          text: `🔄 ${payload.editor_name}님이 태스크 수정: ${payload.task_title}`,
+          blocks: bUpdBlocks,
+        });
+        break;
+      }
+
+      case 'task_comment_broadcast': {
+        // 팀 채널에 댓글 요약 (멘션으로 담당자 호출)
+        // payload: { task_id, task_title, assignee_slack_id?, assignee_name?, commenter_name, content, comment_id, attachment_count }
+        const channel = await resolveTeamChannel(payload.task_id);
+        if (!channel) break;
+        const preview = String(payload.content || '').slice(0, 200);
+        const mention = payload.assignee_slack_id
+          ? `<@${payload.assignee_slack_id}>`
+          : payload.assignee_name || '담당자';
+        const attachTag = payload.attachment_count
+          ? `\n📎 첨부 ${payload.attachment_count}개`
+          : '';
+        const bCmtLinkUrl = payload.task_id ? taskUrl(payload.task_id, payload.comment_id) : null;
+        const bCmtBlocks: any[] = [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `💬 *${payload.commenter_name}*님이 ${mention}님 담당 태스크에 댓글\n*${payload.task_title}*\n>${preview.replace(/\n/g, '\n>')}${attachTag}`,
+            },
+          },
+        ];
+        if (bCmtLinkUrl) {
+          bCmtBlocks.push({
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: '📄 MeetFlow에서 열기', emoji: true },
+                url: bCmtLinkUrl,
+                action_id: 'open_task',
+              },
+            ],
+          });
+        }
+        bCmtBlocks.push({
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: '개인 DM도 함께 발송됨 · MeetFlow' },
+          ],
+        });
+        lastResult = await postSlack(channel, {
+          text: `💬 ${payload.commenter_name}님 → ${payload.assignee_name || '담당자'}: ${preview || '(첨부파일)'}`,
+          blocks: bCmtBlocks,
         });
         break;
       }
@@ -327,9 +758,15 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        ok: lastResult.ok,
+        error: lastResult.error,
+        channel: lastResult.channel,
+        event,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (err) {
     console.error('[slack-notify]', err);
     return new Response(JSON.stringify({ error: String(err) }), {

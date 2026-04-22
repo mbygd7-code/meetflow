@@ -1,7 +1,7 @@
 // Supabase Edge Function — 새 직원 초대 (이메일 기반)
 // Deploy: supabase functions deploy invite-user
 //
-// POST body: { email, name?, teamId? }
+// POST body: { email, name?, teamId?, slackUserId? }
 // Returns: { ok, userId, email }
 //
 // 요구 권한: 호출자가 admin 이어야 함 (authorization 헤더 Bearer token 으로 검증)
@@ -57,6 +57,7 @@ serve(async (req) => {
     const email = String(body.email || '').trim().toLowerCase();
     const name = body.name ? String(body.name).trim() : null;
     const teamId = body.teamId || null;
+    const slackUserId = body.slackUserId ? String(body.slackUserId).trim() : null;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json({ error: '올바른 이메일 주소가 아닙니다' }, 400);
@@ -91,6 +92,7 @@ serve(async (req) => {
         email,
         name: name || email.split('@')[0],
         role: 'user',
+        ...(slackUserId ? { slack_user_id: slackUserId } : {}),
       },
       { onConflict: 'id' }
     );

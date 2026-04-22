@@ -20,7 +20,12 @@ export const supabase = createClient(
       flowType: 'implicit',
     },
     realtime: {
+      // postgres_changes 속도 제한 (10 events/sec로 충분)
       params: { eventsPerSecond: 10 },
+      // Broadcast/postgres_changes 공용 하트비트 — 기본 15s, 회의 중 WS 안정성 위해 명시
+      heartbeatIntervalMs: 15000,
+      // 연결 타임아웃 (기본값 10s)
+      timeout: 10000,
     },
   }
 );

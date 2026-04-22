@@ -268,6 +268,26 @@ html.theme-transitioning *::after {
 }
 .fade-in { animation: fade-in 0.2s ease-out; }
 
+/* Slack → MeetFlow 딥링크 유입 시 타겟 댓글 강조 플래시 */
+@keyframes comment-highlight-flash {
+  0% { background: rgba(114, 60, 235, 0.22); box-shadow: 0 0 0 2px rgba(114, 60, 235, 0.4); }
+  40% { background: rgba(114, 60, 235, 0.18); box-shadow: 0 0 0 2px rgba(114, 60, 235, 0.3); }
+  100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+.comment-highlight-flash {
+  animation: comment-highlight-flash 2.4s ease-out;
+  padding: 8px;
+  margin: -8px;
+}
+html[data-theme="light"] .comment-highlight-flash {
+  animation-name: comment-highlight-flash-light;
+}
+@keyframes comment-highlight-flash-light {
+  0% { background: rgba(158, 180, 36, 0.25); box-shadow: 0 0 0 2px rgba(158, 180, 36, 0.5); }
+  40% { background: rgba(158, 180, 36, 0.18); box-shadow: 0 0 0 2px rgba(158, 180, 36, 0.35); }
+  100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+
 /* 회의록 백그라운드 생성 중 깜박임 */
 @keyframes summary-pulse {
   0%, 100% { background: rgba(114, 60, 235, 0.06); }

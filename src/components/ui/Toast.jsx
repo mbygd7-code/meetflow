@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { useToastStore } from '@/stores/toastStore';
 
@@ -18,20 +19,21 @@ export default function Toast() {
 
   if (toasts.length === 0) return null;
 
-  return (
-    <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 max-w-sm">
+  return createPortal(
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm pointer-events-none">
       {toasts.map((toast) => {
         const Icon = ICONS[toast.type] || Info;
         return (
           <div
             key={toast.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-md shadow-lg animate-slide-in ${STYLES[toast.type] || STYLES.info}`}
+            className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-md shadow-lg animate-slide-in pointer-events-auto ${STYLES[toast.type] || STYLES.info}`}
           >
             <Icon size={18} className="shrink-0" />
             <p className="text-sm font-medium text-white flex-1">{toast.message}</p>
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }

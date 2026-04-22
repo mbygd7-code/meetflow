@@ -8,18 +8,20 @@ import {
   LogOut,
   X,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { Loader2 } from 'lucide-react';
 
-// 상단 작업 메뉴 — 주 업무 흐름 (마이보드 / 회의 / 태스크)
+// 상단 작업 메뉴 — 주 업무 흐름 (마이보드 / 회의 / 멤버·태스크)
+// /tasks 는 /members로 통합됨 (멤버 페이지에서 태스크 관리 가능)
 function getPrimaryNavItems() {
   return [
     { to: '/', label: '마이보드', icon: LayoutDashboard, end: true },
     { to: '/meetings', label: '회의', icon: MessageSquare },
-    { to: '/tasks', label: '태스크', icon: CheckSquare },
+    { to: '/members', label: '멤버·태스크', icon: Users },
   ];
 }
 

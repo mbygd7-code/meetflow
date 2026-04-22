@@ -212,17 +212,17 @@ export default function CreateMeetingModal({ open, onClose }) {
     );
   };
 
-  // 선택된 팀에 속한 멤버 ID들
-  const teamMemberIds = useMemo(
-    () => ALL_MEMBERS.filter((m) => selectedTeams.includes(m.team)).map((m) => m.id),
-    [selectedTeams]
-  );
+  // 선택된 팀에 속한 멤버 ID들 (여러 팀 소속이어도 감지, teamIds 사용)
+  const teamMemberIds = useMemo(() => {
+    if (!selectedTeams.length) return [];
+    return ALL_MEMBERS
+      .filter((m) => (m.teamIds || []).some((tid) => selectedTeams.includes(tid)))
+      .map((m) => m.id);
+  }, [selectedTeams, ALL_MEMBERS]);
 
-  // 리스트에서 숨길 멤버 (선택된 팀에 속한 멤버)
-  const visibleMembers = useMemo(
-    () => ALL_MEMBERS.filter((m) => !selectedTeams.includes(m.team)),
-    [selectedTeams]
-  );
+  // 항상 모든 멤버 표시 — 팀에 포함된 멤버는 시각적으로 '팀에 포함됨' 표시
+  // (숨기는 대신 표시하여 UX 혼란 제거 — 선택된 팀원을 명확히 인지 가능)
+  const visibleMembers = ALL_MEMBERS;
 
   // 최종 참석자
   const allParticipants = useMemo(() => {
@@ -508,7 +508,10 @@ export default function CreateMeetingModal({ open, onClose }) {
             {/* 팀 목록 */}
             {TEAMS.map((team) => {
               const selected = selectedTeams.includes(team.id);
-              const memberCount = ALL_MEMBERS.filter((m) => m.team === team.id).length;
+              // 여러 팀 소속도 정확히 카운트 (teamIds 배열 전체 검사)
+              const memberCount = ALL_MEMBERS.filter((m) =>
+                (m.teamIds || []).includes(team.id)
+              ).length;
               return (
                 <button
                   key={team.id}
@@ -535,17 +538,28 @@ export default function CreateMeetingModal({ open, onClose }) {
             )}
 
             {visibleMembers.map((m) => {
-              const selected = selectedMembers.includes(m.id);
-              const teamName = TEAMS.find((t) => t.id === m.team)?.name;
+              const manuallySelected = selectedMembers.includes(m.id);
+              const inSelectedTeam = (m.teamIds || []).some((tid) => selectedTeams.includes(tid));
+              const selected = manuallySelected || inSelectedTeam;
+              // 멤버의 모든 팀 이름 표시 (첫 팀 + 추가 개수)
+              const memberTeamNames = (m.teamIds || [])
+                .map((tid) => TEAMS.find((t) => t.id === tid)?.name)
+                .filter(Boolean);
+              const teamDisplay = memberTeamNames[0];
+
               return (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => toggleMember(m.id)}
+                  onClick={() => !inSelectedTeam && toggleMember(m.id)}
+                  disabled={inSelectedTeam}
+                  title={inSelectedTeam ? `${teamDisplay}에 포함되어 자동 선택됨` : undefined}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border ${
-                    selected
-                      ? 'bg-brand-purple/10 border-brand-purple/20'
-                      : 'hover:bg-bg-secondary border-transparent'
+                    inSelectedTeam
+                      ? 'bg-brand-purple/5 border-brand-purple/15 cursor-not-allowed opacity-80'
+                      : manuallySelected
+                        ? 'bg-brand-purple/10 border-brand-purple/20'
+                        : 'hover:bg-bg-secondary border-transparent'
                   }`}
                 >
                   <div
@@ -554,8 +568,18 @@ export default function CreateMeetingModal({ open, onClose }) {
                   >
                     {m.name.charAt(0)}
                   </div>
-                  <p className="text-sm font-medium text-txt-primary flex-1">{m.name}</p>
-                  <span className="text-[11px] text-txt-muted">{teamName}</span>
+                  <p className="text-sm font-medium text-txt-primary flex-1 truncate">{m.name}</p>
+                  {inSelectedTeam && (
+                    <span className="text-[10px] bg-brand-purple/20 text-brand-purple-deep dark:text-brand-purple px-2 py-0.5 rounded-full font-semibold shrink-0 border border-brand-purple/30">
+                      팀 포함
+                    </span>
+                  )}
+                  {teamDisplay && !inSelectedTeam && (
+                    <span className="text-[11px] text-txt-muted shrink-0">
+                      {teamDisplay}
+                      {memberTeamNames.length > 1 && ` +${memberTeamNames.length - 1}`}
+                    </span>
+                  )}
                   {selected && <Check size={13} className="text-brand-purple shrink-0 ml-1" />}
                 </button>
               );
@@ -600,7 +624,9 @@ export default function CreateMeetingModal({ open, onClose }) {
                     </span>
                   );
                 })}
-              <span className="text-[11px] text-txt-muted ml-1">총 {allParticipants.length + 7}명</span>
+              <span className="text-[11px] text-txt-muted ml-1">
+                AI 7명 외 {allParticipants.length}명
+              </span>
             </div>
           )}
         </div>
