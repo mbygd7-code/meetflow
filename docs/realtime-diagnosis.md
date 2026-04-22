@@ -201,7 +201,36 @@ const channelName = `meeting:${meetingId}`;  // 고정 — Date.now() 같은 동
 
 ---
 
-## 8. 참고 파일
+## 8. Edge Function ES256 JWT 이슈 (2026-04-23 해결)
+
+### 증상
+- Edge Function 호출 시 401 반환
+- 콘솔에 `UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM: Unsupported JWT algorithm ES256`
+- 기존에 잘 되던 `invite-user`, `delete-user`도 조용히 실패
+- 신규 사용자 초대, 비번 재설정 불가 → "회원가입 프로세스 꼬임"
+
+### 원인
+Supabase 프로젝트가 최근 **ES256(비대칭) JWT 서명**으로 전환됨. 하지만 Edge Function **게이트웨이의 기본 JWT 검증기는 HS256만 지원**. 사용자 토큰이 게이트웨이에서 거부되어 함수 본문이 실행되지도 않음.
+
+### 해결
+`--no-verify-jwt` 플래그로 재배포:
+```bash
+npx supabase functions deploy reset-user-password --no-verify-jwt
+npx supabase functions deploy invite-user --no-verify-jwt
+npx supabase functions deploy delete-user --no-verify-jwt
+```
+
+게이트웨이 검증은 꺼도 **함수 내부의 `userClient.auth.getUser()`가 GoTrue로 위임**하므로 ES256 이해함 → 실제 인증은 정상 동작.
+
+### 영향 범위
+사용자 auth를 검증하는 함수만 해당 (이 3개). 나머지는 anon 키 또는 service role 사용.
+
+### 향후 새 Edge Function 추가 시 규칙
+사용자 인증이 필요한 함수는 반드시 `--no-verify-jwt` + 내부 `getUser()` 패턴 사용.
+
+---
+
+## 9. 참고 파일
 
 - 계획 문서: `C:\Users\rimmma\.claude\plans\immutable-strolling-rivest.md`
 - 핵심 훅: `src/hooks/useRealtimeMessages.js`
