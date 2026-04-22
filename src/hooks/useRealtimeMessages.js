@@ -141,12 +141,30 @@ export function useRealtimeMessages(meetingId) {
 
     if (isDemoMode(user?.id, meetingId)) return () => (cancelled = true);
 
+    // WebSocket Realtime 비활성화 옵션 — 폴링만으로 충분한 네트워크 환경 대비
+    // VITE_DISABLE_REALTIME_WS=true 설정 시 postgres_changes/broadcast 구독 스킵
+    // localStorage('disable_realtime_ws', '1')로 런타임 토글도 가능
+    const disableRealtime =
+      import.meta.env.VITE_DISABLE_REALTIME_WS === 'true' ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('disable_realtime_ws') === '1');
+
+    if (disableRealtime) {
+      console.log('[useRealtimeMessages] ⚠ Realtime WS 비활성화됨 — 폴링만 사용');
+      realtimeOkRef.current = false;
+      // 바로 폴링 섹션으로 (Realtime 채널 생성 스킵)
+    }
+
     // ═══════════ Realtime 채널 ═══════════
     // 이전 채널 정리 (StrictMode 이중 실행 대비)
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+
+    // WebSocket 비활성화 시 채널 섹션 전체 스킵
+    if (disableRealtime) {
+      // 폴링 + 가시성/포커스 이벤트만 설정
+    } else {
 
     // 핵심: 채널 이름은 고정 (meetingId만) — 모든 참여자가 같은 이름에 subscribe해야 Broadcast 전달됨
     const channelName = `meeting:${meetingId}`;
@@ -202,6 +220,7 @@ export function useRealtimeMessages(meetingId) {
     });
 
     channelRef.current = channel;
+    }  // ← end of if (!disableRealtime) else { ... }
 
     // ═══════════ ③ 폴링 백업 ═══════════
     // Realtime 작동 여부에 따라 주기 자동 조절
