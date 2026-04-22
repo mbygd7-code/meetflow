@@ -72,6 +72,10 @@ export function useRealtimeMessages(meetingId) {
   // 항상 최신 메시지 배열을 참조 (incremental 폴링/broadcast 시 stale closure 방지)
   const messagesRef = useRef([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  // 재연결 제어
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+  const reconnectingRef = useRef(false);
 
   // 3경로 공통 진입점 — ID로 중복 제거 후 시간순 정렬 유지
   const dedupAdd = useCallback((msg) => {
@@ -168,58 +172,91 @@ export function useRealtimeMessages(meetingId) {
 
     // 핵심: 채널 이름은 고정 (meetingId만) — 모든 참여자가 같은 이름에 subscribe해야 Broadcast 전달됨
     const channelName = `meeting:${meetingId}`;
-    console.log('[useRealtimeMessages] 구독 시작:', channelName);
 
-    const channel = supabase.channel(channelName, {
-      config: {
-        broadcast: { self: false, ack: false },
-      },
-    });
+    // 채널 빌더 — 재연결 시 재사용 가능하도록 함수화
+    function buildChannel() {
+      console.log('[useRealtimeMessages] 구독 시작:', channelName, `(시도 #${reconnectAttemptsRef.current + 1})`);
 
-    // ─── ② postgres_changes 수신 (DB INSERT 감지) ───
-    channel.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `meeting_id=eq.${meetingId}`,
-      },
-      async (payload) => {
-        const msg = payload.new;
-        console.log('[useRealtimeMessages] ② Realtime INSERT 수신:', msg?.id);
-        // Realtime payload에는 JOIN이 없으므로 user 정보 보강
-        if (msg.user_id && !msg.user) {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('id, name, avatar_color')
-            .eq('id', msg.user_id)
-            .maybeSingle();
-          msg.user = userData;
+      const ch = supabase.channel(channelName, {
+        config: {
+          broadcast: { self: false, ack: false },
+        },
+      });
+
+      // ─── ② postgres_changes 수신 (DB INSERT 감지) ───
+      ch.on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `meeting_id=eq.${meetingId}`,
+        },
+        async (payload) => {
+          const msg = payload.new;
+          console.log('[useRealtimeMessages] ② Realtime INSERT 수신:', msg?.id);
+          if (msg.user_id && !msg.user) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('id, name, avatar_color')
+              .eq('id', msg.user_id)
+              .maybeSingle();
+            msg.user = userData;
+          }
+          dedupAdd(msg);
         }
+      );
+
+      // ─── ① Broadcast 수신 (즉시성 최상 경로) ───
+      ch.on('broadcast', { event: 'new_message' }, (payload) => {
+        const msg = payload?.payload;
+        if (!msg?.id) return;
+        console.log('[useRealtimeMessages] ① Broadcast 수신:', msg.id);
         dedupAdd(msg);
-      }
-    );
+      });
 
-    // ─── ① Broadcast 수신 (즉시성 최상 경로) ───
-    channel.on('broadcast', { event: 'new_message' }, (payload) => {
-      const msg = payload?.payload;
-      if (!msg?.id) return;
-      console.log('[useRealtimeMessages] ① Broadcast 수신:', msg.id);
-      dedupAdd(msg);
-    });
+      ch.subscribe((status, err) => {
+        console.log('[useRealtimeMessages] 구독 상태:', status, err ? `에러: ${err.message}` : '');
+        if (status === 'SUBSCRIBED') {
+          realtimeOkRef.current = true;
+          reconnectAttemptsRef.current = 0;  // 성공 시 백오프 리셋
+          reconnectingRef.current = false;
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          realtimeOkRef.current = false;
+          console.warn(`[useRealtimeMessages] Realtime ${status} — 자동 재구독 스케줄 (폴링은 백업 동작 중)`);
+          scheduleReconnect();
+        }
+      });
 
-    channel.subscribe((status, err) => {
-      console.log('[useRealtimeMessages] 구독 상태:', status, err ? `에러: ${err.message}` : '');
-      if (status === 'SUBSCRIBED') {
-        realtimeOkRef.current = true;
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        realtimeOkRef.current = false;
-        console.warn('[useRealtimeMessages] Realtime 비정상 — ③ 폴링이 안전망 역할');
-      }
-    });
+      return ch;
+    }
 
-    channelRef.current = channel;
+    // 지수 백오프 재연결 — 1s → 2s → 4s → 8s → 16s → 30s(상한)
+    function scheduleReconnect() {
+      if (cancelled) return;
+      if (reconnectingRef.current) return;  // 이미 예약됨 → 중복 방지
+      reconnectingRef.current = true;
+
+      const attempt = reconnectAttemptsRef.current;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+      reconnectAttemptsRef.current = attempt + 1;
+
+      console.log(`[useRealtimeMessages] ${delay}ms 후 재구독 시도 (attempt #${reconnectAttemptsRef.current})`);
+
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        // 이전 채널 정리
+        if (channelRef.current) {
+          try { supabase.removeChannel(channelRef.current); } catch {}
+          channelRef.current = null;
+        }
+        reconnectingRef.current = false;
+        channelRef.current = buildChannel();
+      }, delay);
+    }
+
+    channelRef.current = buildChannel();
     }  // ← end of if (!disableRealtime) else { ... }
 
     // ═══════════ ③ 폴링 백업 ═══════════
@@ -267,6 +304,12 @@ export function useRealtimeMessages(meetingId) {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onFocus);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectingRef.current = false;
+      reconnectAttemptsRef.current = 0;
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
