@@ -305,7 +305,7 @@ function SummaryList() {
                 }
                 return (
                   <Link key={m.id} to={`/summaries/${m.id}`}>
-                    <Card className="hover:border-border-hover-strong !bg-bg-tertiary">
+                    <Card className="hover:border-border-hover-strong !bg-bg-tertiary !py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
