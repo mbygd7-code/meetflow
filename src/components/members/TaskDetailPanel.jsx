@@ -817,8 +817,9 @@ function MeetingContextCard({ meetingId, taskTitle }) {
             target="_blank"
             rel="noreferrer"
             className="text-[10px] text-brand-purple hover:underline inline-flex items-center gap-0.5 shrink-0"
+            title="이 회의의 완료된 회의 뷰에서 전체 대화 기록을 확인합니다"
           >
-            회의록 <ExternalLink size={9} />
+            히스토리 <ExternalLink size={9} />
           </a>
         </div>
       </div>
