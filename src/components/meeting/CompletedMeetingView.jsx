@@ -143,12 +143,13 @@ export default function CompletedMeetingView({ meeting }) {
     let cancelled = false;
     (async () => {
       if (!SUPABASE_ENABLED || isDemoMeeting(meeting.id)) return;
+      // meeting_summaries 컬럼은 평탄화됨 (decisions/discussions/deferred/action_items)
       const { data } = await supabase
         .from('meeting_summaries')
-        .select('summary_data')
+        .select('decisions, discussions, deferred, action_items, milo_insights')
         .eq('meeting_id', meeting.id)
         .maybeSingle();
-      if (!cancelled && data?.summary_data) setSummaryData(data.summary_data);
+      if (!cancelled && data) setSummaryData(data);
     })();
     return () => { cancelled = true; };
   }, [meeting.id]);

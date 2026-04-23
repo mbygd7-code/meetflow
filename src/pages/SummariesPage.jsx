@@ -107,7 +107,9 @@ function SummaryList() {
     });
   }, [allCompleted, range, searchQuery]);
 
-  // 완료된 회의들의 summary_data 배치 로드 (점수 계산용)
+  // 완료된 회의들의 요약 배치 로드 (점수 계산용)
+  // 주의: meeting_summaries는 decisions/discussions/deferred/action_items가 top-level 컬럼
+  //       (summary_data 같은 단일 JSONB 컬럼이 아님 — migration 002)
   useEffect(() => {
     if (!SUPABASE_ENABLED || allCompleted.length === 0) return;
     const realIds = allCompleted
@@ -117,14 +119,19 @@ function SummaryList() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('meeting_summaries')
-          .select('meeting_id, summary_data')
+          .select('meeting_id, decisions, discussions, deferred, action_items, milo_insights')
           .in('meeting_id', realIds);
+        if (error) {
+          console.warn('[SummaryList] batch load error:', error);
+          return;
+        }
         if (cancelled) return;
         const map = {};
         for (const row of data || []) {
-          if (row.summary_data) map[row.meeting_id] = row.summary_data;
+          // row 전체를 summary 객체로 저장 → computeMeetingScore가 바로 접근 가능
+          map[row.meeting_id] = row;
         }
         setSummariesMap(map);
       } catch (err) {
