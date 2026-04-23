@@ -124,13 +124,25 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
   if (chips.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-x-4 gap-y-2 text-xs flex-wrap py-1">
-      {chips.map((chip, i) => (
-        <span key={i} className="inline-flex items-center gap-4">
-          {chip}
-          {i < chips.length - 1 && <span className="text-border-default">·</span>}
-        </span>
-      ))}
-    </div>
+    <>
+      {/* 데스크톱(md↑): 구분자 · 포함 한 줄 flex-wrap */}
+      <div className="hidden md:flex items-center gap-x-4 gap-y-2 text-xs flex-wrap py-1">
+        {chips.map((chip, i) => (
+          <span key={i} className="inline-flex items-center gap-4">
+            {chip}
+            {i < chips.length - 1 && <span className="text-border-default">·</span>}
+          </span>
+        ))}
+      </div>
+
+      {/* 모바일(md 미만): 구분자 없이 칩만 flex-wrap, 더 타이트 */}
+      <div className="md:hidden flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] py-1">
+        {chips.map((chip, i) => (
+          <span key={i} className="inline-flex items-center">
+            {chip}
+          </span>
+        ))}
+      </div>
+    </>
   );
 }

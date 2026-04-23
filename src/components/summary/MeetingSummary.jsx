@@ -103,11 +103,11 @@ function formatDurationLabel(minutes) {
 
 function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-purple' }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-tertiary/50">
-      <Icon size={16} className={color} />
-      <div>
-        <p className="text-lg font-bold text-txt-primary leading-none">{value}</p>
-        <p className="text-[10px] text-txt-muted mt-0.5">{label}{sub ? ` · ${sub}` : ''}</p>
+    <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-lg bg-bg-tertiary/50">
+      <Icon size={14} className={`${color} shrink-0 md:w-4 md:h-4`} />
+      <div className="min-w-0">
+        <p className="text-base md:text-lg font-bold text-txt-primary leading-none truncate">{value}</p>
+        <p className="text-[10px] text-txt-muted mt-0.5 truncate">{label}{sub ? ` · ${sub}` : ''}</p>
       </div>
     </div>
   );
@@ -406,11 +406,11 @@ export default function MeetingSummary() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+    <div className="p-3 md:p-6 max-w-5xl mx-auto">
       {/* 상단 네비 */}
       <Link
         to="/summaries"
-        className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4 transition-colors"
+        className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-3 md:mb-4 transition-colors"
       >
         <ArrowLeft size={14} />
         회의록 목록으로
@@ -418,21 +418,38 @@ export default function MeetingSummary() {
 
       {/* 헤더 */}
       <div className="mb-4">
-        <div className="flex items-center gap-3 mb-2 flex-wrap">
+        {/* 데스크톱: 한 줄 레이아웃 */}
+        <div className="hidden md:flex items-center gap-3 mb-2 flex-wrap">
           <h1 className="text-2xl font-semibold text-txt-primary">{meeting.title}</h1>
           <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
             {meeting.status === 'completed' ? '완료' : meeting.status}
           </Badge>
-
-          {/* 우측: 피드백 아이콘 + 회의 점수 — 완료 회의에만 노출 */}
           {meeting.status === 'completed' && (
             <div className="ml-auto flex items-center gap-3">
               <MeetingFeedback meetingId={meeting.id} />
-              {meetingScore && (
-                <MeetingScoreBadge score={meetingScore} />
-              )}
+              {meetingScore && <MeetingScoreBadge score={meetingScore} />}
             </div>
           )}
+        </div>
+
+        {/* 모바일: 제목(줄바꿈 허용) + 하단에 완료 뱃지·평가·피드백 */}
+        <div className="md:hidden">
+          <h1 className="text-xl font-semibold text-txt-primary leading-tight mb-2">
+            {meeting.title}
+          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
+              {meeting.status === 'completed' ? '완료' : meeting.status}
+            </Badge>
+            {meeting.status === 'completed' && (
+              <>
+                <div className="ml-auto flex items-center gap-2">
+                  <MeetingFeedback meetingId={meeting.id} compact />
+                  {meetingScore && <MeetingScoreBadge score={meetingScore} compact />}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -630,7 +647,7 @@ export default function MeetingSummary() {
       </div>
 
       {/* 하단 액션 */}
-      <div className="flex items-center gap-3 pt-3 border-t border-border-divider">
+      <div className="flex items-center gap-2 md:gap-3 pt-3 border-t border-border-divider flex-wrap">
         <button
           onClick={exportMarkdown}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors"
