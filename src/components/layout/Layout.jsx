@@ -6,6 +6,7 @@ import { useMeetingStore } from '@/stores/meetingStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
+import SlackNotifyBanner from '@/components/onboarding/SlackNotifyBanner';
 
 const PAGE_TITLES = {
   '/': '마이보드',
@@ -106,6 +107,8 @@ export default function Layout() {
 
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto content-gradient-bg scrollbar-hide pb-[72px] md:pb-0">
+              {/* 온보딩 배너 — 회의방 내부에선 숨김 (몰입 방해) */}
+              {!hideTopBar && <SlackNotifyBanner />}
               <Outlet context={{ pageTitle }} />
             </div>
           </main>
