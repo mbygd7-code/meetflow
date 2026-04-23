@@ -698,7 +698,8 @@ ${successfulSpecs.map((s) => `- @${s.employeeName}: ${(s.response_text || '').re
                         aiEmployee: 'milo',
                         agendaId: agenda?.id || null,
                         aiType: 'summary',
-                        orchestrationVersion: 'parallel_synthesize_v1',
+                        // DB에서 스트리밍 vs 비스트리밍 구분 가능하도록 다른 태그 사용
+                        orchestrationVersion: 'parallel_synthesize_v1_streaming',
                         miloSynthesisId: synthesisGroupId,
                       });
 

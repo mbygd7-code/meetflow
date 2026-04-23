@@ -113,7 +113,10 @@ export default function AiAnalyticsPanel() {
     return days.map((day) => {
       const dayRows = orchStats.filter((r) => r.day === day);
       const v1 = dayRows.filter((r) => r.orchestration_version === 'parallel_v1').reduce((s, r) => s + r.response_count, 0);
-      const v2 = dayRows.filter((r) => r.orchestration_version === 'parallel_synthesize_v1').reduce((s, r) => s + r.response_count, 0);
+      // 종합: 비스트리밍 + 스트리밍 둘 다 포함 (UI에서는 하나로 묶음)
+      const v2 = dayRows
+        .filter((r) => r.orchestration_version?.startsWith('parallel_synthesize_v1'))
+        .reduce((s, r) => s + r.response_count, 0);
       const v3 = dayRows.filter((r) => r.orchestration_version === 'agent_loop_v1').reduce((s, r) => s + r.response_count, 0);
       return { day, v1, v2, v3, total: v1 + v2 + v3, label: day.slice(5) };
     });
@@ -154,10 +157,18 @@ export default function AiAnalyticsPanel() {
             </div>
             <p className="text-2xl font-bold text-txt-primary">
               {totalResponses > 0
-                ? Math.round(((versionTotals['parallel_synthesize_v1'] || 0) / totalResponses) * 100)
+                ? Math.round((
+                    ((versionTotals['parallel_synthesize_v1'] || 0)
+                      + (versionTotals['parallel_synthesize_v1_streaming'] || 0)
+                    ) / totalResponses) * 100)
                 : 0}%
             </p>
-            <p className="text-[10px] text-txt-muted mt-1">Phase 1 전환 효과</p>
+            <p className="text-[10px] text-txt-muted mt-1">
+              Phase 1 효과
+              {versionTotals['parallel_synthesize_v1_streaming'] > 0
+                ? ` · 스트리밍 ${versionTotals['parallel_synthesize_v1_streaming']}건`
+                : ''}
+            </p>
           </Card>
           <Card className="!p-3.5">
             <div className="flex items-center gap-2 text-[10px] text-txt-muted uppercase tracking-wider mb-1.5">
