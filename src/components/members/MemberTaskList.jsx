@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Users, Calendar, AlertCircle, CheckCircle2, FileText, MessageSquare, ChevronRight, Plus } from 'lucide-react';
+import { Users, Calendar, AlertCircle, CheckCircle2, FileText, MessageSquare, ChevronRight, Plus, ArrowLeft } from 'lucide-react';
 import { format, parseISO, isValid, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -27,7 +27,7 @@ const STATUS_LABEL = {
 /**
  * 우측: 선택된 멤버 요약 + 태스크 리스트
  */
-export default function MemberTaskList({ tasks = [], members = [], selectedMember, commentCounts = {}, onSelectTask, onCreateTask }) {
+export default function MemberTaskList({ tasks = [], members = [], selectedMember, selectedId, commentCounts = {}, onSelectTask, onCreateTask, onBack, mobileShowTasks = false }) {
   const [filter, setFilter] = useState('all'); // all / todo / in_progress / done / overdue
   const [sort, setSort] = useState('due_date'); // due_date / priority / recent
 
@@ -79,12 +79,23 @@ export default function MemberTaskList({ tasks = [], members = [], selectedMembe
 
   const rate = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
+  // 모바일: mobileShowTasks가 true일 때만 표시
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className={`flex-1 flex-col overflow-hidden ${mobileShowTasks ? 'flex' : 'hidden md:flex'}`}>
       {/* 요약 헤더 */}
-      <div className="px-6 py-4 border-b border-border-divider bg-bg-primary/30 shrink-0">
+      <div className="px-4 md:px-6 py-4 border-b border-border-divider bg-bg-primary/30 shrink-0">
         {selectedMember ? (
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-3 md:gap-4">
+            {/* 모바일 뒤로가기 */}
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="md:hidden w-9 h-9 rounded-md flex items-center justify-center hover:bg-bg-tertiary text-txt-secondary shrink-0 -ml-1"
+                aria-label="목록으로"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
               style={{ backgroundColor: selectedMember.avatar_color || '#723CEB' }}

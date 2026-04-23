@@ -1,12 +1,13 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
+import { useMeetingFiles } from '@/hooks/useMeetingFiles';
 import { useMilo } from '@/hooks/useMilo';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -15,122 +16,715 @@ import { useFeedbackStore } from '@/stores/feedbackStore';
 import ChatArea from './ChatArea';
 import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
+import PdfViewer from './PdfViewer';
+import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 
-// ── 자료 패널 (왼쪽 접힘/펼침) ──
-function DocumentPanel({ files = [], expanded, onToggle }) {
-  const [previewFile, setPreviewFile] = useState(null);
+// ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
+function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
+  const [thumbUrl, setThumbUrl] = useState(null);
+  const isPdf = file.type === 'application/pdf';
+  const thumbContainerRef = useRef(null);
+  const [thumbW, setThumbW] = useState(140);
 
-  if (!expanded) {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (file.preview) {
+        if (!cancelled) setThumbUrl(file.preview);
+        return;
+      }
+      // 이미지와 PDF 모두 signed URL 필요 (PDF는 첫 페이지 썸네일용)
+      if ((isImage || isPdf) && file.storage_path && getUrl) {
+        const url = await getUrl(file.storage_path);
+        if (!cancelled) setThumbUrl(url);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [file, isImage, isPdf, getUrl]);
+
+  // PDF 썸네일 — 컨테이너 폭에 맞춰 Page width 조정
+  useEffect(() => {
+    if (!isPdf || !thumbContainerRef.current) return;
+    const el = thumbContainerRef.current;
+    const update = () => setThumbW(Math.max(60, el.clientWidth - 4));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPdf]);
+
+  const sizeLabel = file.size
+    ? file.size >= 1024 * 1024
+      ? `${(file.size / (1024 * 1024)).toFixed(1)}MB`
+      : `${(file.size / 1024).toFixed(0)}KB`
+    : '';
+
+  // 이미지: 섹션 폭에 맞춰 adaptive 크기 (갤러리)
+  if (isImage) {
     return (
       <button
-        onClick={onToggle}
-        className="hidden md:flex flex-col items-center justify-start gap-2 w-10 shrink-0 pt-4 border-r border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors"
-        title="자료 패널 열기"
+        onClick={onClick}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        title={file.name}
       >
-        <FolderOpen size={16} className="text-txt-muted" />
-        {files.length > 0 && (
-          <span className="text-[9px] font-bold text-brand-purple bg-brand-purple/10 rounded-full w-5 h-5 flex items-center justify-center">
-            {files.length}
-          </span>
+        <div className="w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
+          {thumbUrl ? (
+            <img
+              src={thumbUrl}
+              alt={file.name}
+              loading="lazy"
+              className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+            />
+          ) : (
+            <div className="text-txt-muted text-[10px]">로딩…</div>
+          )}
+        </div>
+        {!compact && (
+          <div className="px-2 py-1.5">
+            <p className="text-[11px] font-medium truncate text-txt-primary group-hover:text-brand-purple">
+              {file.name}
+            </p>
+            {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
+          </div>
         )}
-        <ChevronRight size={12} className="text-txt-muted" />
       </button>
     );
   }
 
-  return (
-    <aside className="hidden md:flex flex-col w-[280px] shrink-0 border-r border-border-subtle bg-bg-primary transition-all">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
-        <div className="flex items-center gap-2">
-          <FolderOpen size={14} className="text-brand-purple" />
-          <span className="text-sm font-semibold text-txt-primary">자료</span>
-          <span className="text-[10px] text-txt-muted">{files.length}개</span>
-        </div>
-        <button onClick={onToggle} className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded transition-colors">
-          <ChevronLeft size={14} />
-        </button>
-      </div>
-
-      {/* 프리뷰 (전체 패널 사용) */}
-      {previewFile ? (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border-divider">
-            <span className="text-[11px] font-medium text-txt-primary truncate flex-1 mr-2">{previewFile.name}</span>
-            <button onClick={() => setPreviewFile(null)} className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded transition-colors">
-              <X size={14} />
-            </button>
-          </div>
-          <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-bg-tertiary/30">
-            {previewFile.type?.startsWith('image/') ? (
-              <img src={previewFile.url || previewFile.preview} alt={previewFile.name} className="max-w-full max-h-full rounded-md object-contain shadow-md" />
-            ) : previewFile.type === 'application/pdf' ? (
-              <iframe
-                src={previewFile.url || previewFile.preview}
-                className="w-full h-full rounded-md border border-border-subtle"
-                title={previewFile.name}
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-3 text-txt-muted">
-                <FileText size={48} strokeWidth={1.5} />
-                <p className="text-sm font-medium">{previewFile.name}</p>
-                <p className="text-[11px]">{(previewFile.size / 1024).toFixed(0)}KB · {previewFile.type || '알 수 없는 형식'}</p>
-              </div>
-            )}
-          </div>
-          {/* 파일 목록 (축소) */}
-          <div className="border-t border-border-divider px-3 py-2 space-y-1 max-h-24 overflow-y-auto">
-            {files.map((f) => (
-              <button
-                key={f.id || f.name}
-                onClick={() => setPreviewFile(f)}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded text-left text-[10px] transition-colors ${
-                  previewFile?.name === f.name ? 'bg-brand-purple/10 text-brand-purple font-medium' : 'text-txt-secondary hover:bg-bg-tertiary'
-                }`}
-              >
-                <FileText size={10} className="shrink-0" />
-                <span className="truncate">{f.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-      /* 파일 리스트 (프리뷰 없을 때) */
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-        {files.length === 0 ? (
-          <div className="text-center py-8 text-txt-muted">
-            <FolderOpen size={20} className="mx-auto mb-2 opacity-40" />
-            <p className="text-[11px]">첨부된 자료가 없습니다</p>
-            <p className="text-[10px] mt-1">채팅 입력창의 + 버튼으로 업로드하세요</p>
-          </div>
-        ) : (
-          files.map((f) => (
-            <button
-              key={f.id || f.name}
-              onClick={() => setPreviewFile(previewFile?.name === f.name ? null : f)}
-              className={`w-full flex items-center gap-2.5 p-2 rounded-md text-left transition-colors ${
-                previewFile?.name === f.name
-                  ? 'bg-brand-purple/10 border border-brand-purple/20'
-                  : 'bg-bg-tertiary/50 border border-transparent hover:border-border-subtle'
-              }`}
+  // PDF: 첫 페이지를 썸네일로 렌더 (이미지와 유사한 adaptive 레이아웃, aspect A4)
+  if (isPdf) {
+    return (
+      <button
+        onClick={onClick}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        title={file.name}
+      >
+        <div
+          ref={thumbContainerRef}
+          className="w-full aspect-[1/1.414] bg-white flex items-center justify-center overflow-hidden"
+        >
+          {thumbUrl ? (
+            <PdfDocument
+              file={thumbUrl}
+              loading={<div className="text-txt-muted text-[10px]">로딩…</div>}
+              error={<FileText size={compact ? 20 : 32} className="text-txt-muted" strokeWidth={1.4} />}
+              noData={<FileText size={compact ? 20 : 32} className="text-txt-muted" strokeWidth={1.4} />}
             >
-              <div className="w-8 h-8 rounded bg-bg-tertiary flex items-center justify-center shrink-0">
-                {f.type?.startsWith('image/') ? (
-                  <img src={f.url || f.preview} alt="" className="w-8 h-8 rounded object-cover" />
-                ) : (
-                  <FileText size={14} className="text-txt-muted" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-txt-primary truncate">{f.name}</p>
-                <p className="text-[9px] text-txt-muted">{(f.size / 1024).toFixed(0)}KB</p>
-              </div>
-            </button>
-          ))
+              <PdfPage
+                pageNumber={1}
+                width={thumbW}
+                renderAnnotationLayer={false}
+                renderTextLayer={false}
+                className="group-hover:scale-[1.02] transition-transform duration-300"
+              />
+            </PdfDocument>
+          ) : (
+            <div className="text-txt-muted text-[10px]">로딩…</div>
+          )}
+        </div>
+        {!compact && (
+          <div className="px-2 py-1.5">
+            <p className="text-[11px] font-medium truncate text-txt-primary group-hover:text-brand-purple">
+              {file.name}
+            </p>
+            {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // 일반 문서: compact 모드에서는 작게, 아니면 140px 중앙 정렬 (섹션 폭에 영향 안 받음)
+  const docWidth = compact ? '100%' : 140;
+  return (
+    <button
+      onClick={onClick}
+      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+      style={{ width: docWidth }}
+      title={file.name}
+    >
+      <div className={`w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
+        <FileText size={compact ? 20 : 32} strokeWidth={1.4} />
+        {!compact && (
+          <span className="text-[9px] uppercase tracking-wider">
+            {(file.name?.split('.').pop() || 'FILE').slice(0, 6)}
+          </span>
         )}
       </div>
+      {!compact && (
+        <div className="px-2 py-1.5">
+          <p className="text-[11px] font-medium truncate text-txt-primary group-hover:text-brand-purple">
+            {file.name}
+          </p>
+          {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
+        </div>
       )}
-    </aside>
+    </button>
+  );
+}
+
+// ── 이미지 패널 내부 확대 오버레이 (다른 자료 덮음) ──
+function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
+  const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
+  const [sliderOpen, setSliderOpen] = useState(false);
+  const scrollRef = useRef(null);
+  const panRef = useRef(null);
+  const sliderContainerRef = useRef(null);
+  const isZoomed = zoomScale > 100;
+
+  // 슬라이더 외부 클릭 → 닫기 (이미지/채팅창/입력창 어디든 밖을 클릭하면 닫힘)
+  useEffect(() => {
+    if (!sliderOpen) return;
+    const handleOutside = (e) => {
+      if (sliderContainerRef.current && !sliderContainerRef.current.contains(e.target)) {
+        setSliderOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [sliderOpen]);
+
+  // 드래그 이동 (pan) — 확대 상태에서만 활성화
+  const onPanStart = (e) => {
+    if (!isZoomed) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    // 슬라이더/버튼 영역 클릭은 무시
+    if (e.target.closest('button, input, a')) return;
+
+    panRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origScrollLeft: el.scrollLeft,
+      origScrollTop: el.scrollTop,
+    };
+    const onMove = (ev) => {
+      if (!panRef.current || !el) return;
+      el.scrollLeft = panRef.current.origScrollLeft - (ev.clientX - panRef.current.startX);
+      el.scrollTop = panRef.current.origScrollTop - (ev.clientY - panRef.current.startY);
+    };
+    const onUp = () => {
+      panRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  };
+  return (
+    <div className="absolute inset-0 z-20 bg-bg-primary flex flex-col">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-divider shrink-0">
+        <p className="text-xs font-medium text-txt-primary truncate flex-1">{file.name}</p>
+        <div className="flex items-center gap-1 shrink-0">
+          {url && (
+            <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
+               className="text-[11px] text-brand-purple hover:underline px-1.5">
+              다운로드
+            </a>
+          )}
+          <button onClick={onClose} className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded" aria-label="닫기">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 relative bg-bg-tertiary/30 overflow-hidden">
+        {/* 이미지 스크롤 컨테이너 — 확대 시 드래그/스크롤로 전체 접근 가능
+            safe center: 내용 오버플로우 시 start로 fallback하여 왼쪽/위 영역도 스크롤 도달 */}
+        <div
+          ref={scrollRef}
+          onMouseDown={onPanStart}
+          className={`absolute inset-0 overflow-auto flex p-3 ${
+            isZoomed ? 'cursor-grab active:cursor-grabbing' : ''
+          }`}
+          style={{
+            justifyContent: 'safe center',
+            alignItems: 'safe center',
+          }}
+        >
+          {url ? (
+            <img
+              src={url}
+              alt={file.name}
+              onLoad={(e) => onImageLoad?.(e.target.naturalWidth, e.target.naturalHeight)}
+              draggable={false}
+              style={
+                zoomScale === 100
+                  ? undefined
+                  : {
+                      width: `${zoomScale}%`,
+                      height: 'auto',
+                      maxWidth: 'none',
+                      maxHeight: 'none',
+                      flexShrink: 0, // 컨테이너보다 큰 이미지가 축소되지 않도록
+                    }
+              }
+              className={`select-none pointer-events-none ${
+                zoomScale === 100
+                  ? 'max-w-full max-h-full object-contain rounded-md shadow-md'
+                  : 'rounded-md shadow-md'
+              }`}
+            />
+          ) : (
+            <p className="text-xs text-txt-muted">로딩 중...</p>
+          )}
+        </div>
+
+        {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
+        <div
+          ref={sliderContainerRef}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2"
+        >
+          {sliderOpen && (
+            <div className="flex flex-col items-center gap-2 px-2 py-3 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.25)]">
+              <button
+                onClick={() => setZoomScale((s) => Math.min(300, s + 20))}
+                className="p-1 rounded-md text-[#555] hover:text-brand-purple hover:bg-black/5 transition-colors"
+                aria-label="확대"
+              >
+                <ZoomIn size={14} />
+              </button>
+              <span className="text-[10px] font-semibold text-[#222] min-w-[30px] text-center tabular-nums">
+                {zoomScale}%
+              </span>
+              <input
+                type="range"
+                min={50}
+                max={300}
+                step={5}
+                value={zoomScale}
+                onChange={(e) => setZoomScale(parseInt(e.target.value, 10))}
+                orient="vertical"
+                aria-label="이미지 크기 조절"
+                style={{
+                  writingMode: 'bt-lr',
+                  WebkitAppearance: 'slider-vertical',
+                  width: '6px',
+                  height: '120px',
+                }}
+                className="cursor-pointer accent-brand-purple"
+              />
+              <button
+                onClick={() => setZoomScale((s) => Math.max(50, s - 20))}
+                className="p-1 rounded-md text-[#555] hover:text-brand-purple hover:bg-black/5 transition-colors"
+                aria-label="축소"
+              >
+                <ZoomOut size={14} />
+              </button>
+              <button
+                onClick={() => setZoomScale(100)}
+                className="text-[10px] text-brand-purple hover:underline font-medium"
+                title="원래 크기"
+              >
+                리셋
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setSliderOpen((v) => !v)}
+            className={`p-2.5 rounded-full transition-all ring-2 ${
+              sliderOpen
+                ? 'bg-brand-purple text-white ring-white/60 shadow-[0_4px_16px_rgba(114,60,235,0.5)] scale-110'
+                : 'bg-white text-[#333] ring-black/15 shadow-[0_4px_12px_rgba(0,0,0,0.35)] hover:scale-110 hover:ring-black/25'
+            }`}
+            aria-label="이미지 크기 조절"
+            title="이미지 크기 조절"
+          >
+            <Search size={18} strokeWidth={2.5} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 문서 플로팅 윈도우 (드래그/리사이즈 가능, 배경 오버레이 없음) ──
+function FloatingDocumentWindow({ file, url, onClose }) {
+  const [pos, setPos] = useState({ x: 120, y: 80 });
+  const [size, setSize] = useState({ w: 720, h: 540 });
+  const [minimized, setMinimized] = useState(false);
+  const [prevState, setPrevState] = useState(null); // 최소화 전 pos/size 기억
+  const windowRef = useRef(null);
+  const dragRef = useRef(null);   // { startX, startY, origX, origY }
+  const resizeRef = useRef(null); // { startX, startY, origW, origH }
+
+  // 화면 중앙으로 초기 위치
+  useEffect(() => {
+    const w = Math.min(720, window.innerWidth - 80);
+    const h = Math.min(540, window.innerHeight - 120);
+    setSize({ w, h });
+    setPos({ x: Math.max(40, (window.innerWidth - w) / 2), y: Math.max(40, (window.innerHeight - h) / 3) });
+  }, []);
+
+  // 외부 클릭(창 밖 = 채팅창/배경 등) 시 최소화
+  useEffect(() => {
+    if (minimized) return;
+    const handleOutside = (e) => {
+      // 드래그/리사이즈 중에는 외부 클릭으로 간주하지 않음
+      if (dragRef.current || resizeRef.current) return;
+      if (windowRef.current && !windowRef.current.contains(e.target)) {
+        // 현재 pos/size 저장 후 카드를 그대로 작은 크기로 축소
+        setPrevState({ pos, size });
+        setSize({ w: 300, h: 240 });
+        setPos({ x: 60, y: 80 });
+        setMinimized(true);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [minimized, pos, size]);
+
+  // 최소화 복원 — 카드 클릭 시 원래 크기로
+  const handleRestore = () => {
+    if (!minimized) return;
+    if (prevState) {
+      setPos(prevState.pos);
+      setSize(prevState.size);
+      setPrevState(null);
+    }
+    setMinimized(false);
+  };
+
+  // 드래그 이동
+  const onDragStart = (e) => {
+    e.preventDefault();
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      origX: pos.x, origY: pos.y,
+    };
+    const onMove = (ev) => {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      setPos({
+        x: Math.max(0, Math.min(window.innerWidth - 200, dragRef.current.origX + dx)),
+        y: Math.max(0, Math.min(window.innerHeight - 80, dragRef.current.origY + dy)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  // 리사이즈 — direction에 따라 width/height 중 해당 축만 조절
+  // 'se': 우하단 코너(가로+세로), 'e': 우측 엣지(가로만), 's': 하단 엣지(세로만)
+  const onResizeStart = (e, direction = 'se') => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      origW: size.w, origH: size.h,
+      direction,
+    };
+    const onMove = (ev) => {
+      if (!resizeRef.current) return;
+      const { startX, startY, origW, origH, direction: dir } = resizeRef.current;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      setSize({
+        w: dir === 's' ? origW : Math.max(300, origW + dx),
+        h: dir === 'e' ? origH : Math.max(200, origH + dy),
+      });
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type?.startsWith('image/');
+
+  return createPortal(
+    <div
+      ref={windowRef}
+      onClick={minimized ? handleRestore : undefined}
+      className={`fixed z-[9999] bg-bg-secondary rounded-xl shadow-2xl border border-border-subtle overflow-hidden flex flex-col pointer-events-auto transition-all duration-200 ${
+        minimized ? 'cursor-zoom-in hover:ring-2 hover:ring-brand-purple/50' : ''
+      }`}
+      style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
+    >
+      {/* 헤더 — 드래그 핸들 (최소화 시 드래그 비활성화 → 카드 클릭으로 복원) */}
+      <div
+        onMouseDown={minimized ? undefined : onDragStart}
+        className={`flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-bg-primary select-none shrink-0 ${
+          minimized ? 'cursor-zoom-in' : 'cursor-grab active:cursor-grabbing'
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <GripVertical size={14} className="text-txt-muted shrink-0" />
+          <p className="text-xs font-medium text-txt-primary truncate">{file.name}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          {url && !minimized && (
+            <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
+               className="text-[11px] text-brand-purple hover:underline px-1.5">
+              다운로드
+            </a>
+          )}
+          {!minimized && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setPrevState({ pos, size }); setSize({ w: 300, h: 240 }); setPos({ x: 60, y: 80 }); setMinimized(true); }}
+              className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+              aria-label="최소화" title="최소화"
+            >
+              <Minus size={14} />
+            </button>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+            className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="닫기">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      {/* 바디 — PDF는 react-pdf로 렌더, 이미지/기타는 기존 방식. min-h-0으로 flex overflow 허용 */}
+      <div className={`flex-1 min-h-0 ${isPdf ? '' : 'overflow-auto bg-bg-primary/50 flex items-center justify-center p-2'}`}>
+        {isPdf && url ? (
+          <PdfViewer url={url} />
+        ) : isImage && url ? (
+          <img src={url} alt={file.name} className="max-w-full max-h-full object-contain" />
+        ) : url ? (
+          <div className="flex flex-col items-center gap-3 text-txt-muted py-8">
+            <FileText size={48} strokeWidth={1.3} />
+            <p className="text-xs font-medium text-txt-primary break-all text-center">{file.name}</p>
+            <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
+               className="text-xs text-brand-purple hover:underline">
+              파일 다운로드
+            </a>
+          </div>
+        ) : (
+          <p className="text-xs text-txt-muted">로딩 중...</p>
+        )}
+      </div>
+      {/* 리사이즈 핸들 — 우측 엣지(가로) / 하단 엣지(세로) / 우하단 코너(대각선)
+          minimized 상태에선 렌더 생략 */}
+      {!minimized && (
+        <>
+          {/* 우측 엣지 — 가로만 조절 */}
+          <div
+            onMouseDown={(e) => onResizeStart(e, 'e')}
+            className="absolute top-0 right-0 bottom-4 w-1.5 cursor-ew-resize hover:bg-brand-purple/30 transition-colors"
+            title="가로 크기 조절"
+          />
+          {/* 하단 엣지 — 세로만 조절 */}
+          <div
+            onMouseDown={(e) => onResizeStart(e, 's')}
+            className="absolute left-0 bottom-0 right-4 h-1.5 cursor-ns-resize hover:bg-brand-purple/30 transition-colors"
+            title="세로 크기 조절"
+          />
+          {/* 우하단 코너 — 가로+세로 동시 조절 */}
+          <div
+            onMouseDown={(e) => onResizeStart(e, 'se')}
+            className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize flex items-end justify-end pr-0.5 pb-0.5 z-10"
+            title="크기 조절"
+          >
+            <div className="w-2 h-2 border-r-2 border-b-2 border-txt-muted/60" />
+          </div>
+        </>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+// ── 자료 패널 (갤러리 + 리사이저) ──
+// 2단 구조: [자료 섹션(가변 폭, 리사이저로 조절)] + [채팅 flex-1]
+// - 이미지 썸네일: 패널 폭에 따라 auto-fit 그리드 (갤러리)
+// - 문서 썸네일: 고정 140px 중앙 정렬
+// - 이미지 클릭: 패널 내부 오버레이로 확대 (다른 자료 덮음)
+// - 문서 클릭: 드래그/리사이즈 가능한 플로팅 윈도우 (body portal, 오버레이 없음)
+function DocumentPanel({ files = [], getUrl }) {
+  // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
+  const [width, setWidth] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem('meetflow_doc_panel_width') || '420', 10);
+      return Number.isFinite(v) ? Math.max(80, v) : 420;
+    } catch { return 420; }
+  });
+  const [zoomFile, setZoomFile] = useState(null);     // 패널 내 확대할 이미지 파일
+  const [zoomUrl, setZoomUrl] = useState(null);
+  const [docFile, setDocFile] = useState(null);       // 플로팅 윈도우에 띄울 문서
+  const [docUrl, setDocUrl] = useState(null);
+  const [widthBeforeZoom, setWidthBeforeZoom] = useState(null); // 확대 전 원래 폭 기억
+  const resizerRef = useRef(null);
+
+  // 폭 변경 시 localStorage 저장 — 단, 이미지 확대 중에는 저장하지 않음 (원래 폭 유지)
+  useEffect(() => {
+    if (zoomFile) return;
+    try { localStorage.setItem('meetflow_doc_panel_width', String(width)); } catch {}
+  }, [width, zoomFile]);
+
+  // 이미지/문서 구분
+  const isImageFile = (f) => !!f?.type?.startsWith('image/');
+
+  // 이미지 확대 시 패널을 최대 폭까지 확장할 목표값 (이미지 실제 크기 기반 가능)
+  const getMaxPanelWidth = () => Math.min(window.innerWidth - 340, 1400);
+
+  // 파일 클릭 핸들러
+  const handleFileClick = async (file) => {
+    const url = file.storage_path && getUrl
+      ? await getUrl(file.storage_path)
+      : (file.preview || file.url || null);
+
+    if (isImageFile(file)) {
+      // 이미지 확대 시: 현재 폭 기억 + 패널을 최대 폭으로 자동 확장
+      if (widthBeforeZoom === null) setWidthBeforeZoom(width);
+      setWidth((prev) => Math.max(prev, getMaxPanelWidth()));
+      setZoomFile(file);
+      setZoomUrl(url);
+    } else {
+      setDocFile(file);
+      setDocUrl(url);
+    }
+  };
+
+  // 이미지 확대 닫기 → 원래 폭으로 복귀
+  const closeZoom = () => {
+    setZoomFile(null);
+    setZoomUrl(null);
+    if (widthBeforeZoom !== null) {
+      setWidth(widthBeforeZoom);
+      setWidthBeforeZoom(null);
+    }
+  };
+
+  // 이미지 로드 후: 실제 이미지 너비에 맞게 패널 폭을 더 정교하게 조정
+  const handleImageLoaded = (naturalWidth) => {
+    if (!naturalWidth) return;
+    const ideal = Math.min(naturalWidth + 48, getMaxPanelWidth()); // 48px = 패딩 여유
+    setWidth((prev) => (ideal > prev ? ideal : prev));
+  };
+
+  // 파일 리스트에서 현재 열린 파일이 사라지면 닫기
+  useEffect(() => {
+    if (zoomFile && !files.some((f) => f.id === zoomFile.id)) {
+      closeZoom();
+    }
+    if (docFile && !files.some((f) => f.id === docFile.id)) {
+      setDocFile(null); setDocUrl(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, zoomFile, docFile]);
+
+  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-340px (채팅창 최소 340px 보장)
+  const onResizerDown = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      const next = Math.max(80, Math.min(window.innerWidth - 340, startW + dx));
+      setWidth(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  // 항상 1열 유지 — 패널 폭이 커질수록 썸네일도 같이 커짐 (세로 리스트)
+  const isCompact = width < 180; // 매우 좁을 때: 헤더/파일명 숨김
+
+  // 문서/플로팅 윈도우용 파일 URL 로딩
+  return (
+    <>
+      <aside
+        className="hidden md:flex flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative"
+        style={{ width }}
+      >
+        {/* 헤더 — 컴팩트 모드에서는 심플하게 */}
+        <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
+          <FolderOpen size={isCompact ? 14 : 14} className="text-brand-purple shrink-0" />
+          {!isCompact && (
+            <>
+              <span className="text-sm font-semibold text-txt-primary">자료</span>
+              <span className="text-[10px] text-txt-muted">{files.length}개</span>
+            </>
+          )}
+          {isCompact && files.length > 0 && (
+            <span className="text-[9px] font-bold text-brand-purple bg-brand-purple/10 rounded-full w-5 h-5 flex items-center justify-center">
+              {files.length}
+            </span>
+          )}
+        </div>
+
+        {/* 파일 갤러리 — auto-fit 그리드 */}
+        <div className={`flex-1 overflow-y-auto ${isCompact ? 'p-1.5' : 'p-3'}`}>
+          {files.length === 0 ? (
+            <div className="text-center py-8 text-txt-muted">
+              <FolderOpen size={20} className="mx-auto mb-2 opacity-40" />
+              {!isCompact && (
+                <>
+                  <p className="text-[11px]">첨부된 자료가 없습니다</p>
+                  <p className="text-[10px] mt-1">채팅 입력창의 + 버튼으로 업로드하세요</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className={`flex flex-col ${isCompact ? 'gap-1.5' : 'gap-2.5'}`}>
+              {files.map((f) => (
+                <FileThumbCard
+                  key={f.id || f.name}
+                  file={f}
+                  getUrl={getUrl}
+                  onClick={() => handleFileClick(f)}
+                  isImage={isImageFile(f)}
+                  compact={isCompact}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 이미지 확대 오버레이 — 패널 내부를 덮음. 패널은 자동으로 최대 폭까지 확장 */}
+        {zoomFile && (
+          <ImageZoomOverlay
+            file={zoomFile}
+            url={zoomUrl}
+            onClose={closeZoom}
+            onImageLoad={handleImageLoaded}
+          />
+        )}
+
+        {/* 리사이저 — 우측 세로 라인 드래그 */}
+        <div
+          ref={resizerRef}
+          onMouseDown={onResizerDown}
+          className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/resize"
+          title="드래그하여 크기 조절"
+        >
+          <div className="absolute top-0 right-0 w-px h-full bg-border-subtle group-hover/resize:bg-brand-purple/40 transition-colors" />
+        </div>
+      </aside>
+
+      {/* 문서 플로팅 윈도우 — 배경 오버레이 없음, 드래그/리사이즈 가능 */}
+      {docFile && (
+        <FloatingDocumentWindow
+          file={docFile}
+          url={docUrl}
+          onClose={() => { setDocFile(null); setDocUrl(null); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -160,8 +754,9 @@ export default function MeetingRoom() {
   useEffect(() => {
     try { localStorage.setItem('meetflow_auto_intervene', String(aiAutoIntervene)); } catch {}
   }, [aiAutoIntervene]);
-  const [docPanelExpanded, setDocPanelExpanded] = useState(false);
-  const [meetingFiles, setMeetingFiles] = useState([]); // 회의 자료
+  // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
+  // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
+  const { files: meetingFiles, uploadFile: uploadMeetingFile, getDownloadUrl: getMeetingFileUrl } = useMeetingFiles(id);
   const { messages, sendMessage } = useRealtimeMessages(id);
 
   // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
@@ -323,12 +918,14 @@ export default function MeetingRoom() {
     }
   }, [meeting, messages, sendMessage]);
 
-  // 파일 업로드 핸들러 (ChatArea에서 호출)
-  const handleFileUpload = useCallback((file) => {
-    const preview = file.type?.startsWith('image/') ? URL.createObjectURL(file) : null;
-    setMeetingFiles((prev) => [...prev, { id: crypto.randomUUID(), name: file.name, size: file.size, type: file.type, preview, file }]);
-    if (!docPanelExpanded) setDocPanelExpanded(true);
-  }, [docPanelExpanded]);
+  // 파일 업로드 핸들러 (ChatArea에서 호출) — Storage+DB에 영구 저장
+  const handleFileUpload = useCallback(async (file) => {
+    try {
+      await uploadMeetingFile(file);
+    } catch (err) {
+      console.error('[handleFileUpload] 실패:', err);
+    }
+  }, [uploadMeetingFile]);
 
   if (!meeting) {
     return (
@@ -503,8 +1100,7 @@ export default function MeetingRoom() {
         {/* 자료 패널 (데스크톱) */}
         <DocumentPanel
           files={meetingFiles}
-          expanded={docPanelExpanded}
-          onToggle={() => setDocPanelExpanded((v) => !v)}
+          getUrl={getMeetingFileUrl}
         />
 
         {/* 채팅 영역 */}

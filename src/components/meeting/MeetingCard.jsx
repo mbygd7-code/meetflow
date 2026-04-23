@@ -195,8 +195,8 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
           {meeting.participants?.slice(0, 4).map((p) => (
             <Avatar
               key={p.id}
-              name={p.name}
-              color={p.color}
+              name={p.name || (p.id ? `참가자 ${p.id.slice(0, 4)}` : '참가자')}
+              color={p.color || '#723CEB'}
               size="sm"
               className="ring-2 ring-bg-secondary"
             />

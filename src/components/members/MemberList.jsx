@@ -7,7 +7,7 @@ import { Search, Users, ChevronRight, X } from 'lucide-react';
  * - 검색
  * - 각 멤버: 아바타, 이름, 역할, 태스크 통계, 완수율 바
  */
-export default function MemberList({ members = [], tasks = [], selectedId, onSelect }) {
+export default function MemberList({ members = [], tasks = [], selectedId, onSelect, mobileShowTasks = false }) {
   const [query, setQuery] = useState('');
 
   // 멤버별 태스크 통계
@@ -48,7 +48,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
   }, [members, query]);
 
   return (
-    <div className="w-full lg:w-[300px] shrink-0 border-r border-border-subtle bg-[var(--panel-bg)] flex flex-col overflow-hidden">
+    <div className={`w-full md:w-[240px] lg:w-[300px] shrink-0 border-r border-border-subtle bg-[var(--panel-bg)] flex-col overflow-hidden ${mobileShowTasks ? 'hidden md:flex' : 'flex'}`}>
       {/* 검색 */}
       <div className="p-3 border-b border-border-divider">
         <div className="relative">

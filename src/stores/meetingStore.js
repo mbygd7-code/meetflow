@@ -107,31 +107,52 @@ export const useMeetingStore = create((set, get) => ({
           *,
           agendas(*),
           creator:users!meetings_created_by_fkey(id, name, avatar_color),
+          meeting_participants(
+            user_id,
+            role,
+            users:user_id(id, name, avatar_color)
+          ),
           messages(user_id, is_ai)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // creator 정규화 + messages 기반 participant 수 계산
+      // creator 정규화 + meeting_participants 기반 참가자 이름/컬러 포함
       const normalized = (data || []).map((m) => {
         const msgs = m.messages || [];
-        // 고유 사람 발신자 id 집합 (AI 제외)
+        // 고유 사람 발신자 id 집합 (AI 제외) — legacy fallback용
         const humanIds = new Set(
           msgs.filter((x) => !x.is_ai && x.user_id).map((x) => x.user_id)
         );
         const aiIds = new Set(msgs.filter((x) => x.is_ai && x.user_id).map((x) => x.user_id));
+
+        // meeting_participants JOIN 결과에서 실제 사용자 정보 추출
+        const dbParticipants = (m.meeting_participants || [])
+          .filter((p) => p.users)
+          .map((p) => ({
+            id: p.users.id,
+            name: p.users.name,
+            color: p.users.avatar_color || '#723CEB',
+            role: p.role,
+          }));
+
+        // DB에 participants가 없으면 messages 기반 (legacy 회의)
+        const participants = dbParticipants.length > 0
+          ? dbParticipants
+          : [...humanIds].map((id) => ({ id, name: null, color: '#723CEB' }));
+
         return {
           ...m,
           creator: m.creator
             ? { id: m.creator.id, name: m.creator.name, color: m.creator.avatar_color || '#723CEB' }
             : null,
-          // participants: id만 있는 경량 배열 (이름 없이 count 용도)
-          participants: [...humanIds].map((id) => ({ id })),
-          participant_count: humanIds.size,
+          participants,
+          participant_count: Math.max(dbParticipants.length, humanIds.size),
           ai_participant_count: aiIds.size,
           message_count: msgs.length,
-          // messages 배열은 카드 렌더에 불필요 → 메모리 절약 위해 제거
+          // 원본 embed 배열은 카드 렌더에 불필요 → 메모리 절약 위해 제거
           messages: undefined,
+          meeting_participants: undefined,
         };
       });
       set({ meetings: normalized, loading: false });

@@ -111,6 +111,8 @@ export default function MembersPage() {
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
+  // 모바일 네비게이션: false=멤버 리스트, true=태스크 리스트 (md 이하에서만 적용)
+  const [mobileShowTasks, setMobileShowTasks] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [createTaskDefaults, setCreateTaskDefaults] = useState(null);
@@ -131,8 +133,13 @@ export default function MembersPage() {
   // URL param 동기화 (공유 가능 링크)
   useEffect(() => {
     const member = searchParams.get('member');
-    if (member === 'all') setSelectedMemberId(null);
-    else if (member) setSelectedMemberId(member);
+    if (member === 'all') {
+      setSelectedMemberId(null);
+      setMobileShowTasks(true); // URL로 접근 시 모바일에서도 태스크 뷰
+    } else if (member) {
+      setSelectedMemberId(member);
+      setMobileShowTasks(true);
+    }
     const taskId = searchParams.get('task');
     if (taskId && tasks.length > 0) {
       const t = tasks.find((tk) => tk.id === taskId);
@@ -213,9 +220,10 @@ export default function MembersPage() {
     return tasks.filter((t) => t.assignee_id === selectedMemberId);
   }, [tasks, selectedMemberId]);
 
-  // 멤버 선택 → URL 갱신
+  // 멤버 선택 → URL 갱신 + 모바일 태스크 뷰로 전환
   const handleSelectMember = (id) => {
     setSelectedMemberId(id);
+    setMobileShowTasks(true); // 모바일: 태스크 리스트로 전환
     const newParams = new URLSearchParams(searchParams);
     if (id) newParams.set('member', id);
     else newParams.set('member', 'all');
@@ -423,20 +431,24 @@ export default function MembersPage() {
         )}
       </div>
 
-      {/* 본문 — 2컬럼 */}
+      {/* 본문 — 2컬럼 (모바일: 1개씩 토글) */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         <MemberList
           members={members}
           tasks={tasks}
           selectedId={selectedMemberId}
           onSelect={handleSelectMember}
+          mobileShowTasks={mobileShowTasks}
         />
         <MemberTaskList
           tasks={visibleTasks}
           members={members}
           selectedMember={selectedMember}
+          selectedId={selectedMemberId}
           commentCounts={commentCounts}
           onSelectTask={handleSelectTask}
+          onBack={() => setMobileShowTasks(false)}
+          mobileShowTasks={mobileShowTasks}
           onCreateTask={(member) => {
             setCreateTaskDefaults(member ? { assignee_id: member.id, assignee_name: member.name } : null);
             setCreateTaskOpen(true);

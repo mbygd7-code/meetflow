@@ -32,7 +32,7 @@ export function useMeeting() {
 
   // 회의 생성
   const createMeeting = useCallback(
-    async ({ title, team_id, agendas = [], participants: meetingParticipants, scheduledDate, scheduledTime }) => {
+    async ({ title, team_id, agendas = [], participants: meetingParticipants, files = [], scheduledDate, scheduledTime }) => {
       // scheduled_at 계산: 날짜+시간이 있으면 조합, 없으면 현재 시간
       const scheduledAt = scheduledDate && scheduledTime
         ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -124,6 +124,47 @@ export function useMeeting() {
           .from('meeting_participants')
           .upsert(participantRows, { onConflict: 'meeting_id,user_id' });
         if (partErr) console.error('[createMeeting] participants insert error:', partErr);
+      }
+
+      // ═══ 파일 업로드 (base64 → Storage + DB) ═══
+      // CreateMeetingModal은 파일을 base64로 전달. Storage에 업로드하고 meeting_files 테이블에 기록.
+      if (files.length > 0 && user?.id) {
+        for (const f of files) {
+          try {
+            if (!f.base64) continue;
+            const fileUuid = crypto.randomUUID();
+            const safeName = (f.name || 'file').replace(/[^\w가-힣.\-]/g, '_');
+            const storagePath = `meetings/${meeting.id}/${fileUuid}_${safeName}`;
+
+            // base64 → Blob
+            const binary = atob(f.base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const blob = new Blob([bytes], { type: f.type || 'application/octet-stream' });
+
+            const { error: upErr } = await supabase.storage
+              .from('meeting-files')
+              .upload(storagePath, blob, { cacheControl: '3600' });
+            if (upErr) {
+              console.error('[createMeeting] file upload error:', f.name, upErr);
+              continue;
+            }
+
+            const { error: insErr } = await supabase.from('meeting_files').insert({
+              meeting_id: meeting.id,
+              uploaded_by: user.id,
+              name: f.name,
+              type: f.type || null,
+              size: f.size || 0,
+              storage_path: storagePath,
+            });
+            if (insErr) {
+              console.error('[createMeeting] meeting_files insert error:', insErr);
+            }
+          } catch (err) {
+            console.error('[createMeeting] file process error:', err);
+          }
+        }
       }
 
       // 로컬 store에 참석자 정보 포함 (UI 렌더용)
@@ -269,8 +310,8 @@ export function useMeeting() {
   // 회의 요청 — Slack 통지 + Google Calendar 연동
   const requestMeeting = useCallback(
     async ({ title, team_id, agendas = [], participants = [], files = [], scheduledDate, scheduledTime, duration }) => {
-      // 1. 회의 생성 (날짜/시간 포함)
-      const meeting = await createMeeting({ title, team_id, agendas, participants, scheduledDate, scheduledTime });
+      // 1. 회의 생성 (날짜/시간 + 첨부 파일 포함)
+      const meeting = await createMeeting({ title, team_id, agendas, participants, files, scheduledDate, scheduledTime });
 
       // 2. Slack 통지 (Edge Function 호출)
       if (canUseDB && team_id) {

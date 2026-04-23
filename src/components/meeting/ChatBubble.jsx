@@ -94,10 +94,14 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
     senderName = emp?.nameKo || emp?.name || message.user?.name || 'Milo';
   } else {
     // user JOIN이 실패한 경우(삭제된 사용자 / public.users 동기화 누락):
-    // user.email 앞 부분 또는 user_id 짧게 fallback — "알없" 대신 식별 가능한 값
-    const fallback = message.user?.email?.split('@')[0]
-      || (message.user_id ? `참가자 ${message.user_id.slice(0, 4)}` : '손님');
-    senderName = message.user?.name || fallback;
+    // 우선순위: user.name > email 앞부분 > user_id 앞 4자리 > '알수없음'
+    // "손님"은 혼동을 주므로 사용하지 않음 (실제 이름과 겹칠 수 있음)
+    const emailPrefix = message.user?.email?.split('@')[0];
+    const idSuffix = message.user_id ? message.user_id.slice(0, 4) : null;
+    senderName =
+      message.user?.name ||
+      emailPrefix ||
+      (idSuffix ? `사용자 ${idSuffix}` : '알수없음');
   }
 
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';

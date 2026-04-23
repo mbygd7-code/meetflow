@@ -100,7 +100,7 @@ export function useRealtimeMessages(meetingId) {
     async function fetchMessages({ incremental = false } = {}) {
       let query = supabase
         .from('messages')
-        .select('*, user:users(id,name,avatar_color)')
+        .select('*, user:users(id,name,email,avatar_color)')
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: true });
 
@@ -115,6 +115,32 @@ export function useRealtimeMessages(meetingId) {
         return null;
       }
       if (cancelled) return null;
+
+      // user JOIN 복구 — user가 null인데 user_id는 있는 경우 public.users에서 직접 조회
+      // (JOIN이 RLS/race/동기화 이슈로 실패한 경우 대비)
+      const missingUserIds = [
+        ...new Set(
+          (data || [])
+            .filter((m) => !m.is_ai && m.user_id && (!m.user || !m.user.name))
+            .map((m) => m.user_id)
+        ),
+      ];
+      if (missingUserIds.length > 0) {
+        try {
+          const { data: userRows } = await supabase
+            .from('users')
+            .select('id, name, email, avatar_color')
+            .in('id', missingUserIds);
+          const userMap = new Map((userRows || []).map((u) => [u.id, u]));
+          (data || []).forEach((msg) => {
+            if (msg.user_id && userMap.has(msg.user_id)) {
+              msg.user = { ...(msg.user || {}), ...userMap.get(msg.user_id) };
+            }
+          });
+        } catch (recoverErr) {
+          console.warn('[useRealtimeMessages] user 복구 실패 (무시):', recoverErr);
+        }
+      }
 
       if (incremental) {
         let addedCount = 0;
@@ -430,6 +456,11 @@ export function useRealtimeMessages(meetingId) {
       }
 
       // ① DB INSERT (authoritative)
+      // 비-AI 메시지는 반드시 user_id가 있어야 함 (null이면 전송 거부)
+      if (!isAi && !user?.id) {
+        console.error('[sendMessage] 사용자 ID 없음 — 전송 거부 (재로그인 필요)');
+        return null;
+      }
       const insertData = {
         meeting_id: meetingId,
         agenda_id: agendaId,
@@ -447,7 +478,7 @@ export function useRealtimeMessages(meetingId) {
       const { data, error } = await supabase
         .from('messages')
         .insert(insertData)
-        .select('*, user:users(id,name,avatar_color)')
+        .select('*, user:users(id,name,email,avatar_color)')
         .single();
       if (error) {
         console.error('[sendMessage]', error);
