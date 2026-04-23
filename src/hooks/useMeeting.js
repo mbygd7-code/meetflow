@@ -198,10 +198,11 @@ export function useMeeting() {
       }
       updateMeeting(id, patch);
 
-      // AI 요약 생성 시도
+      // AI 요약 생성 시도 — Phase 2: meetingTitle 전달 (RAG 인덱싱 시 파일명 가독성↑)
+      const meetingTitle = useMeetingStore.getState().meetings.find((m) => m.id === id)?.title || null;
       let summary = null;
       try {
-        summary = await generateSummary({ meetingId: id, messages, agendas });
+        summary = await generateSummary({ meetingId: id, messages, agendas, meetingTitle });
         console.log('[endMeeting] AI 요약 생성 완료:', summary);
       } catch (err) {
         console.warn('[endMeeting] AI 요약 생성 실패 (데모 요약 사용):', err.message);

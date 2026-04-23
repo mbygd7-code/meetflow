@@ -153,9 +153,9 @@ export async function processKnowledgeFile({ fileId, employeeId, content }) {
 /**
  * 회의 요약 생성 — Supabase Edge Function 'generate-summary' 호출
  */
-export async function generateSummary({ meetingId, messages, agendas }) {
+export async function generateSummary({ meetingId, messages, agendas, meetingTitle = null }) {
   const { data, error } = await supabase.functions.invoke('generate-summary', {
-    body: { meetingId, messages, agendas },
+    body: { meetingId, messages, agendas, meetingTitle },
   });
 
   if (error) {
