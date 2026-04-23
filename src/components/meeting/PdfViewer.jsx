@@ -44,23 +44,33 @@ export default function PdfViewer({ url }) {
   }, []);
 
   // ResizeObserver로 컨테이너 크기 변화 감지 → fit width 계산
+  // 최적화: rAF 디바운스 + 10px 단위 스냅으로 PDF canvas 재렌더 최소화
   useEffect(() => {
     if (!scrollContainerRef.current) return;
     const el = scrollContainerRef.current;
+    let rafId = null;
     const computeFit = () => {
-      const cw = el.clientWidth - 16;   // horizontal padding 감안
-      const ch = el.clientHeight - 16;  // vertical padding 감안
-      if (cw <= 0 || ch <= 0) return;
-      // height 기준 width와 width 기준 모두 계산 → 더 작은 쪽이 fit
-      const byHeight = ch * pageAspect;
-      const byWidth = cw;
-      const fit = Math.max(80, Math.min(byWidth, byHeight));
-      setFitWidth(fit);
+      if (rafId) return; // 이미 예약됨
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const cw = el.clientWidth - 16;
+        const ch = el.clientHeight - 16;
+        if (cw <= 0 || ch <= 0) return;
+        const byHeight = ch * pageAspect;
+        const byWidth = cw;
+        const fit = Math.max(80, Math.min(byWidth, byHeight));
+        // 10px 단위 스냅 — 같은 값이면 리렌더 스킵 (React 얕은 비교)
+        const snapped = Math.round(fit / 10) * 10;
+        setFitWidth((prev) => (prev === snapped ? prev : snapped));
+      });
     };
     computeFit();
     const ro = new ResizeObserver(computeFit);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [pageAspect]);
 
   if (loadError) {

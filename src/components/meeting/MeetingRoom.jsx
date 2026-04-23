@@ -390,24 +390,39 @@ function FloatingDocumentWindow({ file, url, onClose }) {
     setMinimized(false);
   };
 
-  // 드래그 이동
+  // 드래그 이동 — DOM 직접 조작 + rAF 디바운스로 React 리렌더 방지
   const onDragStart = (e) => {
     e.preventDefault();
-    dragRef.current = {
-      startX: e.clientX, startY: e.clientY,
-      origX: pos.x, origY: pos.y,
-    };
+    const el = windowRef.current;
+    if (!el) return;
+    const startX = e.clientX, startY = e.clientY;
+    const origX = pos.x, origY = pos.y;
+    dragRef.current = { startX, startY, origX, origY };
+
+    const prevTransition = el.style.transition;
+    el.style.transition = 'none';
+
+    let lastX = origX, lastY = origY;
+    let rafId = null;
+
     const onMove = (ev) => {
-      if (!dragRef.current) return;
-      const dx = ev.clientX - dragRef.current.startX;
-      const dy = ev.clientY - dragRef.current.startY;
-      setPos({
-        x: Math.max(0, Math.min(window.innerWidth - 200, dragRef.current.origX + dx)),
-        y: Math.max(0, Math.min(window.innerHeight - 80, dragRef.current.origY + dy)),
-      });
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      lastX = Math.max(0, Math.min(window.innerWidth - 200, origX + dx));
+      lastY = Math.max(0, Math.min(window.innerHeight - 80, origY + dy));
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          el.style.left = `${lastX}px`;
+          el.style.top = `${lastY}px`;
+          rafId = null;
+        });
+      }
     };
     const onUp = () => {
+      if (rafId) cancelAnimationFrame(rafId);
       dragRef.current = null;
+      el.style.transition = prevTransition;
+      setPos({ x: lastX, y: lastY });
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -415,28 +430,42 @@ function FloatingDocumentWindow({ file, url, onClose }) {
     document.addEventListener('mouseup', onUp);
   };
 
-  // 리사이즈 — direction에 따라 width/height 중 해당 축만 조절
+  // 리사이즈 — DOM 직접 조작 + rAF 디바운스, PDF 재렌더 최소화
   // 'se': 우하단 코너(가로+세로), 'e': 우측 엣지(가로만), 's': 하단 엣지(세로만)
   const onResizeStart = (e, direction = 'se') => {
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = {
-      startX: e.clientX, startY: e.clientY,
-      origW: size.w, origH: size.h,
-      direction,
-    };
+    const el = windowRef.current;
+    if (!el) return;
+    const startX = e.clientX, startY = e.clientY;
+    const origW = size.w, origH = size.h;
+    resizeRef.current = { startX, startY, origW, origH, direction };
+
+    const prevTransition = el.style.transition;
+    el.style.transition = 'none';
+
+    let lastW = origW, lastH = origH;
+    let rafId = null;
+
     const onMove = (ev) => {
-      if (!resizeRef.current) return;
-      const { startX, startY, origW, origH, direction: dir } = resizeRef.current;
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
-      setSize({
-        w: dir === 's' ? origW : Math.max(300, origW + dx),
-        h: dir === 'e' ? origH : Math.max(200, origH + dy),
-      });
+      lastW = direction === 's' ? origW : Math.max(300, origW + dx);
+      lastH = direction === 'e' ? origH : Math.max(200, origH + dy);
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          el.style.width = `${lastW}px`;
+          el.style.height = `${lastH}px`;
+          rafId = null;
+        });
+      }
     };
     const onUp = () => {
+      if (rafId) cancelAnimationFrame(rafId);
       resizeRef.current = null;
+      el.style.transition = prevTransition;
+      // 드래그 종료 시 한 번만 state commit → PdfViewer도 1회 재렌더
+      setSize({ w: lastW, h: lastH });
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -451,17 +480,16 @@ function FloatingDocumentWindow({ file, url, onClose }) {
     <div
       ref={windowRef}
       onClick={minimized ? handleRestore : undefined}
-      className={`fixed z-[9999] bg-bg-secondary rounded-xl shadow-2xl border border-border-subtle overflow-hidden flex flex-col pointer-events-auto transition-all duration-200 ${
-        minimized ? 'cursor-zoom-in hover:ring-2 hover:ring-brand-purple/50' : ''
+      className={`fixed z-[9999] bg-bg-secondary rounded-xl shadow-2xl border border-border-subtle overflow-hidden flex flex-col pointer-events-auto ${
+        minimized ? 'cursor-zoom-in hover:ring-2 hover:ring-brand-purple/50 transition-[box-shadow] duration-150' : ''
       }`}
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
     >
-      {/* 헤더 — 드래그 핸들 (최소화 시 드래그 비활성화 → 카드 클릭으로 복원) */}
+      {/* 헤더 — 드래그 핸들 (최소화 상태에서도 드래그 가능, 클릭 시 복원은 body에서만) */}
       <div
-        onMouseDown={minimized ? undefined : onDragStart}
-        className={`flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-bg-primary select-none shrink-0 ${
-          minimized ? 'cursor-zoom-in' : 'cursor-grab active:cursor-grabbing'
-        }`}
+        onMouseDown={onDragStart}
+        onClick={(e) => e.stopPropagation()}  // 헤더 클릭 → 카드 onClick(복원) 차단
+        className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-bg-primary select-none shrink-0 cursor-grab active:cursor-grabbing"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <GripVertical size={14} className="text-txt-muted shrink-0" />
@@ -828,49 +856,59 @@ export default function MeetingRoom() {
     }));
   }, []);
 
-  // Milo AI
-  // 동일 응답 텍스트가 짧은 시간 내에 중복 전송되는 것을 방어 (최종 방어선)
-  const sentResponseHashesRef = useRef(new Map()); // text → timestamp
-  const handleMiloRespond = useCallback(async (result) => {
-    if (!result?.response_text) return;
-    const hash = `${result.ai_employee || 'milo'}::${result.response_text.slice(0, 100)}`;
-    const now = Date.now();
-    const prevTime = sentResponseHashesRef.current.get(hash);
-    if (prevTime && now - prevTime < 10000) {
-      console.warn('[MeetingRoom] Duplicate AI response blocked:', hash.slice(0, 60));
-      return;
-    }
-    sentResponseHashesRef.current.set(hash, now);
-    // 오래된 해시 정리 (메모리 누수 방지)
-    if (sentResponseHashesRef.current.size > 50) {
-      const cutoff = now - 60000;
-      for (const [k, t] of sentResponseHashesRef.current.entries()) {
-        if (t < cutoff) sentResponseHashesRef.current.delete(k);
-      }
-    }
-    await sendMessage(result.response_text, {
-      agendaId: currentAgenda?.id, isAi: true, aiType: result.ai_type,
-      aiEmployee: result.ai_employee || 'milo',
-      searchSources: result.search_sources || null,
-      searchMode: result.search_mode || null,
-      // Phase 0 계측: 현재 병렬 fan-out 버전으로 응답됨
-      // Phase 1 적용 시 Milo 종합 메시지는 'parallel_synthesize_v1'로 기록됨
-      orchestrationVersion: result.orchestration_version || 'parallel_v1',
-      miloSynthesisId: result.milo_synthesis_id || null,
-    });
-  }, [sendMessage, currentAgenda]);
-
-  const handleThinking = useCallback((active, employeeId) => {
-    setAiThinking(active ? { active: true, employeeId } : null);
-  }, []);
-
-  // AI 에러 토스트 (3초 자동 사라짐)
+  // AI 에러 토스트 (4초 자동 사라짐)
   const [aiError, setAiError] = useState(null);
   const aiErrorTimerRef = useRef(null);
   const handleAiError = useCallback((err) => {
     setAiError(err);
     clearTimeout(aiErrorTimerRef.current);
     aiErrorTimerRef.current = setTimeout(() => setAiError(null), 4000);
+  }, []);
+
+  // Milo AI
+  // 동일 응답 텍스트가 짧은 시간 내에 중복 전송되는 것을 방어 (최종 방어선)
+  // 해시 충돌 완화: employee_id + 전체 내용 + ai_type 조합으로 specialist 응답 false-positive 차단
+  const sentResponseHashesRef = useRef(new Map()); // text → timestamp
+  const handleMiloRespond = useCallback(async (result) => {
+    if (!result?.response_text) return;
+    // 기존: slice(0,100) → Specialist 1·2가 비슷한 서두로 시작하면 누락됨
+    // 수정: 전체 내용 사용 + 직원 ID + ai_type → 실질적으로 같은 메시지만 차단
+    const hash = `${result.ai_employee || 'milo'}::${result.ai_type || '-'}::${result.response_text}`;
+    const now = Date.now();
+    const prevTime = sentResponseHashesRef.current.get(hash);
+    if (prevTime && now - prevTime < 10000) {
+      console.warn('[MeetingRoom] Duplicate AI response blocked:', (result.ai_employee || 'milo'), '-', result.response_text.slice(0, 40));
+      return;
+    }
+    sentResponseHashesRef.current.set(hash, now);
+    if (sentResponseHashesRef.current.size > 50) {
+      const cutoff = now - 60000;
+      for (const [k, t] of sentResponseHashesRef.current.entries()) {
+        if (t < cutoff) sentResponseHashesRef.current.delete(k);
+      }
+    }
+    try {
+      await sendMessage(result.response_text, {
+        agendaId: currentAgenda?.id, isAi: true, aiType: result.ai_type,
+        aiEmployee: result.ai_employee || 'milo',
+        searchSources: result.search_sources || null,
+        searchMode: result.search_mode || null,
+        orchestrationVersion: result.orchestration_version || 'parallel_v1',
+        miloSynthesisId: result.milo_synthesis_id || null,
+      });
+    } catch (err) {
+      // sendMessage 실패(Auth/RLS/네트워크) 시 사용자에게 에러 토스트 표시
+      console.error('[handleMiloRespond] sendMessage 실패:', err);
+      handleAiError({
+        message: `AI 응답 저장 실패: ${err?.message || '네트워크 또는 인증 오류'}`,
+        type: 'send_failed',
+        employeeId: result.ai_employee || 'milo',
+      });
+    }
+  }, [sendMessage, currentAgenda, handleAiError]);
+
+  const handleThinking = useCallback((active, employeeId) => {
+    setAiThinking(active ? { active: true, employeeId } : null);
   }, []);
 
   useMilo({

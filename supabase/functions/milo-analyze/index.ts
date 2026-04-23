@@ -142,7 +142,7 @@ serve(async (req) => {
   let model = 'unknown';
 
   try {
-    const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge } = await req.json();
+    const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge, isExplicitCall } = await req.json();
 
     // ── AI 전문가 이름 매핑 (transcript 라벨링용) ──
     const AI_NAME_MAP: Record<string, string> = {
@@ -222,9 +222,11 @@ serve(async (req) => {
       const lastUpdated = isObj ? googleDocsSummary.lastUpdated : null;
       const schema = isObj ? googleDocsSummary.schema : null;
 
-      // RAG 인덱싱 완료 시: 요약만 (1,500자) — 상세는 ai_knowledge_chunks에서 검색
-      // 미완료 시: 기존 방식 (15,000자)
-      const maxChars = skipFullInject ? 1500 : 15000;
+      // 토큰 최적화:
+      // - RAG 인덱싱 완료 시: 요약만 (1,500자)
+      // - 자동개입(is_explicit_call=false): 요약만 (1,500자) — 사용자가 명시적으로 요청 안 했으므로
+      // - 명시적 @멘션/직접 요청: 전체 (15,000자)
+      const maxChars = skipFullInject || !isExplicitCall ? 1500 : 15000;
       const truncated = content.length > maxChars;
       if (truncated) content = content.slice(0, maxChars) + (skipFullInject
         ? '\n[...상세 데이터는 RAG 의미 검색으로 필요 시 자동 제공됩니다]'

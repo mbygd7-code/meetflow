@@ -19,7 +19,7 @@ const aiCircuitBreaker = new CircuitBreaker({ threshold: 3, resetMs: 30000 });
  * Milo 분석 — Supabase Edge Function 'milo-analyze' 호출
  * Harness: withRetry(1회 재시도) + CircuitBreaker(3연속 실패 시 30초 차단) + 구조화 로깅
  */
-export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleDocsSummary = null, signal = null, skipKnowledge = false }) {
+export async function analyzeMilo({ messages, agenda, preset = 'default', context = {}, miloSettings = null, compressedContext = '', googleDocsSummary = null, signal = null, skipKnowledge = false, isExplicitCall = false }) {
   const employeeId = miloSettings?.aiEmployee || 'milo';
   const ctx = createRequestContext(null, employeeId);
 
@@ -36,6 +36,8 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
               compressedContext,
               googleDocsSummary,
               skipKnowledge,
+              // 명시적 @멘션/직접 요청인 경우에만 Google Docs 전체 주입 (토큰 최적화)
+              isExplicitCall,
               miloSettings: miloSettings
                 ? {
                     systemPromptOverride: miloSettings.systemPromptOverride,

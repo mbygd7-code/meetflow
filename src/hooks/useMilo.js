@@ -375,6 +375,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               compressedContext: compressedContextRef.current,
               googleDocsSummary: miloOverrides.googleDocsSummary || null,
               skipKnowledge: !mentioned && !isDirectRequest,
+              // 명시적 호출 시에만 Google Docs 전체 주입 (토큰 절감 ~3400)
+              isExplicitCall: mentioned || directEmployeeMention || isDirectRequest,
               signal: chainAbort.signal,
             });
             logAiCallEnd({
@@ -536,6 +538,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                       miloSettings: specSettings,
                       compressedContext: compressedContextRef.current,
                       googleDocsSummary: specOverrides.googleDocsSummary || null,
+                      // 전문가는 사용자의 명시적 요청을 받은 경우에만 호출되므로 항상 explicit
+                      isExplicitCall: true,
                       signal: abortCtrl.signal,
                     });
                     if (specResult && !specResult.should_respond && specResult.response_text) {
