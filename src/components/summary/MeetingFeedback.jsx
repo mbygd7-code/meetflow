@@ -177,10 +177,10 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
       <button
         onClick={() => handleClick(UP_KEY)}
         disabled={!!busy}
-        className={`${btnBase} ${
+        className={`${btnBase} border ${
           isUp
-            ? 'text-status-success bg-status-success/10'
-            : 'text-txt-muted hover:text-status-success hover:bg-status-success/5'
+            ? 'text-txt-secondary border-border-default bg-transparent'
+            : 'text-txt-muted border-transparent hover:text-txt-secondary hover:border-border-subtle'
         } ${busy && busy !== UP_KEY ? 'opacity-60' : ''}`}
         title={isUp ? '피드백 취소' : '도움됐어요'}
         aria-pressed={isUp}
@@ -196,10 +196,10 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
       <button
         onClick={() => handleClick(DOWN_KEY)}
         disabled={!!busy}
-        className={`${btnBase} ${
+        className={`${btnBase} border ${
           isDown
-            ? 'text-status-error bg-status-error/10'
-            : 'text-txt-muted hover:text-status-error hover:bg-status-error/5'
+            ? 'text-txt-secondary border-border-default bg-transparent'
+            : 'text-txt-muted border-transparent hover:text-txt-secondary hover:border-border-subtle'
         } ${busy && busy !== DOWN_KEY ? 'opacity-60' : ''}`}
         title={isDown ? '피드백 취소' : '개선이 필요해요'}
         aria-pressed={isDown}

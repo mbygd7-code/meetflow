@@ -342,7 +342,6 @@ function SummaryList() {
                               요약 실패
                             </span>
                           )}
-                          <Badge variant="outline">완료</Badge>
 
                           {/* 관리자 전용 삭제 버튼 */}
                           {isAdmin && (
