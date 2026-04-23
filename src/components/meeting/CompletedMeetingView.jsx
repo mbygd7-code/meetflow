@@ -1566,16 +1566,24 @@ export default function CompletedMeetingView({ meeting }) {
             <div className="w-7 h-7 rounded-md bg-brand-purple/15 flex items-center justify-center shrink-0">
               <ListTodo size={14} className="text-brand-purple" strokeWidth={2.4} />
             </div>
-            <div className="flex items-center gap-2 flex-1 text-left">
+            <div className="flex items-center gap-2.5 flex-1 text-left">
               <span className="text-sm font-semibold text-txt-primary">후속 태스크</span>
               {meetingTasks.length > 0 ? (
                 <>
-                  <span className="text-xs text-txt-muted">
-                    <span className="text-txt-primary font-semibold">{taskStats.done}</span>
-                    <span className="text-txt-muted">/{taskStats.total}</span> 완료
+                  {/* 총 개수 — 크게 강조 */}
+                  <span className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-brand-purple/10 border border-brand-purple/20">
+                    <span className="text-xl md:text-2xl font-bold text-brand-purple leading-none">
+                      {taskStats.total}
+                    </span>
+                    <span className="text-[10px] font-medium text-brand-purple/80">개</span>
+                  </span>
+                  {/* 완료 진행 */}
+                  <span className="text-xs text-txt-muted hidden sm:inline-flex items-baseline gap-0.5">
+                    <span className="text-status-success font-semibold text-sm">{taskStats.done}</span>
+                    <span>/ {taskStats.total} 완료</span>
                   </span>
                   {/* 진행률 바 */}
-                  <div className="hidden md:flex flex-1 max-w-[200px] h-1.5 rounded-full bg-bg-tertiary overflow-hidden mx-2">
+                  <div className="hidden md:flex flex-1 max-w-[180px] h-1.5 rounded-full bg-bg-tertiary overflow-hidden mx-1">
                     <div
                       className="h-full bg-status-success transition-all"
                       style={{ width: `${taskStats.total > 0 ? (taskStats.done / taskStats.total) * 100 : 0}%` }}
