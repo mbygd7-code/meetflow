@@ -5,6 +5,7 @@ import { Sparkles, Copy, Check, Reply, SmilePlus, ThumbsUp, ThumbsDown, Heart, H
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import RichText from './RichText';
+import FeedbackButtons from './FeedbackButtons';
 
 const NAME_TO_ID = {};
 AI_EMPLOYEES.forEach((e) => {
@@ -401,6 +402,13 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
               </div>
             );
           })()}
+
+          {/* AI 메시지 피드백 (Phase 3) — 항상 은은하게, 호버 시 진해짐 */}
+          {isAi && !readonly && message.id && !String(message.id).startsWith('m-local-') && !String(message.id).startsWith('stream-') && (
+            <div className="flex items-center justify-end gap-1 mt-1.5 opacity-60 hover:opacity-100 transition-opacity">
+              <FeedbackButtons messageId={message.id} compact />
+            </div>
+          )}
 
           {/* 호버 액션 */}
           <div className="flex items-center gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">

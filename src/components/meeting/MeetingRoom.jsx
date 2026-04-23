@@ -11,6 +11,7 @@ import { useMilo } from '@/hooks/useMilo';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useToastStore } from '@/stores/toastStore';
+import { useFeedbackStore } from '@/stores/feedbackStore';
 import ChatArea from './ChatArea';
 import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
@@ -162,6 +163,19 @@ export default function MeetingRoom() {
   const [docPanelExpanded, setDocPanelExpanded] = useState(false);
   const [meetingFiles, setMeetingFiles] = useState([]); // 회의 자료
   const { messages, sendMessage } = useRealtimeMessages(id);
+
+  // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
+  const loadMyFeedbacks = useFeedbackStore((s) => s.loadMyFeedbacks);
+  const loadAggregates = useFeedbackStore((s) => s.loadAggregates);
+  useEffect(() => {
+    const aiMsgIds = messages
+      .filter((m) => m.is_ai && m.id && !String(m.id).startsWith('m-local-') && !String(m.id).startsWith('stream-'))
+      .map((m) => m.id);
+    if (aiMsgIds.length === 0) return;
+    loadMyFeedbacks(aiMsgIds);
+    loadAggregates(aiMsgIds);
+    // 메시지 수가 바뀔 때마다 재조회 (새 AI 응답 도착 시 포함)
+  }, [messages.length, loadMyFeedbacks, loadAggregates]);
 
   // 활성 회의 등록
   useEffect(() => {
