@@ -24,6 +24,7 @@ import MeetingParticipants from './MeetingParticipants';
 import MeetingFeedback from './MeetingFeedback';
 import MeetingScoreBadge from './MeetingScoreBadge';
 import MeetingSummaryPrintable from './MeetingSummaryPrintable';
+import ActionItemsSection from './ActionItemsSection';
 import { computeMeetingScore } from '@/utils/meetingScoreUtils';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -627,41 +628,14 @@ export default function MeetingSummary() {
           )}
         </Section>
 
-        {/* 후속 태스크 */}
-        <Section icon={ListTodo} title="후속 태스크" color="bg-brand-purple/15 text-brand-purple" count={summary.action_items?.length}>
-          {summary.action_items?.length ? (
-            <ul className="space-y-2.5">
-              {summary.action_items.map((a, i) => {
-                const pri = getPriorityInfo(a.priority);
-                return (
-                  <li key={i} className="flex items-start gap-2.5 p-2.5 rounded-md bg-bg-tertiary/40 border border-border-subtle">
-                    <div className="w-4 h-4 rounded border-2 border-border-default mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-txt-primary">{a.title}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {a.assignee_hint && (
-                          <span className="text-[11px] text-txt-secondary">{a.assignee_hint}</span>
-                        )}
-                        {a.due_hint && (
-                          <span className="text-[10px] text-txt-muted">{a.due_hint}</span>
-                        )}
-                        <span className={`text-[10px] font-medium inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${pri.bg} ${pri.tone} ${pri.border}`}>
-                          {pri.label}
-                        </span>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <EmptyState
-              icon={ListTodo}
-              title="후속 태스크가 없어요"
-              description="이번 회의에서 추출된 할 일이 없습니다."
-              compact
-            />
-          )}
+        {/* 후속 태스크 — 담당자 확인/수정/추가 워크플로우 */}
+        <Section
+          icon={ListTodo}
+          title="후속 태스크"
+          color="bg-brand-purple/15 text-brand-purple"
+          count={summary.action_items?.length}
+        >
+          <ActionItemsSection meeting={meeting} summary={summary} />
         </Section>
       </div>
 
