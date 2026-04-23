@@ -329,7 +329,17 @@ export function useRealtimeMessages(meetingId) {
 
   // ═══════════ sendMessage — DB INSERT + Broadcast emit ═══════════
   const sendMessage = useCallback(
-    async (content, { agendaId, isAi = false, aiType, aiEmployee, source = 'web', searchSources = null } = {}) => {
+    async (content, {
+      agendaId,
+      isAi = false,
+      aiType,
+      aiEmployee,
+      source = 'web',
+      searchSources = null,
+      searchMode = null,
+      orchestrationVersion = null,  // Phase 0 계측: 'parallel_v1' | 'parallel_synthesize_v1' | 'agent_loop_v1'
+      miloSynthesisId = null,       // Phase 0 계측: 같은 종합 세션의 그룹 키 (현재는 null)
+    } = {}) => {
       if (!content?.trim()) return;
 
       // 데모 모드 (mock 회의) — 로컬 state만 갱신
@@ -347,6 +357,9 @@ export function useRealtimeMessages(meetingId) {
           ai_type: aiType,
           ai_employee: isAi ? (aiEmployee || 'milo') : undefined,
           search_sources: searchSources || undefined,
+          search_mode: searchMode || undefined,
+          orchestration_version: orchestrationVersion || undefined,
+          milo_synthesis_id: miloSynthesisId || undefined,
           source,
           user: isAi ? aiUser : { id: user?.id, name: user?.name || '나', color: '#723CEB' },
           created_at: new Date().toISOString(),
@@ -366,6 +379,9 @@ export function useRealtimeMessages(meetingId) {
         source,
       };
       if (isAi && aiEmployee) insertData.ai_employee = aiEmployee;
+      // Phase 0 계측 필드 (migration 028 적용 전이면 DB가 unknown column 에러를 낼 수 있음 → null일 때는 생략)
+      if (orchestrationVersion) insertData.orchestration_version = orchestrationVersion;
+      if (miloSynthesisId) insertData.milo_synthesis_id = miloSynthesisId;
 
       const { data, error } = await supabase
         .from('messages')
@@ -379,7 +395,14 @@ export function useRealtimeMessages(meetingId) {
 
       // 즉시 로컬 state에 추가 (본인 화면 표시)
       const enriched = isAi
-        ? { ...data, ai_employee: data.ai_employee || aiEmployee || 'milo', search_sources: searchSources || undefined }
+        ? {
+            ...data,
+            ai_employee: data.ai_employee || aiEmployee || 'milo',
+            search_sources: searchSources || undefined,
+            search_mode: searchMode || undefined,
+            orchestration_version: orchestrationVersion || data.orchestration_version || undefined,
+            milo_synthesis_id: miloSynthesisId || data.milo_synthesis_id || undefined,
+          }
         : data;
       dedupAdd(enriched);
 

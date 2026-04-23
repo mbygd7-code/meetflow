@@ -5,6 +5,13 @@ import { MILO_PRESETS, EMPLOYEE_NAME_MAP } from '@/lib/constants';
 import { useMiloStore } from '@/stores/miloStore';
 import { useAiTeamStore, AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { saveSessionState, loadSessionState } from '@/lib/harness';
+import {
+  logAiCallStart,
+  logAiCallEnd,
+  logAiCallError,
+  logOrchestrationSkip,
+  logOrchestrationStep,
+} from '@/lib/telemetry';
 
 // Supabase Edge Function으로 Claude API 호출 (VITE_SUPABASE_URL이 있으면 활성화)
 const CLAUDE_API_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -194,8 +201,10 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
     // 직접 요청 감지 ("~해줘", "~찾아줘" 등)
     const isDirectRequest = MILO_INTERVENTION_TRIGGERS.REQUEST?.test(afterQuote);
 
-    // 자동 개입 OFF → 직접 호출(@멘션) 또는 직접 요청만 허용
-    if (!autoIntervene && !mentioned && !directEmployeeMention && !isDirectRequest) {
+    // 자동 개입 OFF → **명시적 @멘션만** 허용
+    // (isDirectRequest("해줘/어떤/왜..." 등)는 너무 광범위해서 OFF 의도에 반함 — 제외)
+    if (!autoIntervene && !mentioned && !directEmployeeMention) {
+      logOrchestrationSkip({ meetingId, reason: 'auto_intervene_off', messageId: lastMsg.id });
       runningRef.current = false;
       return;
     }
@@ -205,6 +214,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
       if (!alwaysRespond) {
         // 기존 로직: 개입 횟수/쿨다운/최소 턴 체크
         if (interventionCountRef.current >= cfg.maxInterventionsPerAgenda) {
+          logOrchestrationSkip({ meetingId, reason: 'max_interventions', messageId: lastMsg.id });
           runningRef.current = false;
           return;
         }
@@ -212,6 +222,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
         // performance.now()는 단조 증가 보장 (시스템 클럭 변경 영향 받지 않음)
         const sinceLastMs = performance.now() - lastInterventionRef.current;
         if (sinceLastMs < cfg.cooldownMinutes * 60 * 1000) {
+          logOrchestrationSkip({ meetingId, reason: 'cooldown', messageId: lastMsg.id });
           runningRef.current = false;
           return;
         }
@@ -223,6 +234,7 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           if (!messages[i].is_ai) humanTurnsSinceMilo++;
         }
         if (humanTurnsSinceMilo < cfg.minTurnsBefore) {
+          logOrchestrationSkip({ meetingId, reason: 'min_turns', messageId: lastMsg.id });
           runningRef.current = false;
           return;
         }
@@ -258,21 +270,37 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
         const routedEmployees = routeByKeywords(lastMsg.content);
         let specialists = routedEmployees.filter((id) => id !== 'milo');
 
-        // AI 직원 직접 멘션 시 — 멘션된 직원 식별
+        // AI 직원 직접 멘션 시 — 멘션된 직원들 식별 (복수 멘션 지원)
+        // directSpecialist: Milo 단계 스킵 여부 플래그 (첫 번째 멘션 ID)
+        // directSpecialists: 병렬 호출할 전문가 ID 배열 (최대 2명, 중복 제거)
         let directSpecialist = null;
+        let directSpecialists = [];
         // 1) 인용한 AI가 전문가면 최우선 (인용 답글 = 해당 AI에게 이어 말하기)
         if (quotedAiId && quotedAiId !== 'milo') {
           directSpecialist = quotedAiId;
+          directSpecialists = [quotedAiId];
           if (!specialists.includes(directSpecialist)) {
             specialists = [directSpecialist, ...specialists];
           }
         } else if (directEmployeeMention) {
-          const match = afterQuote.match(MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION);
-          if (match) {
-            const name = match[1].replace('@', '').toLowerCase();
-            directSpecialist = EMPLOYEE_NAME_MAP[name];
-            if (directSpecialist && !specialists.includes(directSpecialist)) {
-              specialists = [directSpecialist, ...specialists];
+          // afterQuote에서 모든 AI 직원 멘션을 수집 (복수 멘션 지원)
+          //   예: "@노먼 @코틀러 리브랜딩 의견" → [norman, kotler]
+          const allMentionsRe = new RegExp(MILO_INTERVENTION_TRIGGERS.AI_EMPLOYEE_MENTION.source, 'gi');
+          const mentionIds = [];
+          let mentionMatch;
+          while ((mentionMatch = allMentionsRe.exec(afterQuote)) !== null) {
+            const name = mentionMatch[1].replace('@', '').toLowerCase();
+            const id = EMPLOYEE_NAME_MAP[name];
+            if (id && !mentionIds.includes(id)) mentionIds.push(id);
+            if (mentionIds.length >= 2) break; // 최대 2명
+          }
+          if (mentionIds.length > 0) {
+            directSpecialist = mentionIds[0]; // 플래그 역할 (Milo 단계 스킵 여부)
+            directSpecialists = mentionIds;
+            // specialists 배열 맨 앞에 주입 (fallback 용도 — routeByKeywords 결과 뒤)
+            for (let i = mentionIds.length - 1; i >= 0; i--) {
+              const id = mentionIds[i];
+              if (!specialists.includes(id)) specialists = [id, ...specialists];
             }
           }
         }
@@ -300,6 +328,12 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
         if (directSpecialist) {
           result = { should_respond: false };
           onThinking?.(false, null);
+          logOrchestrationStep({
+            meetingId,
+            step: 'conductor_skipped_direct',
+            employees: [directSpecialist],
+            orchestrationVersion: 'parallel_v1',
+          });
         } else if (CLAUDE_API_ENABLED) {
           // 1단계: 밀로가 먼저 응답
           let miloPrompt = buildPromptFor('milo');
@@ -323,6 +357,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           const humanNames = [...new Set(
             messages.filter((m) => !m.is_ai && m.user?.name).map((m) => m.user.name)
           )];
+          const conductorStart = performance.now();
+          logAiCallStart({
+            meetingId,
+            employeeId: 'milo',
+            trigger: mentioned ? 'mention' : (isDirectRequest ? 'direct_request' : (alwaysRespond ? 'always_respond' : 'auto')),
+            messageId: lastMsg.id,
+          });
           try {
             result = await analyzeMilo({
               messages,
@@ -335,8 +376,22 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               skipKnowledge: !mentioned && !isDirectRequest,
               signal: chainAbort.signal,
             });
+            logAiCallEnd({
+              meetingId,
+              employeeId: 'milo',
+              elapsed: Math.round(performance.now() - conductorStart),
+              shouldRespond: !!result?.should_respond,
+              orchestrationVersion: 'parallel_v1',
+              usage: result?._usage || null,
+            });
           } catch (apiErr) {
             console.warn('[useMilo] API call failed, falling back to mock:', apiErr?.message);
+            logAiCallError({
+              meetingId,
+              employeeId: 'milo',
+              error: apiErr,
+              type: apiErr?.name === 'AbortError' ? 'abort' : 'exception',
+            });
             result = mockMiloResponse(messages, agenda, routedEmployees, alwaysRespond || mentioned);
           }
           if (chainAbort.signal.aborted) return;
@@ -391,7 +446,8 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               specialists = []; // 자동 개입에서 선별이 없으면 전문가 호출하지 않음
             }
           } else {
-            specialists = [directSpecialist].slice(0, 2);
+            // 복수 직접 멘션 지원: directSpecialists 배열 사용 (최대 2명)
+            specialists = (directSpecialists.length > 0 ? directSpecialists : [directSpecialist]).slice(0, 2);
           }
 
           // 활성화된 직원만 필터 (비활성화된 AI는 호출하지 않음)
@@ -410,8 +466,15 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               currentMsgs.slice(msgCountAtStart).some((m) => !m.is_ai);
             if (hasHumanInterruption) {
               console.log('[useMilo] 사람 개입 감지 — 전문가 호출 스킵');
+              logOrchestrationSkip({ meetingId, reason: 'human_interruption', messageId: lastMsg.id });
               onThinking?.(false, null);
             } else {
+              logOrchestrationStep({
+                meetingId,
+                step: 'specialists_parallel',
+                employees: uniqueSpecs,
+                orchestrationVersion: 'parallel_v1',
+              });
               // 진행 중인 전문가 ID를 onThinking으로 순차 표시 (UX용)
               onThinking?.(true, uniqueSpecs[0]);
 
@@ -505,7 +568,13 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               const specOutputs = await Promise.all(specPromises);
               onThinking?.(false, null);
 
+              // Phase 1: 종합 그룹 ID — 이 턴에서 응답되는 전문가들 + Milo 종합을 하나의 그룹으로 묶음
+              const synthesisGroupId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `synth-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
               // 사용자 UX를 위해 순차적으로 응답 렌더링 (도착 순서 X, 지정 순서)
+              const successfulSpecs = [];
               for (const { specId, specResult } of specOutputs) {
                 // 중간에 사람 개입했으면 남은 응답 스킵
                 const currentMsgs2 = messagesRef.current;
@@ -522,7 +591,10 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                     specResult.response_text = `[${emp.nameKo}] ${specResult.response_text}`;
                   }
                   specResult.ai_employee = specId;
+                  // Phase 1: 종합 그룹 태그 — 같은 턴의 AI 메시지들이 동일 그룹 키 공유
+                  specResult.milo_synthesis_id = synthesisGroupId;
                   lastRespondingEmployeeRef.current = specId;
+                  successfulSpecs.push({ specId, response_text: specResult.response_text, employeeName: emp?.nameKo || specId });
                   try {
                     onRespond?.(specResult);
                   } catch (respondErr) {
@@ -533,6 +605,166 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                     await new Promise((r) => setTimeout(r, MILO_DELAYS.SPECIALIST.base));
                   }
                 }
+              }
+
+              // ════════════════════════════════════════════════════════════════
+              // Phase 1: Milo 종합 한줄평 (parallel_synthesize_v1)
+              // ────────────────────────────────────────────────────────────────
+              // 조건: 전문가 2명 이상 성공 응답 + 사용자 개입 없음 + flag ON
+              // 효과: 전문가들의 답을 통합한 결론 한줄평을 Milo가 마지막에 추가
+              // ════════════════════════════════════════════════════════════════
+              const SYNTHESIZE_ENABLED = import.meta.env.VITE_PHASE1_SYNTHESIZE !== 'false';
+
+              if (SYNTHESIZE_ENABLED && successfulSpecs.length >= 2 && CLAUDE_API_ENABLED) {
+                // 사용자 개입 재확인
+                const currentMsgs3 = messagesRef.current;
+                const synthesizeInterrupted = currentMsgs3.length > msgCountAtStart &&
+                  currentMsgs3.slice(msgCountAtStart).some((m) => !m.is_ai);
+
+                if (synthesizeInterrupted) {
+                  logOrchestrationSkip({
+                    meetingId,
+                    reason: 'human_interruption_before_synthesize',
+                    messageId: lastMsg.id,
+                  });
+                } else {
+                  logOrchestrationStep({
+                    meetingId,
+                    step: 'milo_synthesize_start',
+                    employees: successfulSpecs.map((s) => s.specId),
+                    orchestrationVersion: 'parallel_synthesize_v1',
+                  });
+
+                  onThinking?.(true, 'milo');
+
+                  // 종합 전용 시스템 프롬프트 — 지휘자 로직 배제, 종합 형식만 강조
+                  const synthesizePrompt = `당신은 '밀로(Milo)'입니다. 지금 방금 전문가들이 사용자의 질문에 답했습니다.
+당신의 역할: 전문가들의 답을 **종합해서 결론 한줄평**을 제시하는 것.
+
+## 방금 응답한 전문가들
+${successfulSpecs.map((s) => `- @${s.employeeName}: ${(s.response_text || '').replace(/^\[[^\]]+\]\s*/, '').slice(0, 400)}`).join('\n')}
+
+## 응답 형식 (엄격)
+- **3문장 이내** — 더 길게 쓰지 마라
+- 숫자 1개 이상 포함 (기한·비율·개수 등 — 없으면 우선순위 번호라도)
+- 전문가들 공통 핵심 + 상충 지점을 한 줄로 정리
+- 실행 가능한 **다음 단계 1개** 제안
+- 전문가 언급 시 @이름 형식 (@${successfulSpecs.map((s) => s.employeeName).join(', @')} 등)
+- 응답 시작: "[밀로 종합]" 프리픽스 붙이기
+
+## 금지
+- 전문가 응답을 그대로 복사 금지 — 반드시 **통합 관점** 추가
+- "~하겠습니다" 약속형 마무리 금지 — 결론만 제시
+- 자신을 3인칭 언급 금지 ("제가", "저는"만 사용)
+
+## 반드시
+- should_respond: true (침묵 금지)
+- ai_type: 'summary'
+- selected_specialists: []  (이미 전문가 호출 완료)
+
+사용자는 "그래서 결국 어떻게 해야 하나?"를 알고 싶어합니다. 결론만 주세요.`;
+
+                  const synthHumanNames = [...new Set(
+                    messages.filter((m) => !m.is_ai && m.user?.name).map((m) => m.user.name)
+                  )];
+
+                  const synthStart = performance.now();
+                  logAiCallStart({
+                    meetingId,
+                    employeeId: 'milo',
+                    trigger: 'synthesize',
+                    messageId: lastMsg.id,
+                  });
+
+                  try {
+                    const synthResult = await analyzeMilo({
+                      messages, // 원본 대화 그대로 (전문가 응답은 프롬프트에 이미 주입됨)
+                      agenda,
+                      preset,
+                      context: {
+                        routedEmployees,
+                        participants: synthHumanNames,
+                        mode: 'synthesize', // Edge Function에서 웹검색 스킵
+                      },
+                      miloSettings: {
+                        ...getSnapshot(),
+                        systemPromptOverride: synthesizePrompt,
+                        aiEmployee: 'milo',
+                        apiModelId: getEmployeeModelId('milo'),
+                        skipGoogleDocsFullInject: true,
+                      },
+                      compressedContext: compressedContextRef.current,
+                      googleDocsSummary: null,
+                      skipKnowledge: true, // 종합은 RAG 불필요
+                      signal: chainAbort.signal,
+                    });
+
+                    logAiCallEnd({
+                      meetingId,
+                      employeeId: 'milo',
+                      elapsed: Math.round(performance.now() - synthStart),
+                      shouldRespond: !!synthResult?.should_respond,
+                      orchestrationVersion: 'parallel_synthesize_v1',
+                      usage: synthResult?._usage || null,
+                    });
+
+                    onThinking?.(false, null);
+
+                    // 종합 중 사람 개입 확인
+                    const currentMsgs4 = messagesRef.current;
+                    const interruptedDuringSynth = currentMsgs4.length > msgCountAtStart &&
+                      currentMsgs4.slice(msgCountAtStart).some((m) => !m.is_ai);
+
+                    if (interruptedDuringSynth) {
+                      logOrchestrationSkip({
+                        meetingId,
+                        reason: 'human_interruption_during_synthesize',
+                        messageId: lastMsg.id,
+                      });
+                    } else if (synthResult?.should_respond && synthResult.response_text) {
+                      // "[밀로 종합]" 프리픽스 보장
+                      if (!synthResult.response_text.match(/^\[밀로\s*종합\]/)) {
+                        synthResult.response_text = `[밀로 종합] ${synthResult.response_text}`;
+                      }
+                      synthResult.ai_employee = 'milo';
+                      synthResult.ai_type = synthResult.ai_type || 'summary';
+                      synthResult.orchestration_version = 'parallel_synthesize_v1';
+                      synthResult.milo_synthesis_id = synthesisGroupId;
+                      lastRespondingEmployeeRef.current = 'milo';
+                      try {
+                        onRespond?.(synthResult);
+                      } catch (err) {
+                        console.error('[useMilo] synthesize onRespond error:', err);
+                      }
+                    }
+                  } catch (synthErr) {
+                    onThinking?.(false, null);
+                    const isAbort = synthErr?.name === 'AbortError' || chainAbort.signal.aborted;
+                    if (!isAbort) {
+                      console.error('[useMilo] synthesize error:', synthErr);
+                      logAiCallError({
+                        meetingId,
+                        employeeId: 'milo',
+                        error: synthErr,
+                        type: 'exception',
+                      });
+                    } else {
+                      logAiCallError({
+                        meetingId,
+                        employeeId: 'milo',
+                        error: 'synthesize aborted',
+                        type: 'abort',
+                      });
+                    }
+                    // 종합 실패해도 전문가 응답은 이미 표시됨 → 폴백 없이 그냥 종료
+                  }
+                }
+              } else if (successfulSpecs.length === 1) {
+                logOrchestrationSkip({
+                  meetingId,
+                  reason: 'synthesize_skipped_single_specialist',
+                  messageId: lastMsg.id,
+                });
               }
             }
           }

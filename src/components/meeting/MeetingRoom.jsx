@@ -241,7 +241,13 @@ export default function MeetingRoom() {
     }
     await sendMessage(result.response_text, {
       agendaId: currentAgenda?.id, isAi: true, aiType: result.ai_type,
-      aiEmployee: result.ai_employee || 'milo', searchSources: result.search_sources || null,
+      aiEmployee: result.ai_employee || 'milo',
+      searchSources: result.search_sources || null,
+      searchMode: result.search_mode || null,
+      // Phase 0 계측: 현재 병렬 fan-out 버전으로 응답됨
+      // Phase 1 적용 시 Milo 종합 메시지는 'parallel_synthesize_v1'로 기록됨
+      orchestrationVersion: result.orchestration_version || 'parallel_v1',
+      miloSynthesisId: result.milo_synthesis_id || null,
     });
   }, [sendMessage, currentAgenda]);
 
@@ -278,12 +284,24 @@ export default function MeetingRoom() {
         const mtg = freshMeeting || meeting;
         const userName = mtg.participants?.[0]?.name || '여러분';
         const agendaList = (mtg.agendas || []).filter((a) => a.title?.trim());
+        // 자동개입 OFF 상태에서는 AI 호출 방법 안내 추가
+        // (localStorage 최신값 직접 조회 — state 클로저 stale 방지)
+        let autoOn = true;
+        try {
+          const saved = localStorage.getItem('meetflow_auto_intervene');
+          autoOn = saved === null ? true : saved === 'true';
+        } catch { /* ignore */ }
+
+        const offGuide = autoOn
+          ? ''
+          : `\n\n💡 **AI 자동개입이 꺼져 있어요.**\n필요할 때 \`@밀로\` 또는 \`@노먼 / @코틀러 / @프뢰벨 / @간트 / @코르프 / @데밍\` 으로 호출하면 해당 전문가가 답변드립니다. 호출 전에는 조용히 듣고만 있을게요.`;
+
         let greeting;
         if (agendaList.length > 0) {
           const agendaNames = agendaList.map((a, i) => `${i + 1}. ${a.title}`).join('\n');
-          greeting = `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다.\n\n오늘의 어젠다:\n${agendaNames}\n\n첫 번째 안건 "${agendaList[0].title}"부터 시작하겠습니다. 의견을 자유롭게 나눠주세요!`;
+          greeting = `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다.\n\n오늘의 어젠다:\n${agendaNames}\n\n첫 번째 안건 "${agendaList[0].title}"부터 시작하겠습니다. 의견을 자유롭게 나눠주세요!${offGuide}`;
         } else {
-          greeting = `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다. 오늘 회의 주제나 논의하고 싶은 안건이 있으시면 알려주세요.`;
+          greeting = `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다. 오늘 회의 주제나 논의하고 싶은 안건이 있으시면 알려주세요.${offGuide}`;
         }
         sendMessage(greeting, { agendaId: mtg?.agendas?.[0]?.id, isAi: true, aiType: 'nudge', aiEmployee: 'milo' });
       }, 2000);

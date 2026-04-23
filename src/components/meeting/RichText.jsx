@@ -27,14 +27,16 @@ const EMOJI_MAP = [
 function parseInline(text, keyPrefix = '') {
   if (!text) return null;
 
-  // 통합 정규식: **bold** | [링크](URL) | @멘션 | (Art. X) | 이모지
+  // 통합 정규식: **bold** | ![이미지](URL) | [링크](URL) | @멘션 | (Art. X) | 이모지
+  // 주의: 이미지 패턴을 링크 패턴보다 먼저 매칭되도록 위치 (앞의 ! 존재 여부로 구분)
   const emojiChars = EMOJI_MAP.map((e) => e.pattern.source).join('|');
   const inlineRegex = new RegExp(
-    `(\\*\\*(.+?)\\*\\*)|` +                          // **bold**
-    `(\\[([^\\]]+)\\]\\((https?:\\/\\/[^)]+)\\))|` +  // [텍스트](URL)
-    `(@[\\u3131-\\uD79D\\w]+(?:님)?)` +               // @멘션 (@명배영, @명배영님)
-    `|(\\(?Art\\.\\s*\\d+(?:\\(\\d+\\))?\\)?)` +      // (Art. X) or Art. X
-    `|(${emojiChars})`,                                // emojis
+    `(\\*\\*(.+?)\\*\\*)|` +                            // 1,2: **bold**
+    `(!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)]+)\\))|` +   // 3,4,5: ![alt](URL) 이미지
+    `(\\[([^\\]]+)\\]\\((https?:\\/\\/[^)]+)\\))|` +    // 6,7,8: [텍스트](URL) 링크
+    `(@[\\u3131-\\uD79D\\w]+(?:님)?)` +                 // 9: @멘션
+    `|(\\(?Art\\.\\s*\\d+(?:\\(\\d+\\))?\\)?)` +        // 10: (Art. X)
+    `|(${emojiChars})`,                                  // 11: emojis
     'g'
   );
 
@@ -56,28 +58,57 @@ function parseInline(text, keyPrefix = '') {
         </strong>
       );
     } else if (match[3]) {
+      // ![alt](URL) — 인라인 이미지 (썸네일 카드)
+      const altText = match[4] || '이미지';
+      const imageUrl = match[5];
+      parts.push(
+        <a
+          key={`${keyPrefix}img${match.index}`}
+          href={imageUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block my-1.5 mr-1.5 rounded-md overflow-hidden border border-border-subtle hover:border-brand-purple/40 hover:shadow-md transition-all align-middle"
+          onClick={(e) => e.stopPropagation()}
+          title={altText}
+        >
+          <img
+            src={imageUrl}
+            alt={altText}
+            loading="lazy"
+            className="block max-w-[220px] max-h-[160px] w-auto h-auto object-cover"
+            onError={(e) => {
+              // 이미지 로드 실패 시 텍스트 링크로 대체
+              const fallback = document.createElement('span');
+              fallback.className = 'text-brand-purple underline text-xs';
+              fallback.textContent = altText;
+              e.target.replaceWith(fallback);
+            }}
+          />
+        </a>
+      );
+    } else if (match[6]) {
       // [텍스트](URL) — 링크
       parts.push(
         <a
           key={`${keyPrefix}l${match.index}`}
-          href={match[5]}
+          href={match[8]}
           target="_blank"
           rel="noopener noreferrer"
           className="text-brand-purple underline underline-offset-2 hover:text-brand-orange transition-colors"
         >
-          {match[4]}
+          {match[7]}
         </a>
       );
-    } else if (match[6]) {
+    } else if (match[9]) {
       // @멘션 — 하이라이트
       parts.push(
         <span key={`${keyPrefix}m${match.index}`} className="text-brand-purple font-semibold">
-          {match[6]}
+          {match[9]}
         </span>
       );
-    } else if (match[7]) {
+    } else if (match[10]) {
       // (Art. X) — 참조 뱃지
-      const refText = match[7].replace(/^\(|\)$/g, '').trim();
+      const refText = match[10].replace(/^\(|\)$/g, '').trim();
       parts.push(
         <ReferenceBadge key={`${keyPrefix}r${match.index}`} reference={refText} />
       );

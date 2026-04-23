@@ -307,7 +307,11 @@ ${preset || 'default'}
       (aiPromisedSearch && userShortConfirm) ||
       (aiPromisedSearch && !!searchIntentMsg);
 
-    if (GOOGLE_CSE_ID && GOOGLE_API_KEY && wantsSearch) {
+    // 종합 모드(Phase 1)에서는 웹 검색 스킵 — 전문가 응답을 통합하는 것만 목적이므로
+    //   context.mode === 'synthesize' 또는 context.skipSearch === true
+    const isSynthesizeMode = context?.mode === 'synthesize' || context?.skipSearch === true;
+
+    if (GOOGLE_CSE_ID && GOOGLE_API_KEY && wantsSearch && !isSynthesizeMode) {
       try {
         // 검색 쿼리 원본: 현재 메시지에 의도 키워드 있으면 그대로, 아니면 역추적한 의도 메시지 사용
         const sourceMsg = searchKeywords.test(lastUserMsg) ? lastUserMsg : (searchIntentMsg || lastUserMsg);
@@ -719,6 +723,34 @@ ${chunks.map((c, i) => `### 청크 ${i + 1}\n${c.original_text}`).join('\n\n')}
       cacheRead: usageLog.cache_read_tokens,
       cacheCreate: usageLog.cache_create_tokens,
     };
+
+    // 검색이 수행된 경우 UI가 이미지 갤러리 모드로 렌더할 수 있도록 플래그 전달
+    // 이미지 검색 실패 폴백으로 웹 검색이 사용된 경우에도 실제 최종 모드 전달 (actualUsedImage)
+    if (searchSection) {
+      // actualUsedImage는 wantsSearch 블록 내부 let 변수라 여기서 참조 불가 → searchSection 헤더로 판별
+      result.search_mode = searchSection.includes('Google 이미지 검색') ? 'image' : 'web';
+    }
+
+    // AI가 search_sources를 누락했지만 검색 결과는 있던 경우 보강
+    // (프롬프트 엄격 지시에도 LLM이 가끔 빈 배열 반환 — UI 카드 렌더 실패 방지)
+    if (searchSection && (!result.search_sources || result.search_sources.length === 0)) {
+      const extracted: Array<{ title: string; url: string; thumbnail?: string }> = [];
+      // searchSection에서 링크·이미지 markdown 파싱
+      // 패턴: "1. [제목](URL)" + (선택) "   ![이미지](thumbUrl)"
+      const itemRe = /\d+\.\s*\[([^\]]+)\]\((https?:\/\/[^)]+)\)(?:[^\n]*\n\s*!\[[^\]]*\]\((https?:\/\/[^)]+)\))?/g;
+      let m;
+      while ((m = itemRe.exec(searchSection)) !== null && extracted.length < 5) {
+        extracted.push({
+          title: m[1],
+          url: m[2],
+          thumbnail: m[3] || (result.search_mode === 'image' ? m[2] : undefined),
+        });
+      }
+      if (extracted.length > 0) {
+        result.search_sources = extracted;
+        console.log('[milo-analyze] Auto-filled search_sources:', extracted.length);
+      }
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

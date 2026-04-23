@@ -144,9 +144,33 @@ export const useMeetingStore = create((set, get) => ({
     if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     realtimeChannel = supabase
       .channel('meetings-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'meetings' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'meetings' }, async (payload) => {
         console.log('[meetingStore] INSERT:', payload.new.id);
+        // 1) 즉시 payload로 한 번 넣고 (UI 반응성)
         get().addMeeting(payload.new);
+        // 2) agendas/creator 등 embed 필드 채우기 위해 full row 재조회 → merge
+        try {
+          const { data } = await supabase
+            .from('meetings')
+            .select(`
+              *,
+              agendas(*),
+              creator:users!meetings_created_by_fkey(id, name, avatar_color)
+            `)
+            .eq('id', payload.new.id)
+            .maybeSingle();
+          if (data) {
+            const normalized = {
+              ...data,
+              creator: data.creator
+                ? { id: data.creator.id, name: data.creator.name, color: data.creator.avatar_color || '#723CEB' }
+                : null,
+            };
+            get().addMeeting(normalized); // merge 처리됨
+          }
+        } catch (err) {
+          console.warn('[meetingStore] INSERT refetch failed:', err?.message);
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'meetings' }, (payload) => {
         console.log('[meetingStore] UPDATE:', payload.new.id);
@@ -171,10 +195,32 @@ export const useMeetingStore = create((set, get) => ({
 
   getById: (id) => get().meetings.find((m) => m.id === id),
 
+  // addMeeting: 신규면 prepend, 이미 있으면 merge (agendas/participants 등 풍부한 필드 보존)
+  // — Realtime INSERT payload는 meetings 테이블 row만 담고 있어 agendas가 없음.
+  //   로컬 createMeeting은 agendas까지 담아 호출하므로, 둘 중 어느 것이 먼저 오든
+  //   최종 상태에 agendas가 남아 있도록 병합.
   addMeeting: (meeting) =>
     set((state) => {
-      if (state.meetings.some((m) => m.id === meeting.id)) return state;
-      return { meetings: [meeting, ...state.meetings] };
+      const existing = state.meetings.find((m) => m.id === meeting.id);
+      if (!existing) {
+        return { meetings: [meeting, ...state.meetings] };
+      }
+      const merged = {
+        ...existing,
+        ...meeting,
+        agendas:
+          meeting.agendas && meeting.agendas.length > 0
+            ? meeting.agendas
+            : existing.agendas,
+        participants:
+          meeting.participants && meeting.participants.length > 0
+            ? meeting.participants
+            : existing.participants,
+        creator: meeting.creator || existing.creator,
+      };
+      return {
+        meetings: state.meetings.map((m) => (m.id === meeting.id ? merged : m)),
+      };
     }),
 
   updateMeeting: (id, patch) =>
