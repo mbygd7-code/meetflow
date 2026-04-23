@@ -19,6 +19,8 @@ import { useToastStore } from '@/stores/toastStore';
 import SummaryAgendaList from './SummaryAgendaList';
 import MeetingMetaBar from './MeetingMetaBar';
 import MeetingParticipants from './MeetingParticipants';
+import MeetingFeedback from './MeetingFeedback';
+import { computeMeetingScore } from '@/utils/meetingScoreUtils';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -94,6 +96,90 @@ function formatDurationLabel(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+}
+
+// 회의 품질 점수 뱃지 — 등급(S/A+/...) + hover 시 축별 breakdown
+function MeetingScoreBadge({ score: scoreData }) {
+  const [open, setOpen] = useState(false);
+  if (!scoreData) return null;
+  const { score, grade, breakdown, strengths, weaknesses } = scoreData;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${grade.bg} ${grade.color} border-current/20 hover:border-current/40`}
+        title="회의 품질 점수 — 6개 축 가중 평균"
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">평가</span>
+        <span className="text-lg font-bold leading-none">{grade.label}</span>
+        <span className="text-[10px] font-medium opacity-80">{score}점</span>
+      </button>
+
+      {/* Hover 상세 */}
+      {open && (
+        <div
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          className="absolute right-0 top-full mt-2 w-72 bg-bg-secondary border border-border-subtle rounded-lg shadow-lg z-20 p-3"
+        >
+          <div className="flex items-baseline justify-between mb-2 pb-2 border-b border-border-divider">
+            <div>
+              <span className={`text-2xl font-bold ${grade.color}`}>{grade.label}</span>
+              <span className="text-xs text-txt-muted ml-2">{score}/100</span>
+            </div>
+            <span className="text-[10px] text-txt-muted">6개 축 가중 평균</span>
+          </div>
+
+          {/* 축별 breakdown */}
+          <div className="space-y-1.5">
+            {breakdown.map((b) => {
+              const barColor =
+                b.score >= 80 ? 'bg-status-success'
+                : b.score >= 60 ? 'bg-brand-orange'
+                : b.score >= 40 ? 'bg-status-warning'
+                : 'bg-status-error';
+              return (
+                <div key={b.key} className="text-[11px]">
+                  <div className="flex items-baseline justify-between mb-0.5">
+                    <span className="text-txt-primary font-medium">{b.label}</span>
+                    <span className="text-txt-muted">
+                      {b.score}점 <span className="text-[9px] opacity-60">× {b.weight}%</span>
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${barColor}`}
+                      style={{ width: `${b.score}%` }}
+                    />
+                  </div>
+                  {b.hint && <p className="text-[10px] text-txt-muted mt-0.5">{b.hint}</p>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 강점/약점 */}
+          {(strengths.length > 0 || weaknesses.length > 0) && (
+            <div className="mt-2 pt-2 border-t border-border-divider space-y-1 text-[10px]">
+              {strengths.length > 0 && (
+                <p className="text-status-success">
+                  ✓ 강점: {strengths.map((s) => s.label).join(', ')}
+                </p>
+              )}
+              {weaknesses.length > 0 && (
+                <p className="text-status-warning">
+                  ⚠ 개선: {weaknesses.map((s) => s.label).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-purple' }) {
@@ -229,6 +315,17 @@ export default function MeetingSummary() {
       total: messages.length,
     };
   }, [messages, meeting?.started_at, meeting?.ended_at]);
+
+  // 회의 품질 점수 (S/A+/A/B+/...) — 6개 축 가중 평균
+  const meetingScore = useMemo(() => {
+    if (!meeting || !summary) return null;
+    try {
+      return computeMeetingScore({ meeting, summary, messages: messages || [], stats });
+    } catch (err) {
+      console.error('[MeetingSummary] score compute failed:', err);
+      return null;
+    }
+  }, [meeting, summary, messages, stats]);
 
   // 어젠다별 통계 — 메시지의 agenda_id를 기반으로 계산
   //  - messageCount: 해당 어젠다에 속한 메시지 수 (focus %)
@@ -372,6 +469,16 @@ export default function MeetingSummary() {
           <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
             {meeting.status === 'completed' ? '완료' : meeting.status}
           </Badge>
+
+          {/* 우측: 피드백 아이콘 + 회의 점수 — 완료 회의에만 노출 */}
+          {meeting.status === 'completed' && (
+            <div className="ml-auto flex items-center gap-3">
+              <MeetingFeedback meetingId={meeting.id} compact />
+              {meetingScore && (
+                <MeetingScoreBadge score={meetingScore} />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
