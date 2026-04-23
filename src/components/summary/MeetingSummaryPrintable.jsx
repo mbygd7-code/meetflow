@@ -64,9 +64,24 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
     : insight;
 
   return (
+    // 외부 래퍼: 0×0으로 클립하되 부모 위치는 정상 (fixed top/left 0)
+    // 안쪽 요소는 794×1123로 풀 페인트 → 브라우저는 렌더하지만 사용자엔 안 보임
+    // html2canvas는 painted pixel을 읽으므로 정상 캡처
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: 0,
+        height: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: -1,
+      }}
+    >
     <div
       ref={ref}
-      // data-pdf-printable 속성으로 PDF 생성 시 스타일을 프로그래매틱하게 토글
       data-pdf-printable
       style={{
         width: A4_W,
@@ -78,11 +93,6 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
         fontFamily: '"Pretendard", "Inter", -apple-system, sans-serif',
         fontSize: 11,
         lineHeight: 1.45,
-        // 기본: 뷰포트 밖 왼쪽으로 밀어내 안 보이게 (opacity 0 쓰지 않음 — html2canvas 호환)
-        position: 'fixed',
-        top: 0,
-        left: '-9999px',
-        pointerEvents: 'none',
       }}
     >
       {/* ═══ 1. 헤더 (평가 뱃지 제거) ═══ */}
@@ -295,6 +305,7 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
         <span>MeetFlow · AI 기반 회의록</span>
         <span>{safeFormatDate(new Date().toISOString(), 'yyyy.MM.dd HH:mm', '')} 생성</span>
       </footer>
+    </div>
     </div>
   );
 });

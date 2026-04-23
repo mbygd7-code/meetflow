@@ -345,15 +345,6 @@ export default function MeetingSummary() {
             windowHeight: 1123,
             scrollX: 0,
             scrollY: 0,
-            // 오프스크린 요소도 캡처되도록 clone 단계에서 가시화
-            onclone: (clonedDoc) => {
-              const el = clonedDoc.querySelector('[data-pdf-printable]');
-              if (el) {
-                el.style.position = 'static';
-                el.style.left = '0';
-                el.style.top = '0';
-              }
-            },
           },
           jsPDF: {
             unit: 'mm',
