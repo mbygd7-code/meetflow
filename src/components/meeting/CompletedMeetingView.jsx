@@ -2359,7 +2359,6 @@ export default function CompletedMeetingView({ meeting }) {
           {scrubberBuckets.length > 0 && (
             <div className="sticky top-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-2 bg-bg-primary/90 backdrop-blur-sm border-b border-border-divider mb-5">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-txt-muted font-medium shrink-0">시작</span>
                 <div className="flex-1 flex items-end gap-[1.5px] h-8" role="group" aria-label="메시지 타임라인">
                   {scrubberBuckets.map((b, i) => (
                     <button
@@ -2389,7 +2388,6 @@ export default function CompletedMeetingView({ meeting }) {
                     </button>
                   ))}
                 </div>
-                <span className="text-[10px] text-txt-muted font-medium shrink-0">종료</span>
               </div>
             </div>
           )}
