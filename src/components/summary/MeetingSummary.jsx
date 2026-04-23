@@ -115,7 +115,6 @@ function MeetingScoreBadge({ score: scoreData }) {
       >
         <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">평가</span>
         <span className="text-lg font-bold leading-none">{grade.label}</span>
-        <span className="text-[10px] font-medium opacity-80">{score}점</span>
       </button>
 
       {/* Hover 상세 */}
