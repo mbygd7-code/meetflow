@@ -201,10 +201,11 @@ export function useRealtimeMessages(meetingId) {
           if (msg.user_id && !msg.user) {
             const { data: userData } = await supabase
               .from('users')
-              .select('id, name, avatar_color')
+              .select('id, name, avatar_color, email')
               .eq('id', msg.user_id)
               .maybeSingle();
-            msg.user = userData;
+            // public.users 레코드가 없어도 최소 user_id는 전달 → ChatBubble fallback 동작
+            msg.user = userData || { id: msg.user_id };
           }
           dedupAdd(msg);
         }

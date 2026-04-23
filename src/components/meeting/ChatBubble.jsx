@@ -93,7 +93,11 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
   if (isAi) {
     senderName = emp?.nameKo || emp?.name || message.user?.name || 'Milo';
   } else {
-    senderName = message.user?.name || '알 수 없음';
+    // user JOIN이 실패한 경우(삭제된 사용자 / public.users 동기화 누락):
+    // user.email 앞 부분 또는 user_id 짧게 fallback — "알없" 대신 식별 가능한 값
+    const fallback = message.user?.email?.split('@')[0]
+      || (message.user_id ? `참가자 ${message.user_id.slice(0, 4)}` : '손님');
+    senderName = message.user?.name || fallback;
   }
 
   const senderColor = message.user?.color || message.user?.avatar_color || '#723CEB';

@@ -48,7 +48,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
   }, [members, query]);
 
   return (
-    <div className="w-full lg:w-[300px] shrink-0 border-r border-border-subtle bg-bg-secondary flex flex-col overflow-hidden">
+    <div className="w-full lg:w-[300px] shrink-0 border-r border-border-subtle bg-[var(--panel-bg)] flex flex-col overflow-hidden">
       {/* 검색 */}
       <div className="p-3 border-b border-border-divider">
         <div className="relative">
