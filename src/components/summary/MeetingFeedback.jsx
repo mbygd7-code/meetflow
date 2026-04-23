@@ -41,16 +41,25 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
         return;
       }
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('meeting_reactions')
           .select('user_id, reaction')
           .eq('meeting_id', meetingId);
         if (cancelled) return;
-        const list = data || [];
-        setReactions(list);
-        setMyReaction(list.find((r) => r.user_id === user?.id)?.reaction || null);
+        if (error) {
+          // 테이블이 없으면 콘솔에만 경고 (UI는 빈 상태로 표시)
+          if (error.code === '42P01') {
+            console.warn('[MeetingFeedback] meeting_reactions 테이블 없음 — migration 034 실행 필요');
+          } else {
+            console.error('[MeetingFeedback] load failed:', error);
+          }
+        } else {
+          const list = data || [];
+          setReactions(list);
+          setMyReaction(list.find((r) => r.user_id === user?.id)?.reaction || null);
+        }
       } catch (err) {
-        console.error('[MeetingFeedback] load failed:', err);
+        console.error('[MeetingFeedback] load exception:', err);
       }
       if (!cancelled) setLoading(false);
     }
@@ -121,7 +130,22 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
     } catch (err) {
       console.error('[MeetingFeedback] save failed:', err);
       setMyReaction(prev);
-      addToast?.('피드백 저장 실패', 'error', 3000);
+      // 원인별 구체적 메시지 (디버깅 용이)
+      const code = err?.code;
+      const msg = err?.message || '';
+      let friendly = '피드백 저장 실패';
+      if (code === '42P01' || msg.includes('meeting_reactions') && msg.includes('does not exist')) {
+        friendly = 'DB 테이블 없음 — migration 034 실행 필요 (관리자 문의)';
+      } else if (code === '42501' || msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('policy')) {
+        friendly = '권한 오류 — RLS 정책 확인 필요 (migration 034)';
+      } else if (code === '23514') {
+        friendly = '잘못된 피드백 종류';
+      } else if (code === '23503') {
+        friendly = '사용자 정보 동기화 오류';
+      } else if (msg) {
+        friendly = `피드백 저장 실패: ${msg.slice(0, 60)}`;
+      }
+      addToast?.(friendly, 'error', 5000);
     } finally {
       setBusy(null);
     }
