@@ -1,5 +1,5 @@
-import { useMemo, useState, useCallback } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { useMemo, useCallback } from 'react';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
   Zap, CircleDot, MessageSquare, TrendingUp,
@@ -12,23 +12,16 @@ import { differenceInDays, parseISO, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
 import MyTaskCard from '@/components/task/MyTaskCard';
-import TaskSlidePanel from '@/components/task/TaskSlidePanel';
 import EmptyState from '@/components/ui/EmptyState';
 import { getDueDateStatus, safeFormatDate } from '@/utils/formatters';
 import { DASHBOARD_LIMITS, URGENT_DUE_DAYS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
-  // id만 저장 — Realtime 업데이트 시 항상 store의 최신 객체를 조회
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
   const { tasks } = useTaskStore();
-
-  const selectedTask = useMemo(
-    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null),
-    [selectedTaskId, tasks]
-  );
 
   const today = format(new Date(), 'yyyy년 MM월 dd일 EEEE', { locale: ko });
 
@@ -121,12 +114,12 @@ export default function DashboardPage() {
     return `오늘 ${parts.join(' · ')} 있어요`;
   }, [todayMeetings, taskCounts]);
 
-  // ─── 태스크 선택 토글 (useCallback으로 렌더 간 안정화) ───
+  // ─── 태스크 카드 클릭 → 멤버/태스크 페이지 상세 모달로 이동 ───
+  // (인라인 슬라이드 패널 대신 전용 페이지에서 전체 상세/코멘트/첨부 확인)
   const handleSelectTask = useCallback((task) => {
-    setSelectedTaskId((cur) => (cur === task.id ? null : task.id));
-  }, []);
-
-  const handleCloseTask = useCallback(() => setSelectedTaskId(null), []);
+    if (!task?.id) return;
+    navigate(`/members?member=all&task=${encodeURIComponent(task.id)}`);
+  }, [navigate]);
 
   return (
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
@@ -313,7 +306,6 @@ export default function DashboardPage() {
                 <MyTaskCard
                   key={t.id}
                   task={t}
-                  selected={selectedTaskId === t.id}
                   onSelect={handleSelectTask}
                 />
               ))}
@@ -324,8 +316,6 @@ export default function DashboardPage() {
 
       {/* ═══ 데스크톱 오른쪽: 내 태스크 ═══ */}
       <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 relative">
-        <TaskSlidePanel task={selectedTask} onClose={handleCloseTask} />
-
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-semibold text-txt-primary">내 태스크</h2>
@@ -357,7 +347,6 @@ export default function DashboardPage() {
               <MyTaskCard
                 key={t.id}
                 task={t}
-                selected={selectedTaskId === t.id}
                 onSelect={handleSelectTask}
               />
             ))}
