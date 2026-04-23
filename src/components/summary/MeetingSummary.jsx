@@ -320,35 +320,12 @@ export default function MeetingSummary() {
     });
   }, [meeting?.agendas, messages]);
 
-  // PDF 다운로드 — A4 전용 템플릿을 사용. 생성 중에만 잠깐 화면에 표시해
-  // html2canvas가 안전하게 캡처하도록 함.
+  // PDF 다운로드 — Printable은 항상 오프스크린(-9999px)에 렌더되어 있고,
+  // html2canvas는 position:fixed 오프스크린 요소도 정상 캡처함.
+  // 따라서 스타일을 토글하지 않음 → 사용자에게 플래시 전혀 없음.
   const handleDownloadPdf = async () => {
     if (!printableRef.current || !meeting || downloadingPdf) return;
     setDownloadingPdf(true);
-
-    const el = printableRef.current;
-    // 원본 스타일 백업
-    const backup = {
-      position: el.style.position,
-      left: el.style.left,
-      top: el.style.top,
-      opacity: el.style.opacity,
-      zIndex: el.style.zIndex,
-      pointerEvents: el.style.pointerEvents,
-    };
-
-    // 캡처 가능하도록 뷰포트 내 불투명 상태로 전환 (사용자엔 pointer-events:none으로 노출 X)
-    // 투명 레이어로 0.01 opacity — 시각적으로 안 보이되 html2canvas는 정상 읽음
-    el.style.position = 'fixed';
-    el.style.top = '0';
-    el.style.left = '0';
-    el.style.opacity = '1';            // 렌더 픽셀 확보
-    el.style.zIndex = '99999';         // 잠시 최상단
-    el.style.pointerEvents = 'none';
-
-    // 페인트 기회 부여 (한 프레임)
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
     try {
       const html2pdf = (await import('html2pdf.js')).default;
       const fname = `${(meeting.title || '회의록').replace(/[\\/:*?"<>|]/g, '_')}_${safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyyMMdd_HHmm', 'export')}.pdf`;
@@ -368,6 +345,15 @@ export default function MeetingSummary() {
             windowHeight: 1123,
             scrollX: 0,
             scrollY: 0,
+            // 오프스크린 요소도 캡처되도록 clone 단계에서 가시화
+            onclone: (clonedDoc) => {
+              const el = clonedDoc.querySelector('[data-pdf-printable]');
+              if (el) {
+                el.style.position = 'static';
+                el.style.left = '0';
+                el.style.top = '0';
+              }
+            },
           },
           jsPDF: {
             unit: 'mm',
@@ -377,15 +363,13 @@ export default function MeetingSummary() {
           },
           pagebreak: { mode: [], avoid: '*' },
         })
-        .from(el)
+        .from(printableRef.current)
         .save();
       addToast?.('PDF 다운로드 완료', 'success', 2500);
     } catch (err) {
       console.error('[downloadPdf]', err);
       addToast?.('PDF 생성 실패', 'error', 3000);
     } finally {
-      // 스타일 원복
-      Object.assign(el.style, backup);
       setDownloadingPdf(false);
     }
   };

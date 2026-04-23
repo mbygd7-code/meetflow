@@ -252,12 +252,6 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
                     <td style={{ padding: '4px 6px', color: '#52525b', verticalAlign: 'top' }}>{a.assignee_hint || '-'}</td>
                     <td style={{ padding: '4px 6px', color: '#52525b', verticalAlign: 'top' }}>{a.due_hint || '-'}</td>
                     <td style={{ padding: '4px 6px', verticalAlign: 'top', color: pri.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: pri.color, marginRight: 4,
-                        verticalAlign: 'middle',
-                      }} />
                       {pri.label}
                     </td>
                   </tr>
