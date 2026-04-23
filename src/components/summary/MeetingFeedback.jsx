@@ -1,59 +1,27 @@
+// 회의록 피드백 — AI 메시지 FeedbackButtons와 동일한 스타일/개수(👍/👎)
+// 차이점: 사이즈를 키워 헤더에서 눈에 띄게 표시
+// DB 매핑: 👍 → reaction='loved', 👎 → reaction='poor' (migration 034 CHECK 호환)
+
 import { useState, useEffect, useCallback } from 'react';
-import { Heart, Lightbulb, Meh, ThumbsDown, Loader2 } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
-
-// 리액션 종류 정의 — migration 034의 CHECK 제약과 일치해야 함
-const REACTIONS = [
-  {
-    key: 'loved',
-    label: '아주 좋음',
-    Icon: Heart,
-    color: 'text-status-error',      // 빨강 하트
-    bg: 'bg-status-error/10',
-    border: 'border-status-error/30',
-    hoverBg: 'hover:bg-status-error/15',
-  },
-  {
-    key: 'useful',
-    label: '유용했음',
-    Icon: Lightbulb,
-    color: 'text-brand-orange',
-    bg: 'bg-brand-orange/10',
-    border: 'border-brand-orange/30',
-    hoverBg: 'hover:bg-brand-orange/15',
-  },
-  {
-    key: 'okay',
-    label: '보통',
-    Icon: Meh,
-    color: 'text-txt-secondary',
-    bg: 'bg-bg-tertiary',
-    border: 'border-border-default',
-    hoverBg: 'hover:bg-bg-tertiary',
-  },
-  {
-    key: 'poor',
-    label: '개선 필요',
-    Icon: ThumbsDown,
-    color: 'text-status-warning',
-    bg: 'bg-status-warning/10',
-    border: 'border-status-warning/30',
-    hoverBg: 'hover:bg-status-warning/15',
-  },
-];
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isDemoMeeting = (id) => !id || !UUID_RE.test(id);
 
+// UI key ↔ DB reaction 매핑 (기존 테이블 CHECK와 호환)
+const UP_KEY = 'loved';   // 👍
+const DOWN_KEY = 'poor';  // 👎
+
 export default function MeetingFeedback({ meetingId, compact = false }) {
   const { user } = useAuthStore();
   const addToast = useToastStore((s) => s.addToast);
-  const [reactions, setReactions] = useState([]); // 전체 리액션 목록
-  const [myReaction, setMyReaction] = useState(null); // 내 리액션 key
-  const [busy, setBusy] = useState(null); // 현재 클릭 처리 중인 key
+  const [reactions, setReactions] = useState([]);
+  const [myReaction, setMyReaction] = useState(null);
+  const [busy, setBusy] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // 로드 + Realtime 구독
@@ -65,7 +33,6 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
     async function load() {
       setLoading(true);
       if (!SUPABASE_ENABLED || isDemoMeeting(meetingId)) {
-        // 데모 모드: localStorage에서 로컬 리액션 복원
         try {
           const raw = localStorage.getItem(`meetflow_reaction:${meetingId}`);
           if (raw && !cancelled) setMyReaction(raw);
@@ -89,7 +56,6 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
     }
     load();
 
-    // Realtime — 다른 사용자 피드백 즉시 반영
     if (SUPABASE_ENABLED && !isDemoMeeting(meetingId)) {
       channel = supabase
         .channel(`meeting_reactions:${meetingId}:${Date.now()}`)
@@ -112,16 +78,13 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
     };
   }, [meetingId, user?.id]);
 
-  // 카운트 집계
   const countOf = (key) => reactions.filter((r) => r.reaction === key).length;
 
-  // 리액션 토글/변경
   const handleClick = useCallback(async (key) => {
     if (busy) return;
     setBusy(key);
     const isToggleOff = myReaction === key;
     const prev = myReaction;
-    // 낙관적 업데이트
     setMyReaction(isToggleOff ? null : key);
 
     try {
@@ -130,7 +93,6 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
           if (isToggleOff) localStorage.removeItem(`meetflow_reaction:${meetingId}`);
           else localStorage.setItem(`meetflow_reaction:${meetingId}`, key);
         } catch {}
-        addToast?.(isToggleOff ? '피드백을 취소했습니다' : '피드백을 저장했습니다', 'success', 1800);
         return;
       }
 
@@ -141,7 +103,6 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
       }
 
       if (isToggleOff) {
-        // 취소 → DELETE
         const { error } = await supabase
           .from('meeting_reactions')
           .delete()
@@ -149,7 +110,6 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
           .eq('user_id', user.id);
         if (error) throw error;
       } else {
-        // 등록 또는 변경 → UPSERT
         const { error } = await supabase
           .from('meeting_reactions')
           .upsert(
@@ -158,61 +118,75 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
           );
         if (error) throw error;
       }
-      // 카운트는 Realtime으로 갱신됨
     } catch (err) {
       console.error('[MeetingFeedback] save failed:', err);
-      setMyReaction(prev); // 롤백
+      setMyReaction(prev);
       addToast?.('피드백 저장 실패', 'error', 3000);
     } finally {
       setBusy(null);
     }
   }, [myReaction, busy, meetingId, user?.id, addToast]);
 
+  // 사이즈 — AI 메시지 FeedbackButtons 대비 1.5배 이상
+  const iconSize = compact ? 16 : 18;
+  const padX = compact ? 'px-2' : 'px-2.5';
+  const padY = compact ? 'py-1' : 'py-1.5';
+  const textSize = compact ? 'text-xs' : 'text-sm';
+  const btnBase = `inline-flex items-center gap-1.5 ${padX} ${padY} rounded-md transition-colors ${textSize} font-medium`;
+
+  const isUp = myReaction === UP_KEY;
+  const isDown = myReaction === DOWN_KEY;
+  const upCount = countOf(UP_KEY);
+  const downCount = countOf(DOWN_KEY);
+  const hasAnyFeedback = upCount > 0 || downCount > 0;
+
   if (loading) {
     return (
-      <div className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-txt-muted">
-        <Loader2 size={11} className="animate-spin" />
-        피드백 로드 중...
+      <div className={`inline-flex items-center gap-1 ${padX} ${padY} ${textSize} text-txt-muted`}>
+        <Loader2 size={iconSize} className="animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="inline-flex items-center gap-1" role="group" aria-label="회의 피드백">
-      {REACTIONS.map(({ key, label, Icon, color, bg, border, hoverBg }) => {
-        const active = myReaction === key;
-        const count = countOf(key);
-        const isBusy = busy === key;
-        return (
-          <button
-            key={key}
-            onClick={() => handleClick(key)}
-            disabled={!!busy}
-            className={`group/rx inline-flex items-center gap-1 ${compact ? 'px-1.5 py-0.5' : 'px-2 py-1'} rounded-md border transition-all ${
-              active
-                ? `${bg} ${border} ${color}`
-                : `bg-transparent border-transparent text-txt-muted ${hoverBg} hover:${color}`
-            } ${busy && !isBusy ? 'opacity-50' : ''}`}
-            title={`${label}${count > 0 ? ` · ${count}명` : ''}${active ? ' (내 피드백)' : ''}`}
-            aria-pressed={active}
-          >
-            {isBusy ? (
-              <Loader2 size={compact ? 12 : 14} className="animate-spin" />
-            ) : (
-              <Icon
-                size={compact ? 12 : 14}
-                strokeWidth={active ? 2.4 : 2}
-                fill={active && key === 'loved' ? 'currentColor' : 'none'}
-              />
-            )}
-            {count > 0 && (
-              <span className={`text-[10px] font-semibold ${active ? color : 'text-txt-muted'}`}>
-                {count}
-              </span>
-            )}
-          </button>
-        );
-      })}
+    <div className="relative inline-flex items-center gap-1" role="group" aria-label="회의 피드백">
+      <button
+        onClick={() => handleClick(UP_KEY)}
+        disabled={!!busy}
+        className={`${btnBase} ${
+          isUp
+            ? 'text-status-success bg-status-success/10'
+            : 'text-txt-muted hover:text-status-success hover:bg-status-success/5'
+        } ${busy && busy !== UP_KEY ? 'opacity-60' : ''}`}
+        title={isUp ? '피드백 취소' : '도움됐어요'}
+        aria-pressed={isUp}
+      >
+        {busy === UP_KEY ? (
+          <Loader2 size={iconSize} className="animate-spin" />
+        ) : (
+          <ThumbsUp size={iconSize} strokeWidth={isUp ? 2.4 : 2} />
+        )}
+        {hasAnyFeedback && upCount > 0 && <span>{upCount}</span>}
+      </button>
+
+      <button
+        onClick={() => handleClick(DOWN_KEY)}
+        disabled={!!busy}
+        className={`${btnBase} ${
+          isDown
+            ? 'text-status-error bg-status-error/10'
+            : 'text-txt-muted hover:text-status-error hover:bg-status-error/5'
+        } ${busy && busy !== DOWN_KEY ? 'opacity-60' : ''}`}
+        title={isDown ? '피드백 취소' : '개선이 필요해요'}
+        aria-pressed={isDown}
+      >
+        {busy === DOWN_KEY ? (
+          <Loader2 size={iconSize} className="animate-spin" />
+        ) : (
+          <ThumbsDown size={iconSize} strokeWidth={isDown ? 2.4 : 2} />
+        )}
+        {hasAnyFeedback && downCount > 0 && <span>{downCount}</span>}
+      </button>
     </div>
   );
 }

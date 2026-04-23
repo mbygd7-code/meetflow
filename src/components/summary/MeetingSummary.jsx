@@ -473,7 +473,7 @@ export default function MeetingSummary() {
           {/* 우측: 피드백 아이콘 + 회의 점수 — 완료 회의에만 노출 */}
           {meeting.status === 'completed' && (
             <div className="ml-auto flex items-center gap-3">
-              <MeetingFeedback meetingId={meeting.id} compact />
+              <MeetingFeedback meetingId={meeting.id} />
               {meetingScore && (
                 <MeetingScoreBadge score={meetingScore} />
               )}
