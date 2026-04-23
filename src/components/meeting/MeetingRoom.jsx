@@ -669,15 +669,21 @@ function DocumentPanel({ files = [], getUrl }) {
     document.addEventListener('mouseup', onUp);
   };
 
+  // 파일이 없을 때는 최소 폭(80px)으로 자동 축소 → 채팅 공간 확보
+  // 사용자의 저장된 폭은 그대로 유지 (파일 업로드 시 복원됨)
+  const MIN_WIDTH = 80;
+  const isEmpty = files.length === 0;
+  const effectiveWidth = isEmpty ? MIN_WIDTH : width;
+
   // 항상 1열 유지 — 패널 폭이 커질수록 썸네일도 같이 커짐 (세로 리스트)
-  const isCompact = width < 180; // 매우 좁을 때: 헤더/파일명 숨김
+  const isCompact = effectiveWidth < 180; // 매우 좁을 때: 헤더/파일명 숨김
 
   // 문서/플로팅 윈도우용 파일 URL 로딩
   return (
     <>
       <aside
-        className="hidden md:flex flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative"
-        style={{ width }}
+        className="hidden md:flex flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative transition-[width] duration-200 ease-out"
+        style={{ width: effectiveWidth }}
       >
         {/* 헤더 — 컴팩트 모드에서는 심플하게 */}
         <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
@@ -733,15 +739,17 @@ function DocumentPanel({ files = [], getUrl }) {
           />
         )}
 
-        {/* 리사이저 — 우측 세로 라인 드래그 */}
-        <div
-          ref={resizerRef}
-          onMouseDown={onResizerDown}
-          className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/resize"
-          title="드래그하여 크기 조절"
-        >
-          <div className="absolute top-0 right-0 w-px h-full bg-border-subtle group-hover/resize:bg-brand-purple/40 transition-colors" />
-        </div>
+        {/* 리사이저 — 우측 세로 라인 드래그 (자료 있을 때만 활성화) */}
+        {!isEmpty && (
+          <div
+            ref={resizerRef}
+            onMouseDown={onResizerDown}
+            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/resize"
+            title="드래그하여 크기 조절"
+          >
+            <div className="absolute top-0 right-0 w-px h-full bg-border-subtle group-hover/resize:bg-brand-purple/40 transition-colors" />
+          </div>
+        )}
       </aside>
 
       {/* 문서 플로팅 윈도우 — 배경 오버레이 없음, 드래그/리사이즈 가능 */}
