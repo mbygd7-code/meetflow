@@ -1,11 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
 import { FileText, Loader2, Sparkles, Search, X } from 'lucide-react';
 import { Card, Badge, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { formatDate } from '@/utils/formatters';
+import { supabase } from '@/lib/supabase';
 import MeetingSummary from '@/components/summary/MeetingSummary';
+import MeetingFeedback from '@/components/summary/MeetingFeedback';
+import MeetingScoreBadge from '@/components/summary/MeetingScoreBadge';
+import { computeMeetingScore } from '@/utils/meetingScoreUtils';
+
+const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // 기간 필터 옵션 — 기준 시각 대비 N일 이내
 const RANGE_OPTIONS = [
@@ -60,6 +67,8 @@ function SummaryList() {
   const [range, setRange] = useState('all');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // 회의 요약 데이터 맵 (meeting_id → summary_data) — 카드 점수 계산용
+  const [summariesMap, setSummariesMap] = useState({});
 
   const generatingMeeting = summaryGeneratingId
     ? meetings.find((m) => m.id === summaryGeneratingId)
@@ -97,6 +106,33 @@ function SummaryList() {
       return tb - ta;
     });
   }, [allCompleted, range, searchQuery]);
+
+  // 완료된 회의들의 summary_data 배치 로드 (점수 계산용)
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || allCompleted.length === 0) return;
+    const realIds = allCompleted
+      .map((m) => m.id)
+      .filter((id) => UUID_RE.test(id));
+    if (realIds.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('meeting_summaries')
+          .select('meeting_id, summary_data')
+          .in('meeting_id', realIds);
+        if (cancelled) return;
+        const map = {};
+        for (const row of data || []) {
+          if (row.summary_data) map[row.meeting_id] = row.summary_data;
+        }
+        setSummariesMap(map);
+      } catch (err) {
+        console.warn('[SummaryList] summaries batch load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [allCompleted]);
 
   // 각 기간별 카운트 (탭에 숫자 표시용)
   const rangeCounts = useMemo(() => {
@@ -197,28 +233,64 @@ function SummaryList() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((m) => (
-                <Link key={m.id} to={`/summaries/${m.id}`}>
-                  <Card className="hover:border-border-hover-strong !bg-bg-tertiary">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
-                          {m.title}
-                        </h3>
-                        <p className="text-xs text-txt-secondary">
-                          {formatDate(m.ended_at || m.started_at, 'yyyy.MM.dd HH:mm')} ·
-                          어젠다 {m.agendas?.length || 0}개 ·
-                          참여 {m.participant_count ?? m.participants?.length ?? 0}명
-                          {typeof m.message_count === 'number' && m.message_count > 0 && (
-                            <> · 메시지 {m.message_count}건</>
-                          )}
-                        </p>
+              {filtered.map((m) => {
+                const summary = summariesMap[m.id];
+                // 점수 계산 — summary가 로드된 경우에만 (없으면 뱃지 숨김)
+                // 리스트 뷰이므로 messages를 비워 전달 (score 유틸이 agenda.status로 대체 판정)
+                let scoreData = null;
+                if (summary) {
+                  try {
+                    scoreData = computeMeetingScore({
+                      meeting: m,
+                      summary,
+                      messages: [],
+                      stats: {
+                        participants: Array.from({ length: m.participant_count ?? m.participants?.length ?? 0 }),
+                        total: m.message_count ?? 0,
+                        durationMin: (m.started_at && m.ended_at)
+                          ? Math.max(0, Math.round((new Date(m.ended_at) - new Date(m.started_at)) / 60000))
+                          : 0,
+                      },
+                    });
+                  } catch {}
+                }
+                return (
+                  <Link key={m.id} to={`/summaries/${m.id}`}>
+                    <Card className="hover:border-border-hover-strong !bg-bg-tertiary">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
+                            {m.title}
+                          </h3>
+                          <p className="text-xs text-txt-secondary">
+                            {formatDate(m.ended_at || m.started_at, 'yyyy.MM.dd HH:mm')} ·
+                            어젠다 {m.agendas?.length || 0}개 ·
+                            참여 {m.participant_count ?? m.participants?.length ?? 0}명
+                            {typeof m.message_count === 'number' && m.message_count > 0 && (
+                              <> · 메시지 {m.message_count}건</>
+                            )}
+                          </p>
+                        </div>
+                        {/* 평가 + 피드백 — 클릭 시 카드 네비 방지 */}
+                        <div
+                          className="flex items-center gap-2 shrink-0"
+                          onClick={(e) => {
+                            // 내부 인터랙티브(버튼/드롭다운)는 Link 네비 차단
+                            if (e.target.closest('button')) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }
+                          }}
+                        >
+                          <MeetingFeedback meetingId={m.id} compact />
+                          {scoreData && <MeetingScoreBadge score={scoreData} compact />}
+                          <Badge variant="outline">완료</Badge>
+                        </div>
                       </div>
-                      <Badge variant="outline">완료</Badge>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
+                    </Card>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
