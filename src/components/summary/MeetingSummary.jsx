@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
   Loader, Clock, Users, MessageSquare,
-  ChevronDown, ChevronUp, Copy, Check, FileText, RefreshCw, AlertCircle,
-  Quote, Trash2,
+  ChevronDown, ChevronUp, Check, RefreshCw, AlertCircle,
+  Quote, Trash2, Download,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -120,8 +120,9 @@ export default function MeetingSummary() {
   const { messages } = useRealtimeMessages(id);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const contentRef = useRef(null);
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
   const isAdmin = useAuthStore((s) => s.isAdmin?.() || false);
@@ -317,35 +318,37 @@ export default function MeetingSummary() {
     });
   }, [meeting?.agendas, messages]);
 
-  // 마크다운 내보내기
-  const exportMarkdown = () => {
-    if (!summary || !meeting) return;
-    let md = `# ${meeting.title}\n`;
-    md += `**일시**: ${safeFormatDate(meeting.started_at || meeting.created_at, 'yyyy.MM.dd HH:mm', '-')}\n`;
-    if (meeting.creator?.name) md += `**요청자**: ${meeting.creator.name}\n`;
-    if (stats) md += `**소요시간**: ${stats.durationMin}분 | **참가자**: ${stats.participants.join(', ')} | **메시지**: ${stats.total}건\n`;
-    md += `\n---\n\n`;
-    if (summary.milo_insights) md += `## Milo 인사이트\n${summary.milo_insights}\n\n`;
-    if (summary.decisions?.length) {
-      md += `## 결정 사항 (${summary.decisions.length}건)\n`;
-      summary.decisions.forEach((d, i) => { md += `${i + 1}. **${d.title}** — ${d.detail}${d.owner ? ` (담당: ${d.owner})` : ''}\n`; });
-      md += '\n';
+  // PDF 다운로드 — html2pdf.js로 contentRef 영역을 A4 PDF로 저장
+  const handleDownloadPdf = async () => {
+    if (!contentRef.current || !meeting || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      // 동적 import — 초기 번들에서 ~50KB 절감
+      const html2pdf = (await import('html2pdf.js')).default;
+      const fname = `${(meeting.title || '회의록').replace(/[\\/:*?"<>|]/g, '_')}_${safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyyMMdd_HHmm', 'export')}.pdf`;
+      await html2pdf()
+        .set({
+          margin: [12, 10, 12, 10],  // mm (top, left, bottom, right)
+          filename: fname,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: {
+            scale: 2,               // 고해상도
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+          },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        })
+        .from(contentRef.current)
+        .save();
+      addToast?.('PDF 다운로드 완료', 'success', 2500);
+    } catch (err) {
+      console.error('[downloadPdf]', err);
+      addToast?.('PDF 생성 실패', 'error', 3000);
+    } finally {
+      setDownloadingPdf(false);
     }
-    if (summary.discussions?.length) {
-      md += `## 논의 중 (${summary.discussions.length}건)\n`;
-      summary.discussions.forEach((d, i) => { md += `${i + 1}. **${d.title}** — ${d.detail}\n`; });
-      md += '\n';
-    }
-    if (summary.deferred?.length) {
-      md += `## 보류 (${summary.deferred.length}건)\n`;
-      summary.deferred.forEach((d, i) => { md += `${i + 1}. **${d.title}** — ${d.reason}\n`; });
-      md += '\n';
-    }
-    if (summary.action_items?.length) {
-      md += `## 후속 태스크 (${summary.action_items.length}건)\n`;
-      summary.action_items.forEach((a, i) => { md += `- [ ] **${a.title}** — ${a.assignee_hint} · ${a.due_hint} · ${a.priority}\n`; });
-    }
-    navigator.clipboard?.writeText(md).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   if (!meeting) {
@@ -407,7 +410,7 @@ export default function MeetingSummary() {
 
   return (
     <div className="p-3 md:p-6 max-w-5xl mx-auto">
-      {/* 상단 네비 */}
+      {/* 상단 네비 — PDF 내보내기 대상에서 제외 */}
       <Link
         to="/summaries"
         className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-3 md:mb-4 transition-colors"
@@ -415,6 +418,9 @@ export default function MeetingSummary() {
         <ArrowLeft size={14} />
         회의록 목록으로
       </Link>
+
+      {/* PDF 캡처 대상 시작 — 하단 액션바 전까지 */}
+      <div ref={contentRef}>
 
       {/* 헤더 */}
       <div className="mb-4">
@@ -646,21 +652,19 @@ export default function MeetingSummary() {
         </Section>
       </div>
 
-      {/* 하단 액션 */}
+      </div>
+      {/* PDF 캡처 대상 끝 */}
+
+      {/* 하단 액션 — PDF에 포함되지 않음 */}
       <div className="flex items-center gap-2 md:gap-3 pt-3 border-t border-border-divider flex-wrap">
         <button
-          onClick={exportMarkdown}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors"
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors disabled:opacity-50"
+          title="현재 회의록을 PDF 파일로 저장"
         >
-          {copied ? <Check size={14} className="text-status-success" /> : <Copy size={14} />}
-          {copied ? '복사됨' : '마크다운 복사'}
-        </button>
-        <button
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors"
-          onClick={() => window.print()}
-        >
-          <FileText size={14} />
-          인쇄 / PDF
+          {downloadingPdf ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+          {downloadingPdf ? 'PDF 생성 중...' : 'PDF 다운로드'}
         </button>
         {messages && messages.length >= 2 && (
           <button
