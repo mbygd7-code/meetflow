@@ -198,10 +198,12 @@ function SummaryList() {
     <div className="p-3 md:p-4 lg:p-4 max-w-5xl space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
       <div>
         {pageTitle && (
-          <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+          <h2 className="text-xl md:text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
         )}
-        <p className="text-sm text-txt-secondary">
-          종료된 회의의 AI 요약을 확인하세요 · 총 <span className="text-txt-primary font-semibold">{allCompleted.length}</span>건
+        <p className="text-xs md:text-sm text-txt-secondary">
+          <span className="hidden md:inline">종료된 회의의 AI 요약을 확인하세요 · </span>
+          <span className="md:hidden">AI 요약 · </span>
+          총 <span className="text-txt-primary font-semibold">{allCompleted.length}</span>건
         </p>
       </div>
 
@@ -212,20 +214,20 @@ function SummaryList() {
 
       <SectionPanel flush>
         {/* 탭(기간 필터) + 검색 */}
-        <div className="flex items-center justify-between px-4 lg:px-6 pt-4 border-b border-border-divider">
-          <div className="flex gap-1 flex-wrap">
+        <div className="flex items-center justify-between gap-2 px-3 md:px-4 lg:px-6 pt-3 md:pt-4 border-b border-border-divider">
+          <div className="flex gap-0.5 md:gap-1 flex-wrap min-w-0">
             {RANGE_OPTIONS.map((r) => {
               const active = range === r.id;
               return (
                 <button
                   key={r.id}
                   onClick={() => setRange(r.id)}
-                  className={`relative px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`relative px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-colors ${
                     active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
                   }`}
                 >
                   {r.label}
-                  <span className="ml-1.5 text-xs text-txt-muted">{rangeCounts[r.id] || 0}</span>
+                  <span className="ml-1 md:ml-1.5 text-[10px] md:text-xs text-txt-muted">{rangeCounts[r.id] || 0}</span>
                   {active && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-purple rounded-full" />
                   )}
@@ -303,10 +305,18 @@ function SummaryList() {
                     });
                   } catch {}
                 }
+                // 버튼 클릭은 Link 네비 차단
+                const stopNavIfButton = (e) => {
+                  if (e.target.closest('button')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                };
                 return (
                   <Link key={m.id} to={`/summaries/${m.id}`}>
-                    <Card className="hover:border-border-hover-strong !bg-bg-tertiary !py-3">
-                      <div className="flex items-center justify-between gap-3">
+                    <Card className="hover:border-border-hover-strong !bg-bg-tertiary !py-3 !px-4 md:!px-6">
+                      {/* ═══ 데스크톱(md↑): 한 줄 레이아웃 ═══ */}
+                      <div className="hidden md:flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base font-semibold text-txt-primary mb-1 truncate">
                             {m.title}
@@ -320,48 +330,93 @@ function SummaryList() {
                             )}
                           </p>
                         </div>
-                        {/* 평가 + 피드백 — 클릭 시 카드 네비 방지 */}
                         <div
                           className="flex items-center gap-2 shrink-0"
-                          onClick={(e) => {
-                            // 내부 인터랙티브(버튼/드롭다운)는 Link 네비 차단
-                            if (e.target.closest('button')) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }
-                          }}
+                          onClick={stopNavIfButton}
                         >
                           <MeetingFeedback meetingId={m.id} compact />
                           {scoreData && <MeetingScoreBadge score={scoreData} compact />}
                           {failed && (
                             <span
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold bg-status-error/10 text-status-error border border-status-error/25"
-                              title="AI 요약 생성 실패 — 상세 페이지에서 다시 시도해보세요"
+                              title="AI 요약 생성 실패"
                             >
                               <AlertCircle size={10} strokeWidth={2.6} />
                               요약 실패
                             </span>
                           )}
-
-                          {/* 관리자 전용 삭제 버튼 */}
                           {isAdmin && (
                             <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDeleteMeeting(m);
-                              }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteMeeting(m); }}
                               disabled={deletingId === m.id}
                               className="p-1.5 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded-md transition-colors disabled:opacity-50"
                               title="회의 삭제 (관리자 전용)"
                             >
-                              {deletingId === m.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={14} />
-                              )}
+                              {deletingId === m.id
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : <Trash2 size={14} />}
                             </button>
                           )}
+                        </div>
+                      </div>
+
+                      {/* ═══ 모바일(md미만): 2행 스택 레이아웃 ═══ */}
+                      <div className="md:hidden">
+                        {/* 행 1: 제목(줄바꿈) + 우측 평가/실패/삭제 */}
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <h3 className="flex-1 min-w-0 text-[15px] font-semibold text-txt-primary leading-snug line-clamp-2">
+                            {m.title}
+                          </h3>
+                          <div
+                            className="flex items-center gap-1 shrink-0"
+                            onClick={stopNavIfButton}
+                          >
+                            {scoreData && <MeetingScoreBadge score={scoreData} compact />}
+                            {failed && (
+                              <span
+                                className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] font-semibold bg-status-error/10 text-status-error border border-status-error/25"
+                                title="AI 요약 생성 실패"
+                              >
+                                <AlertCircle size={10} strokeWidth={2.6} />
+                              </span>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteMeeting(m); }}
+                                disabled={deletingId === m.id}
+                                className="p-1 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded-md transition-colors disabled:opacity-50"
+                                title="회의 삭제"
+                              >
+                                {deletingId === m.id
+                                  ? <Loader2 size={12} className="animate-spin" />
+                                  : <Trash2 size={12} />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 행 2: 메타 정보 (짧게) */}
+                        <p className="text-[11px] text-txt-secondary leading-relaxed mb-2">
+                          <span className="whitespace-nowrap">
+                            {formatDate(m.ended_at || m.started_at, 'MM/dd HH:mm')}
+                          </span>
+                          <span className="mx-1 text-txt-muted">·</span>
+                          <span className="whitespace-nowrap">어젠다 {m.agendas?.length || 0}</span>
+                          <span className="mx-1 text-txt-muted">·</span>
+                          <span className="whitespace-nowrap">
+                            참여 {m.participant_count ?? m.participants?.length ?? 0}
+                          </span>
+                          {typeof m.message_count === 'number' && m.message_count > 0 && (
+                            <>
+                              <span className="mx-1 text-txt-muted">·</span>
+                              <span className="whitespace-nowrap">메시지 {m.message_count}</span>
+                            </>
+                          )}
+                        </p>
+
+                        {/* 행 3: 피드백 (좌측 정렬) */}
+                        <div onClick={stopNavIfButton} className="flex items-center">
+                          <MeetingFeedback meetingId={m.id} compact />
                         </div>
                       </div>
                     </Card>
