@@ -1,0 +1,74 @@
+# Supabase 프로젝트 설정
+# 이 파일은 `supabase functions deploy` 시 Edge Function의 설정을 자동 적용합니다.
+# 대시보드 설정은 우선 적용되나, CLI 배포 시 이 파일이 상태를 코드화합니다.
+
+project_id = "limehvlxkgwykdrazegn"
+
+# ══════════════════════════════════════════════════════════════════
+# Edge Functions — verify_jwt 비활성화
+# ══════════════════════════════════════════════════════════════════
+# Supabase Gateway는 ES256 JWT 알고리즘을 지원하지 않아 기본값(true) 시 401 발생.
+# 아래 함수들은 내부에서 service_role_key 또는 admin 역할을 직접 검증하므로 안전.
+# 참고: UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM ES256 이슈 해결용.
+
+# Milo AI 메인 분석 (사용자 JWT는 함수 내부 로직에서 사용)
+[functions.milo-analyze]
+verify_jwt = false
+
+# Milo 스트리밍 응답 (Phase 1.5)
+[functions.milo-stream]
+verify_jwt = false
+
+# 회의록 자동 생성
+[functions.generate-summary]
+verify_jwt = false
+
+# 지식 파일 Contextual Retrieval 인덱싱
+[functions.contextualize-knowledge]
+verify_jwt = false
+
+# Slack/Notion 연동 (DB 트리거 또는 클라이언트 양방향 호출)
+[functions.slack-notify]
+verify_jwt = false
+
+[functions.notion-sync]
+verify_jwt = false
+
+[functions.notion-poll]
+verify_jwt = false
+
+# 직원 초대/삭제 (admin 직접 검증)
+[functions.invite-user]
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false
+
+[functions.reset-user-password]
+verify_jwt = false
+
+# Slack 양방향 상호작용 (외부 Slack webhook)
+[functions.slack-events]
+verify_jwt = false
+
+[functions.slack-commands]
+verify_jwt = false
+
+[functions.slack-interaction]
+verify_jwt = false
+
+# 구글 캘린더 이벤트 생성
+[functions.gcal-create-event]
+verify_jwt = false
+
+# 음성 인식 (STT)
+[functions.stt-recognize]
+verify_jwt = false
+
+# 직원 평가 AI
+[functions.evaluate-employee]
+verify_jwt = false
+
+# Milo 분석 도구 모음
+[functions.milo-analyze-tools]
+verify_jwt = false
