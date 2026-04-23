@@ -320,42 +320,41 @@ export default function MeetingSummary() {
     });
   }, [meeting?.agendas, messages]);
 
-  // PDF 다운로드 — Printable은 항상 오프스크린(-9999px)에 렌더되어 있고,
-  // html2canvas는 position:fixed 오프스크린 요소도 정상 캡처함.
-  // 따라서 스타일을 토글하지 않음 → 사용자에게 플래시 전혀 없음.
+  // PDF 다운로드 — html2canvas + jsPDF 직접 조합으로 단일 페이지 강제.
+  // html2pdf.js의 자동 페이지 분할 때문에 1페이지 내용이 2페이지로 분리되던 문제 해결.
   const handleDownloadPdf = async () => {
     if (!printableRef.current || !meeting || downloadingPdf) return;
     setDownloadingPdf(true);
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const canvas = await html2canvas(printableRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.96);
+      const pdf = new jsPDF({
+        unit: 'mm',
+        format: 'a4',
+        orientation: 'portrait',
+        compress: true,
+      });
+
+      // A4 한 페이지에 정확히 맞춤 (210 × 297mm)
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
       const fname = `${(meeting.title || '회의록').replace(/[\\/:*?"<>|]/g, '_')}_${safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyyMMdd_HHmm', 'export')}.pdf`;
-      await html2pdf()
-        .set({
-          margin: 0,
-          filename: fname,
-          image: { type: 'jpeg', quality: 0.96 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            logging: false,
-            width: 794,
-            height: 1123,
-            windowWidth: 794,
-            windowHeight: 1123,
-            scrollX: 0,
-            scrollY: 0,
-          },
-          jsPDF: {
-            unit: 'mm',
-            format: 'a4',
-            orientation: 'portrait',
-            compress: true,
-          },
-          pagebreak: { mode: [], avoid: '*' },
-        })
-        .from(printableRef.current)
-        .save();
+      pdf.save(fname);
       addToast?.('PDF 다운로드 완료', 'success', 2500);
     } catch (err) {
       console.error('[downloadPdf]', err);
