@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
   Loader, Clock, Users, MessageSquare,
   ChevronDown, ChevronUp, Copy, Check, FileText, RefreshCw, AlertCircle,
-  Quote,
+  Quote, Trash2,
 } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
+import { useMeetingStore } from '@/stores/meetingStore';
 import { Card, Badge, EmptyState } from '@/components/ui';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -121,6 +123,41 @@ export default function MeetingSummary() {
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const addToast = useToastStore((s) => s.addToast);
+  const navigate = useNavigate();
+  const isAdmin = useAuthStore((s) => s.isAdmin?.() || false);
+  const [deleting, setDeleting] = useState(false);
+
+  // 관리자 전용: 회의 완전 삭제
+  const handleDeleteMeeting = async () => {
+    if (!meeting) return;
+    const confirmed = window.confirm(
+      `"${meeting.title}" 회의를 완전히 삭제하시겠습니까?\n\n` +
+      `- 메시지, 어젠다, 요약, 태스크, 리액션이 모두 제거됩니다.\n` +
+      `- 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    try {
+      await supabase.from('meeting_summaries').delete().eq('meeting_id', id);
+      await supabase.from('meeting_reactions').delete().eq('meeting_id', id);
+      await supabase.from('messages').delete().eq('meeting_id', id);
+      await supabase.from('agendas').delete().eq('meeting_id', id);
+      const { error } = await supabase.from('meetings').delete().eq('id', id);
+      if (error) throw error;
+      useMeetingStore.setState((s) => ({
+        meetings: s.meetings.filter((m) => m.id !== id),
+      }));
+      addToast?.('회의를 삭제했습니다', 'success', 2500);
+      navigate('/summaries');
+    } catch (err) {
+      console.error('[deleteMeeting]', err);
+      const msg = err?.code === '42501' || /policy/i.test(err?.message || '')
+        ? '삭제 권한이 없습니다. (migration 037 적용 필요)'
+        : `삭제 실패: ${err?.message || ''}`;
+      addToast?.(msg, 'error', 4000);
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function loadSummary() {
@@ -617,6 +654,19 @@ export default function MeetingSummary() {
           >
             {generating ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             {generating ? '재생성 중...' : '요약 재생성'}
+          </button>
+        )}
+
+        {/* 관리자 전용: 회의 삭제 — 재생성 버튼 옆 */}
+        {isAdmin && (
+          <button
+            onClick={handleDeleteMeeting}
+            disabled={deleting}
+            className={`${messages && messages.length >= 2 ? '' : 'ml-auto'} flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-status-error/10 border border-status-error/25 text-status-error hover:bg-status-error/15 transition-colors disabled:opacity-50`}
+            title="회의를 완전히 삭제합니다 (관리자 전용)"
+          >
+            {deleting ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {deleting ? '삭제 중...' : '회의 삭제'}
           </button>
         )}
       </div>

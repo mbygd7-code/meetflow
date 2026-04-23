@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
-import { FileText, Loader2, Sparkles, Search, X, AlertCircle } from 'lucide-react';
+import { FileText, Loader2, Sparkles, Search, X, AlertCircle, Trash2 } from 'lucide-react';
 import { Card, Badge, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useMeetingStore } from '@/stores/meetingStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useToastStore } from '@/stores/toastStore';
 import { formatDate } from '@/utils/formatters';
 import { supabase } from '@/lib/supabase';
 import MeetingSummary from '@/components/summary/MeetingSummary';
@@ -69,6 +71,43 @@ function SummaryList() {
   const [searchQuery, setSearchQuery] = useState('');
   // 회의 요약 데이터 맵 (meeting_id → summary_data) — 카드 점수 계산용
   const [summariesMap, setSummariesMap] = useState({});
+  const [deletingId, setDeletingId] = useState(null);
+  const isAdmin = useAuthStore((s) => s.isAdmin?.() || false);
+  const addToast = useToastStore((s) => s.addToast);
+
+  // 관리자 전용: 회의 삭제
+  const handleDeleteMeeting = async (meeting) => {
+    const confirmed = window.confirm(
+      `"${meeting.title}" 회의를 완전히 삭제하시겠습니까?\n\n` +
+      `- 메시지, 어젠다, 요약, 태스크, 리액션이 모두 제거됩니다.\n` +
+      `- 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+    setDeletingId(meeting.id);
+    try {
+      // FK CASCADE가 걸려있어 meetings만 삭제해도 자식들 정리됨 (migration 001~024 확인)
+      // 안전하게 자식 테이블 선 정리 (FK 설정이 누락된 테이블 대비)
+      await supabase.from('meeting_summaries').delete().eq('meeting_id', meeting.id);
+      await supabase.from('meeting_reactions').delete().eq('meeting_id', meeting.id);
+      await supabase.from('messages').delete().eq('meeting_id', meeting.id);
+      await supabase.from('agendas').delete().eq('meeting_id', meeting.id);
+      const { error } = await supabase.from('meetings').delete().eq('id', meeting.id);
+      if (error) throw error;
+      // 로컬 store에서도 즉시 제거 (Realtime으로도 반영되지만 즉각성을 위해)
+      useMeetingStore.setState((s) => ({
+        meetings: s.meetings.filter((m) => m.id !== meeting.id),
+      }));
+      addToast?.('회의를 삭제했습니다', 'success', 2500);
+    } catch (err) {
+      console.error('[deleteMeeting]', err);
+      const msg = err?.code === '42501' || /policy/i.test(err?.message || '')
+        ? '삭제 권한이 없습니다. (migration 037 적용 필요)'
+        : `삭제 실패: ${err?.message || ''}`;
+      addToast?.(msg, 'error', 4000);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const generatingMeeting = summaryGeneratingId
     ? meetings.find((m) => m.id === summaryGeneratingId)
@@ -304,6 +343,26 @@ function SummaryList() {
                             </span>
                           )}
                           <Badge variant="outline">완료</Badge>
+
+                          {/* 관리자 전용 삭제 버튼 */}
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteMeeting(m);
+                              }}
+                              disabled={deletingId === m.id}
+                              className="p-1.5 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded-md transition-colors disabled:opacity-50"
+                              title="회의 삭제 (관리자 전용)"
+                            >
+                              {deletingId === m.id ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </Card>
