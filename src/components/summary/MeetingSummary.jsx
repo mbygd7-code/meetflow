@@ -635,7 +635,7 @@ export default function MeetingSummary() {
           color="bg-brand-purple/15 text-brand-purple"
           count={summary.action_items?.length}
         >
-          <ActionItemsSection meeting={meeting} summary={summary} />
+          <ActionItemsSection meeting={meeting} summary={summary} messages={messages} />
         </Section>
       </div>
 

@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
 import { getPriorityInfo, PRIORITY_MAP } from '@/lib/taskConstants';
 import { Avatar } from '@/components/ui';
+import TaskDetailPanel from '@/components/members/TaskDetailPanel';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isDemoId = (id) => !id || !UUID_RE.test(id);
@@ -30,7 +31,7 @@ function normalizeTask(t) {
   };
 }
 
-export default function ActionItemsSection({ meeting, summary }) {
+export default function ActionItemsSection({ meeting, summary, messages = [] }) {
   const { user, isAdmin } = useAuthStore();
   const admin = typeof isAdmin === 'function' ? isAdmin() : false;
   const addToast = useToastStore((s) => s.addToast);
@@ -44,6 +45,14 @@ export default function ActionItemsSection({ meeting, summary }) {
   const [newTitle, setNewTitle] = useState('');
   const [openMenu, setOpenMenu] = useState(null); // `${taskId}:${type}` (assignee|priority|due)
   const [busyIds, setBusyIds] = useState(new Set());
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  // migration 038 미적용 환경 폴백 (confirmed 컬럼 지원 여부)
+  const [confirmColumnSupported, setConfirmColumnSupported] = useState(true);
+
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null),
+    [selectedTaskId, tasks]
+  );
 
   // ── 데이터 유도 ──
   const meetingTasks = useMemo(
@@ -90,46 +99,125 @@ export default function ActionItemsSection({ meeting, summary }) {
     });
   };
 
-  // 이름으로 담당자 id 매칭 (AI hint → 실제 user)
-  const resolveAssigneeId = useCallback((hint) => {
-    if (!hint) return null;
-    const clean = hint.trim();
-    const exact = members.find((m) => m.name === clean);
-    if (exact) return exact.id;
-    const partial = members.find((m) => m.name && clean.includes(m.name));
-    return partial?.id || null;
-  }, [members]);
+  // ── 메시지 기반 발언자 분석 ──
+  // 회의록 메시지를 분석해서 가장 활발히 발언한 사람들을 추출
+  const speakerStats = useMemo(() => {
+    const counts = {};  // user_id → { count, lastAt, user }
+    for (const m of messages) {
+      if (m.is_ai) continue;
+      if (!m.user_id) continue;
+      const cur = counts[m.user_id] || { count: 0, lastAt: 0, user: m.user };
+      cur.count += 1;
+      const ts = new Date(m.created_at).getTime();
+      if (ts > cur.lastAt) cur.lastAt = ts;
+      counts[m.user_id] = cur;
+    }
+    // 발언 수 내림차순
+    return Object.entries(counts)
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.count - a.count);
+  }, [messages]);
+
+  // ── 담당자 자동 매칭 (AI hint + 메시지 컨텍스트) ──
+  const resolveAssigneeId = useCallback((hint, taskTitle) => {
+    const clean = (hint || '').trim();
+
+    // 1) 정확한 이름 일치 (members 우선)
+    if (clean) {
+      const exact = members.find((m) => m.name === clean);
+      if (exact) return exact.id;
+    }
+
+    // 2) 힌트에 멤버 이름 포함 (양방향)
+    if (clean) {
+      const partial = members.find((m) => {
+        if (!m.name) return false;
+        return clean.includes(m.name) || m.name.includes(clean);
+      });
+      if (partial) return partial.id;
+    }
+
+    // 3) 태스크 제목/힌트에 "저가/제가/내가/본인" 등 1인칭 → 회의 생성자
+    if (clean || taskTitle) {
+      const selfKeywords = /\b(저[가는]?|제가|내가|본인|담당자\s*본인)\b/;
+      if (selfKeywords.test(clean) || selfKeywords.test(taskTitle || '')) {
+        if (meeting?.creator?.id) {
+          const creator = members.find((m) => m.id === meeting.creator.id);
+          if (creator) return creator.id;
+        }
+      }
+    }
+
+    // 4) 태스크 제목 안에 멤버 이름이 언급되어 있는지
+    if (taskTitle) {
+      const mentioned = members.find((m) => m.name && taskTitle.includes(m.name));
+      if (mentioned) return mentioned.id;
+    }
+
+    // 5) 메시지 컨텍스트 fallback — 태스크 제목의 핵심 단어가 등장한 메시지의 발신자
+    if (taskTitle && messages.length > 0) {
+      const needle = taskTitle.slice(0, 15);
+      const hit = messages.find((m) =>
+        !m.is_ai && m.content?.includes(needle) && m.user_id
+      );
+      if (hit?.user_id && members.some((m) => m.id === hit.user_id)) {
+        return hit.user_id;
+      }
+    }
+
+    // 6) 최후 fallback: 가장 많이 발언한 사람 (논의 주도자)
+    if (speakerStats.length > 0) {
+      const top = speakerStats[0];
+      if (members.some((m) => m.id === top.id)) return top.id;
+    }
+
+    return null;
+  }, [members, meeting?.creator?.id, messages, speakerStats]);
 
   // ── AI 제안 일괄 등록 ──
   const handleRegisterAll = async () => {
     if (unregisteredSuggestions.length === 0 || registering) return;
     setRegistering(true);
     try {
-      const rows = unregisteredSuggestions.map((a) => ({
-        title: a.title || '제목 없음',
-        description: (a.assignee_hint || a.due_hint)
-          ? [
-              a.assignee_hint && `담당 힌트: ${a.assignee_hint}`,
-              a.due_hint && `기한 힌트: ${a.due_hint}`,
-            ].filter(Boolean).join('\n')
-          : null,
-        status: 'todo',
-        priority: ['urgent', 'high', 'medium', 'low'].includes(a.priority) ? a.priority : 'medium',
-        meeting_id: meeting.id,
-        meeting_title: meeting.title || null,
-        ai_suggested: true,
-        assignee_id: resolveAssigneeId(a.assignee_hint),
-        confirmed: false,
-      }));
+      const rows = unregisteredSuggestions.map((a) => {
+        const base = {
+          title: a.title || '제목 없음',
+          description: (a.assignee_hint || a.due_hint)
+            ? [
+                a.assignee_hint && `담당 힌트: ${a.assignee_hint}`,
+                a.due_hint && `기한 힌트: ${a.due_hint}`,
+              ].filter(Boolean).join('\n')
+            : null,
+          status: 'todo',
+          priority: ['urgent', 'high', 'medium', 'low'].includes(a.priority) ? a.priority : 'medium',
+          meeting_id: meeting.id,
+          meeting_title: meeting.title || null,
+          ai_suggested: true,
+          assignee_id: resolveAssigneeId(a.assignee_hint, a.title),
+        };
+        // confirmed 컬럼 지원 시에만 포함 (migration 038 미적용 환경 폴백)
+        if (confirmColumnSupported) base.confirmed = false;
+        return base;
+      });
 
       if (!isDemoId(meeting.id)) {
-        const { data, error } = await supabase
+        let result = await supabase
           .from('tasks')
           .insert(rows)
           .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)');
-        if (error) throw error;
-        (data || []).forEach((t) => addTask(normalizeTask(t)));
-        addToast?.(`${data?.length ?? 0}개 태스크 등록 · 담당자 확인 대기`, 'success', 3000);
+        // migration 038 미적용 → confirmed 컬럼 없음. 재시도 without confirmed
+        if (result.error?.code === '42703' && confirmColumnSupported) {
+          console.warn('[registerAll] confirmed 컬럼 미지원. 재시도 (migration 038 미적용)');
+          setConfirmColumnSupported(false);
+          const fallbackRows = rows.map(({ confirmed, ...rest }) => rest);
+          result = await supabase
+            .from('tasks')
+            .insert(fallbackRows)
+            .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)');
+        }
+        if (result.error) throw result.error;
+        (result.data || []).forEach((t) => addTask(normalizeTask(t)));
+        addToast?.(`${result.data?.length ?? 0}개 태스크 등록 · 담당자 확인 대기`, 'success', 3000);
       } else {
         const now = new Date().toISOString();
         rows.forEach((r, i) => addTask({
@@ -265,26 +353,42 @@ export default function ActionItemsSection({ meeting, summary }) {
   const handleAddTask = async () => {
     const title = newTitle.trim();
     if (!title) return;
-    const row = {
+    // 사용자가 직접 추가할 때도 발언자 기반 자동 담당 지정 (수정 가능)
+    const autoAssigneeId = resolveAssigneeId(null, title);
+
+    const baseRow = {
       title,
       status: 'todo',
       priority: 'medium',
       meeting_id: meeting.id,
       meeting_title: meeting.title || null,
       ai_suggested: false,
-      confirmed: true, // 사람이 직접 추가 → 바로 확인 상태
-      confirmed_by: user?.id || null,
-      confirmed_at: new Date().toISOString(),
+      assignee_id: autoAssigneeId,
     };
+    // confirmed 필드는 지원되는 경우만 포함
+    const row = confirmColumnSupported
+      ? { ...baseRow, confirmed: true, confirmed_by: user?.id || null, confirmed_at: new Date().toISOString() }
+      : baseRow;
+
     try {
       if (!isDemoId(meeting.id)) {
-        const { data, error } = await supabase
+        let result = await supabase
           .from('tasks')
           .insert([row])
           .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)')
           .single();
-        if (error) throw error;
-        addTask(normalizeTask(data));
+        // migration 038 미적용 → confirmed 컬럼 없음. 재시도
+        if (result.error?.code === '42703' && confirmColumnSupported) {
+          console.warn('[addTask] confirmed 컬럼 미지원. 재시도');
+          setConfirmColumnSupported(false);
+          result = await supabase
+            .from('tasks')
+            .insert([baseRow])
+            .select('*, assignee:users!tasks_assignee_id_fkey(id, name, avatar_color, slack_user_id)')
+            .single();
+        }
+        if (result.error) throw result.error;
+        addTask(normalizeTask(result.data));
       } else {
         addTask({ ...row, id: `t-local-${Date.now()}`, created_at: new Date().toISOString() });
       }
@@ -293,7 +397,17 @@ export default function ActionItemsSection({ meeting, summary }) {
       addToast?.('태스크를 추가했습니다', 'success', 2000);
     } catch (err) {
       console.error('[addTask]', err);
-      addToast?.(`추가 실패: ${err.message}`, 'error', 3500);
+      // 원인별 구체적 메시지
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      let friendly = `추가 실패`;
+      if (code === '42703') friendly = 'DB 스키마 업데이트 필요 (migration 038 실행)';
+      else if (code === '42501' || /policy|row-level security/i.test(msg)) {
+        friendly = '등록 권한 없음 (migration 021 확인)';
+      } else if (code === '23514') friendly = '잘못된 값 — priority 또는 status 확인';
+      else if (code === '23503') friendly = '참조 오류 — meeting_id 또는 assignee_id 유효하지 않음';
+      else if (msg) friendly = `추가 실패: ${msg.slice(0, 80)}`;
+      addToast?.(friendly, 'error', 4500);
     }
   };
 
@@ -433,10 +547,15 @@ export default function ActionItemsSection({ meeting, summary }) {
             return (
               <li
                 key={t.id}
-                className={`group/item p-3 rounded-md border transition-colors ${
+                onClick={(e) => {
+                  // 내부 버튼/드롭다운/input 클릭은 모달 오픈 차단
+                  if (e.target.closest('button, input, [role="menu"]')) return;
+                  setSelectedTaskId(t.id);
+                }}
+                className={`group/item p-3 rounded-md border transition-all cursor-pointer ${
                   t.confirmed
-                    ? 'bg-status-success/[0.04] border-status-success/20'
-                    : 'bg-bg-tertiary/40 border-border-subtle hover:border-border-default'
+                    ? 'bg-status-success/[0.04] border-status-success/20 hover:border-status-success/40'
+                    : 'bg-bg-tertiary/40 border-border-subtle hover:border-brand-purple/30'
                 }`}
               >
                 <div className="flex items-start gap-2.5">
@@ -662,6 +781,30 @@ export default function ActionItemsSection({ meeting, summary }) {
             태스크 직접 추가
           </button>
         </div>
+      )}
+
+      {/* 태스크 상세 모달 (MembersPage 와 동일) */}
+      {selectedTask && (
+        <TaskDetailPanel
+          task={selectedTask}
+          members={members}
+          currentUser={user}
+          onClose={() => setSelectedTaskId(null)}
+          onStatusChange={async (taskId, newStatus) => {
+            const target = tasks.find((x) => x.id === taskId);
+            if (target) await updateField(target, { status: newStatus }, { status: target.status });
+          }}
+          onUpdate={async (taskId, patch, opts = {}) => {
+            const target = tasks.find((x) => x.id === taskId);
+            if (!target) return;
+            // rollback 을 위해 변경 전 값 추출
+            const rollback = Object.fromEntries(
+              Object.keys(patch).map((k) => [k, target[k] ?? null])
+            );
+            await updateField(target, patch, rollback);
+            if (!opts.silent) addToast?.('변경되었습니다', 'success', 1800);
+          }}
+        />
       )}
     </div>
   );
