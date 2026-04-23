@@ -251,7 +251,17 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                 </p>
               </div>
             )}
-            {isAi ? <RichText content={displayContent} /> : displayContent}
+            {isAi ? (
+              <>
+                <RichText content={displayContent} />
+                {message.is_streaming && (
+                  <span
+                    className="inline-block align-baseline w-[2px] h-[1em] ml-0.5 bg-brand-purple animate-pulse"
+                    aria-hidden
+                  />
+                )}
+              </>
+            ) : displayContent}
             {/* 검색 출처 카드 — 이미지 검색이면 갤러리 모드, 아니면 웹 카드 모드 */}
             {isAi && message.search_sources?.length > 0 && (() => {
               // 이미지 검색 모드 감지:

@@ -12,6 +12,7 @@ import {
   logOrchestrationSkip,
   logOrchestrationStep,
 } from '@/lib/telemetry';
+import { streamAiResponse } from '@/lib/streamHelper';
 
 // Supabase Edge Function으로 Claude API 호출 (VITE_SUPABASE_URL이 있으면 활성화)
 const CLAUDE_API_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -637,6 +638,9 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
 
                   onThinking?.(true, 'milo');
 
+                  // Phase 1.5: 종합 단계만 스트리밍으로 전환 (flag ON 시)
+                  const STREAMING_ENABLED = import.meta.env.VITE_SUPABASE_STREAMING === 'true';
+
                   // 종합 전용 시스템 프롬프트 — 지휘자 로직 배제, 종합 형식만 강조
                   const synthesizePrompt = `당신은 '밀로(Milo)'입니다. 지금 방금 전문가들이 사용자의 질문에 답했습니다.
 당신의 역할: 전문가들의 답을 **종합해서 결론 한줄평**을 제시하는 것.
@@ -676,6 +680,55 @@ ${successfulSpecs.map((s) => `- @${s.employeeName}: ${(s.response_text || '').re
                     messageId: lastMsg.id,
                   });
 
+                  // ═══ Phase 1.5 스트리밍 경로 (flag ON) ═══
+                  if (STREAMING_ENABLED) {
+                    try {
+                      // 유저 프롬프트: 원 질문 재현 + 전문가 응답 요약
+                      const recentUserMsg = (messages || []).filter((m) => !m.is_ai).pop()?.content || '';
+                      const specSummary = successfulSpecs
+                        .map((s) => `[${s.employeeName}] ${(s.response_text || '').replace(/^\[[^\]]+\]\s*/, '').slice(0, 300)}`)
+                        .join('\n\n');
+                      const streamUserPrompt = `## 사용자 질문\n${recentUserMsg}\n\n## 전문가 응답\n${specSummary}\n\n위 전문가 응답들을 종합해서 [밀로 종합] 프리픽스로 3문장 이내 결론을 제시하세요.`;
+
+                      await streamAiResponse({
+                        meetingId,
+                        systemPrompt: synthesizePrompt,
+                        userPrompt: streamUserPrompt,
+                        model: getEmployeeModelId('milo') || 'claude-sonnet-4-5',
+                        aiEmployee: 'milo',
+                        agendaId: agenda?.id || null,
+                        aiType: 'summary',
+                        orchestrationVersion: 'parallel_synthesize_v1',
+                        miloSynthesisId: synthesisGroupId,
+                      });
+
+                      logAiCallEnd({
+                        meetingId,
+                        employeeId: 'milo',
+                        elapsed: Math.round(performance.now() - synthStart),
+                        shouldRespond: true,
+                        orchestrationVersion: 'parallel_synthesize_v1_streaming',
+                        usage: null, // 스트리밍은 usage 집계 별도 경로 필요
+                      });
+                      onThinking?.(false, null);
+                      lastRespondingEmployeeRef.current = 'milo';
+                      // milo-stream Edge Function이 DB INSERT + Broadcast 모두 처리 → 추가 onRespond 불필요
+                    } catch (streamErr) {
+                      onThinking?.(false, null);
+                      console.error('[useMilo] streaming synthesize error:', streamErr);
+                      logAiCallError({
+                        meetingId,
+                        employeeId: 'milo',
+                        error: streamErr,
+                        type: 'stream_failed',
+                      });
+                      // 폴백 없음 — 종합이 없어도 전문가 응답은 이미 화면에 표시됨
+                    }
+                    // 스트리밍 경로 끝
+                    return; // synthesize 블록 종료 (기존 비스트리밍 경로 스킵)
+                  }
+
+                  // ═══ 기존 비스트리밍 경로 (flag OFF, 기본값) ═══
                   try {
                     const synthResult = await analyzeMilo({
                       messages, // 원본 대화 그대로 (전문가 응답은 프롬프트에 이미 주입됨)

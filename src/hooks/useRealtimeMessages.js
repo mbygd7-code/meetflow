@@ -81,7 +81,10 @@ export function useRealtimeMessages(meetingId) {
   const dedupAdd = useCallback((msg) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === msg.id)) return prev;
-      const next = [...prev, msg];
+      // Phase 1.5: 스트리밍 플레이스홀더가 있으면 정식 메시지로 교체
+      //   finalMsgId가 일치하는 _pending_replacement 플레이스홀더 제거 → 정식 메시지 추가
+      const filtered = prev.filter((m) => m._pending_replacement !== msg.id);
+      const next = [...filtered, msg];
       next.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       return next;
     });
@@ -213,6 +216,63 @@ export function useRealtimeMessages(meetingId) {
         if (!msg?.id) return;
         console.log('[useRealtimeMessages] ① Broadcast 수신:', msg.id);
         dedupAdd(msg);
+      });
+
+      // ─── Phase 1.5: AI 스트리밍 델타 수신 ───
+      // 플레이스홀더 메시지 생성/누적 — tempId 기준 탐색
+      ch.on('broadcast', { event: 'ai_stream_delta' }, (evt) => {
+        const p = evt?.payload;
+        if (!p?.tempId) return;
+        setMessages((prev) => {
+          const placeholderId = `stream-${p.tempId}`;
+          const existing = prev.find((m) => m.id === placeholderId);
+          if (!existing) {
+            // 최초 델타 → 플레이스홀더 생성
+            const aiUser = AI_EMPLOYEE_MAP[p.employeeId] || AI_EMPLOYEE_MAP.milo;
+            return [...prev, {
+              id: placeholderId,
+              streaming_temp_id: p.tempId,
+              is_streaming: true,
+              is_ai: true,
+              ai_employee: p.employeeId || 'milo',
+              user: aiUser,
+              content: p.delta || '',
+              created_at: new Date().toISOString(),
+            }];
+          }
+          // 누적 — 간단하게 뒤에 붙임 (seq 기반 정렬은 Broadcast 순서가 대개 보장되므로 생략)
+          return prev.map((m) =>
+            m.id === placeholderId ? { ...m, content: (m.content || '') + (p.delta || '') } : m
+          );
+        });
+      });
+
+      // ─── Phase 1.5: 스트리밍 완료 ───
+      ch.on('broadcast', { event: 'ai_stream_done' }, (evt) => {
+        const p = evt?.payload;
+        if (!p?.tempId) return;
+        console.log('[useRealtimeMessages] ai_stream_done:', p.tempId, '→', p.finalMsgId);
+        // is_streaming false로 토글 (커서 깜빡임 종료)
+        // 정식 DB 메시지는 postgres_changes 경로로 도착 → dedupAdd가 플레이스홀더와 병합 처리
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.streaming_temp_id === p.tempId ? { ...m, is_streaming: false, _pending_replacement: p.finalMsgId } : m
+          )
+        );
+      });
+
+      // ─── Phase 1.5: 스트리밍 중단/에러 ───
+      ch.on('broadcast', { event: 'ai_stream_aborted' }, (evt) => {
+        const p = evt?.payload;
+        if (!p?.tempId) return;
+        console.warn('[useRealtimeMessages] ai_stream_aborted:', p.tempId, p.reason);
+        setMessages((prev) => prev.filter((m) => m.streaming_temp_id !== p.tempId));
+      });
+      ch.on('broadcast', { event: 'ai_stream_error' }, (evt) => {
+        const p = evt?.payload;
+        if (!p?.tempId) return;
+        console.error('[useRealtimeMessages] ai_stream_error:', p.tempId, p.error);
+        setMessages((prev) => prev.filter((m) => m.streaming_temp_id !== p.tempId));
       });
 
       ch.subscribe((status, err) => {
