@@ -337,27 +337,6 @@ export default function CompletedMeetingView({ meeting }) {
     return () => clearTimeout(timer);
   }, [location.hash, messages.length]);
 
-  // V3: 미니 타임라인 데이터 — 10~20개 버킷으로 시간대 분포
-  const scrubberBuckets = useMemo(() => {
-    if (messages.length === 0 || !meeting.started_at) return [];
-    const start = new Date(meeting.started_at).getTime();
-    const end = new Date(meeting.ended_at || Date.now()).getTime();
-    const span = end - start;
-    if (span <= 0) return [];
-    const BUCKETS = Math.min(24, Math.max(10, Math.floor(messages.length / 3)));
-    const buckets = Array.from({ length: BUCKETS }, () => ({ human: 0, ai: 0, firstMsgId: null }));
-    for (const m of messages) {
-      const t = new Date(m.created_at).getTime();
-      if (isNaN(t)) continue;
-      const idx = Math.min(BUCKETS - 1, Math.max(0, Math.floor(((t - start) / span) * BUCKETS)));
-      const b = buckets[idx];
-      if (m.is_ai) b.ai += 1; else b.human += 1;
-      if (!b.firstMsgId) b.firstMsgId = m.id;
-    }
-    const max = Math.max(1, ...buckets.map((b) => b.human + b.ai));
-    return buckets.map((b) => ({ ...b, total: b.human + b.ai, heightPct: ((b.human + b.ai) / max) * 100 }));
-  }, [messages, meeting.started_at, meeting.ended_at]);
-
   // V4: 키보드 단축키
   // /  → 검색 포커스
   // Esc → 검색 닫기 or 어젠다 필터 해제
@@ -1147,16 +1126,7 @@ export default function CompletedMeetingView({ meeting }) {
     }
   };
 
-  // 스크러버 클릭 핸들러
-  const handleScrubberClick = (firstMsgId) => {
-    if (!firstMsgId) return;
-    const el = messageRefs.current[firstMsgId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setHighlightedMsgId(firstMsgId);
-      setTimeout(() => setHighlightedMsgId(null), 2000);
-    }
-  };
+
 
   // 사이드바 어젠다 리스트
   const agendaList = useMemo(() => {
@@ -2355,43 +2325,6 @@ export default function CompletedMeetingView({ meeting }) {
 
         {/* 메시지 타임라인 */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
-          {/* V3: 미니 타임라인 스크러버 */}
-          {scrubberBuckets.length > 0 && (
-            <div className="sticky top-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-2 bg-bg-primary/90 backdrop-blur-sm border-b border-border-divider mb-5">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-end gap-[1.5px] h-8" role="group" aria-label="메시지 타임라인">
-                  {scrubberBuckets.map((b, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleScrubberClick(b.firstMsgId)}
-                      disabled={b.total === 0}
-                      className="flex-1 h-full flex items-end group/bucket disabled:cursor-default"
-                      title={b.total > 0 ? `${b.total}건 (사람 ${b.human} · AI ${b.ai})` : '이 구간엔 메시지 없음'}
-                    >
-                      <div className="w-full flex flex-col gap-[1px] justify-end h-full">
-                        {/* AI 비율 (위) */}
-                        {b.ai > 0 && (
-                          <div
-                            className="w-full bg-brand-purple/60 group-hover/bucket:bg-brand-purple rounded-sm transition-colors"
-                            style={{ height: `${(b.ai / Math.max(1, b.human + b.ai)) * b.heightPct}%` }}
-                          />
-                        )}
-                        {/* 사람 비율 (아래) */}
-                        {b.human > 0 && (
-                          <div
-                            className="w-full bg-brand-orange/60 group-hover/bucket:bg-brand-orange rounded-sm transition-colors"
-                            style={{ height: `${(b.human / Math.max(1, b.human + b.ai)) * b.heightPct}%` }}
-                          />
-                        )}
-                        {b.total === 0 && <div className="w-full h-[2px] bg-border-subtle rounded-full opacity-50" />}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-txt-muted py-20">
               <MessageSquare size={28} className="mb-3 opacity-50" />
