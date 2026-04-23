@@ -2390,14 +2390,6 @@ export default function CompletedMeetingView({ meeting }) {
                   ))}
                 </div>
                 <span className="text-[10px] text-txt-muted font-medium shrink-0">종료</span>
-                <div className="hidden md:flex items-center gap-2 ml-2 text-[10px] text-txt-muted shrink-0">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-sm bg-brand-orange/60" /> 사람
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-sm bg-brand-purple/60" /> AI
-                  </span>
-                </div>
               </div>
             </div>
           )}
