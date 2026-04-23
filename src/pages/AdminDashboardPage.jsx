@@ -12,6 +12,7 @@ import EmployeeTable from '@/components/admin/EmployeeTable';
 import TeamOverview from '@/components/admin/TeamOverview';
 import EmployeeTaskOverview from '@/components/admin/EmployeeTaskOverview';
 import TeamManagementModal from '@/components/admin/TeamManagementModal';
+import AiAnalyticsPanel from '@/components/admin/AiAnalyticsPanel';
 import { format, parseISO } from 'date-fns';
 import WeeklyChart from '@/components/ui/WeeklyChart';
 
@@ -341,6 +342,9 @@ export default function AdminDashboardPage() {
             )}
           </div>
         </SectionPanel>
+
+        {/* ═══ 섹션 AI: AI 오케스트레이션 + 피드백 (Phase B) ═══ */}
+        <AiAnalyticsPanel />
 
         {/* ═══ 섹션 6: 최근 완료 회의 ═══ */}
         <SectionPanel title="최근 완료 회의" subtitle="최근 5건">
