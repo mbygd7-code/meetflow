@@ -1,5 +1,6 @@
-import { useMemo, useCallback } from 'react';
-import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { useMemo, useState, useEffect, useCallback } from 'react';
+import { Link, useOutletContext } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
   Zap, CircleDot, MessageSquare, TrendingUp,
@@ -12,16 +13,45 @@ import { differenceInDays, parseISO, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
 import MyTaskCard from '@/components/task/MyTaskCard';
+import TaskDetailPanel from '@/components/members/TaskDetailPanel';
 import EmptyState from '@/components/ui/EmptyState';
+import { useToastStore } from '@/stores/toastStore';
 import { getDueDateStatus, safeFormatDate } from '@/utils/formatters';
 import { DASHBOARD_LIMITS, URGENT_DUE_DAYS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
-  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
-  const { tasks } = useTaskStore();
+  const { tasks, updateTask } = useTaskStore();
+  const addToast = useToastStore((s) => s.addToast);
+
+  // 태스크 상세 모달 상태 (id만 저장 → Realtime 업데이트 시 최신 객체 조회)
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [members, setMembers] = useState([]);
+
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null),
+    [selectedTaskId, tasks]
+  );
+
+  // 멤버 목록 로드 (담당자 드롭다운용) — 모달 열릴 때만 1회
+  useEffect(() => {
+    if (!selectedTaskId || members.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('id, name, email, avatar_color, role, slack_user_id')
+          .order('name');
+        if (!cancelled) setMembers(data || []);
+      } catch (err) {
+        console.error('[DashboardPage] members load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedTaskId, members.length]);
 
   const today = format(new Date(), 'yyyy년 MM월 dd일 EEEE', { locale: ko });
 
@@ -114,12 +144,51 @@ export default function DashboardPage() {
     return `오늘 ${parts.join(' · ')} 있어요`;
   }, [todayMeetings, taskCounts]);
 
-  // ─── 태스크 카드 클릭 → 멤버/태스크 페이지 상세 모달로 이동 ───
-  // (인라인 슬라이드 패널 대신 전용 페이지에서 전체 상세/코멘트/첨부 확인)
+  // ─── 태스크 카드 클릭 → 이 페이지 내에서 TaskDetailPanel 모달 열기 ───
+  // (MembersPage로 이동하지 않고 현재 대시보드에서 전체 상세/코멘트/첨부 확인)
   const handleSelectTask = useCallback((task) => {
     if (!task?.id) return;
-    navigate(`/members?member=all&task=${encodeURIComponent(task.id)}`);
-  }, [navigate]);
+    setSelectedTaskId(task.id);
+  }, []);
+
+  const handleCloseTask = useCallback(() => setSelectedTaskId(null), []);
+
+  // 태스크 상태 변경
+  const handleStatusChange = useCallback(async (taskId, newStatus) => {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', taskId)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('편집 권한이 없습니다');
+      updateTask(taskId, data);
+    } catch (err) {
+      console.error('[DashboardPage] status change failed:', err);
+      addToast?.('상태 변경 실패', 'error', 3000);
+    }
+  }, [updateTask, addToast]);
+
+  // 태스크 필드 업데이트 (제목/설명/담당자/기한 등)
+  const handleUpdateTask = useCallback(async (taskId, patch, { silent = false } = {}) => {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', taskId)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('편집 권한이 없습니다 (RLS)');
+      updateTask(taskId, data);
+      if (!silent) addToast?.('변경되었습니다', 'success', 2000);
+    } catch (err) {
+      console.error('[DashboardPage] update failed:', err);
+      if (!silent) addToast?.(err.message || '업데이트 실패', 'error', 3000);
+    }
+  }, [updateTask, addToast]);
 
   return (
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
@@ -353,6 +422,18 @@ export default function DashboardPage() {
           </div>
         )}
       </aside>
+
+      {/* 태스크 상세 모달 — 전용 페이지로 이동하지 않고 대시보드에서 바로 열림 */}
+      {selectedTask && (
+        <TaskDetailPanel
+          task={selectedTask}
+          members={members}
+          currentUser={user}
+          onClose={handleCloseTask}
+          onStatusChange={handleStatusChange}
+          onUpdate={handleUpdateTask}
+        />
+      )}
     </div>
   );
 }
