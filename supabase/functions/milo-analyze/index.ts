@@ -295,21 +295,45 @@ ${preset || 'default'}
     // 마지막 사용자 메시지에서 검색 요청 키워드 감지
     const lastUserMsg = (messages || []).filter((m: any) => !m.is_ai).pop()?.content || '';
     const searchKeywords = /검색|찾아|서치|search|조사|리서치|트렌드|최신|경쟁사|사례|레퍼런스/i;
+    // 이미지 의도 감지: "이미지/사진/그림/일러스트..." + "보여줘/가져와/추천/필요/줘/올려/구해" 근접 패턴
+    //   또는 역순 "찾아/검색/보여/구해/추천" + "이미지/사진/그림/..."
+    //   단독 "이미지"만으론 트리거 안 함 (이미지 사이즈 질문 등 오탐 방지)
+    const imageIntentRe = /(이미지|사진|그림|일러스트|삽화|아이콘|로고|포스터|썸네일|photo|image|picture|illustration|icon|logo)[^\n]{0,20}(찾|검색|보여|가져|구해|추천|필요|보내|올려|줘|달라|부탁)|(찾|검색|보여|구해|추천|가져)[^\n]{0,15}(이미지|사진|그림|일러스트|삽화|아이콘|로고|포스터|썸네일|photo|image|picture|illustration|icon|logo)/i;
     // 직전 AI 메시지가 "~하겠습니다" 약속으로 끝났고 사용자가 짧게 확인만 했다면 → 검색 유지
     const lastAiMsg = (messages || []).filter((m: any) => m.is_ai).pop()?.content || '';
     const aiPromisedSearch = /(검색하여|검색하겠|찾아보겠|조사하겠|수집한\s*후|수집해|분석에\s*즉시|정리해\s*드리|작성해\s*드리)/.test(lastAiMsg);
     const userShortConfirm = lastUserMsg.length < 30 && /(네|응|좋아|그래|진행|시작|해주세요|부탁|ok|okay|yes)/i.test(lastUserMsg);
     // 직전 사용자 요청 중 가장 "검색 의도가 강한" 메시지를 역추적 (최근 10개 이내)
     const recentUserMsgs = (messages || []).filter((m: any) => !m.is_ai).slice(-10);
-    const searchIntentMsg = [...recentUserMsgs].reverse().find((m: any) => searchKeywords.test(m.content || ''))?.content || '';
-    const wantsSearch =
-      searchKeywords.test(lastUserMsg) ||
-      (aiPromisedSearch && userShortConfirm) ||
-      (aiPromisedSearch && !!searchIntentMsg);
+    const searchIntentMsg = [...recentUserMsgs].reverse().find(
+      (m: any) => searchKeywords.test(m.content || '') || imageIntentRe.test(m.content || '')
+    )?.content || '';
+
+    // 트리거 이유 추적 (디버깅용)
+    const searchTrigger =
+      searchKeywords.test(lastUserMsg) ? 'keyword' :
+      imageIntentRe.test(lastUserMsg) ? 'image_intent' :
+      (aiPromisedSearch && userShortConfirm) ? 'ai_promised+confirm' :
+      (aiPromisedSearch && !!searchIntentMsg) ? 'ai_promised+backtrack' :
+      null;
+    const wantsSearch = !!searchTrigger;
 
     // 종합 모드(Phase 1)에서는 웹 검색 스킵 — 전문가 응답을 통합하는 것만 목적이므로
     //   context.mode === 'synthesize' 또는 context.skipSearch === true
     const isSynthesizeMode = context?.mode === 'synthesize' || context?.skipSearch === true;
+
+    // 트리거 여부 로깅 — 스킵된 경우도 기록 (왜 안 됐는지 진단)
+    const searchEnabled = !!(GOOGLE_CSE_ID && GOOGLE_API_KEY);
+    console.log(JSON.stringify({
+      type: 'search_decision',
+      requestId,
+      searchEnabled,
+      trigger: searchTrigger,
+      wantsSearch,
+      isSynthesizeMode,
+      willSearch: searchEnabled && wantsSearch && !isSynthesizeMode,
+      lastUserMsgSample: lastUserMsg.slice(0, 80),
+    }));
 
     if (GOOGLE_CSE_ID && GOOGLE_API_KEY && wantsSearch && !isSynthesizeMode) {
       try {
