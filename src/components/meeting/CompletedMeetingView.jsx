@@ -104,7 +104,9 @@ export default function CompletedMeetingView({ meeting }) {
   const addTaskToStore = useTaskStore((s) => s.addTask);
   const updateTaskInStore = useTaskStore((s) => s.updateTask);
   const removeTaskFromStore = useTaskStore((s) => s.removeTask);
-  const [tasksExpanded, setTasksExpanded] = useState(true);
+  // 기본은 접힘 — 태스크가 많을 때 채팅/사이드바 시야 확보.
+  // 아이템이 3개 이하일 때만 자동으로 펼치기 (소량은 접을 필요 X)
+  const [tasksExpanded, setTasksExpanded] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [pendingTaskIds, setPendingTaskIds] = useState(new Set()); // 토글 중인 태스크 id
   // V6: 인라인 제목 편집
@@ -484,6 +486,20 @@ export default function CompletedMeetingView({ meeting }) {
     () => allTasks.filter((t) => t.meeting_id === meeting.id),
     [allTasks, meeting.id]
   );
+
+  // 초기 로드 시 태스크 수가 적으면 자동 펼침 (첫 1회만)
+  const didAutoExpandRef = useRef(false);
+  useEffect(() => {
+    if (didAutoExpandRef.current) return;
+    const total = (allTasks.filter((t) => t.meeting_id === meeting.id)).length;
+    if (total > 0 && total <= 3) {
+      setTasksExpanded(true);
+      didAutoExpandRef.current = true;
+    } else if (total > 3) {
+      didAutoExpandRef.current = true;  // 접힘 상태 유지
+    }
+    // total === 0 이면 태스크 없어 표시 안 되므로 체크 skip
+  }, [allTasks, meeting.id]);
 
   // V7: 배정 가능한 사용자 (회의 참여자 + 현재 사용자)
   const assignableUsers = useMemo(() => {
@@ -1581,7 +1597,9 @@ export default function CompletedMeetingView({ meeting }) {
           </button>
 
           {tasksExpanded && (
-            <div className="px-3 md:px-6 pb-4 space-y-2">
+            // max-height 제한 + 내부 스크롤 → 태스크가 많아도 채팅/사이드바 시야 보장
+            // 모바일: 40vh, 데스크톱: 45vh
+            <div className="px-3 md:px-6 pb-4 space-y-2 max-h-[40vh] md:max-h-[45vh] overflow-y-auto overscroll-contain scrollbar-hide">
               {/* V8: 태스크 필터 탭 + V9: 일괄 푸시 */}
               {meetingTasks.length > 0 && (
                 <div className="flex items-center gap-1 flex-wrap pb-1">
