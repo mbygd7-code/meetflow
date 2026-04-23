@@ -65,6 +65,8 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
   return (
     <div
       ref={ref}
+      // data-pdf-printable 속성으로 PDF 생성 시 스타일을 프로그래매틱하게 토글
+      data-pdf-printable
       style={{
         width: A4_W,
         minHeight: A4_H,
@@ -75,10 +77,11 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
         fontFamily: '"Pretendard", "Inter", -apple-system, sans-serif',
         fontSize: 11,
         lineHeight: 1.45,
-        // 화면에서 안 보이게 오프스크린
-        position: 'absolute',
-        left: -99999,
+        // 기본: 뷰포트 밖 왼쪽으로 밀어내 안 보이게 (opacity 0 쓰지 않음 — html2canvas 호환)
+        position: 'fixed',
         top: 0,
+        left: '-9999px',
+        pointerEvents: 'none',
       }}
     >
       {/* ═══ 1. 헤더 ═══ */}

@@ -320,26 +320,54 @@ export default function MeetingSummary() {
     });
   }, [meeting?.agendas, messages]);
 
-  // PDF 다운로드 — 전용 A4 단일 페이지 템플릿(MeetingSummaryPrintable)을 캡처
+  // PDF 다운로드 — A4 전용 템플릿을 사용. 생성 중에만 잠깐 화면에 표시해
+  // html2canvas가 안전하게 캡처하도록 함.
   const handleDownloadPdf = async () => {
     if (!printableRef.current || !meeting || downloadingPdf) return;
     setDownloadingPdf(true);
+
+    const el = printableRef.current;
+    // 원본 스타일 백업
+    const backup = {
+      position: el.style.position,
+      left: el.style.left,
+      top: el.style.top,
+      opacity: el.style.opacity,
+      zIndex: el.style.zIndex,
+      pointerEvents: el.style.pointerEvents,
+    };
+
+    // 캡처 가능하도록 뷰포트 내 불투명 상태로 전환 (사용자엔 pointer-events:none으로 노출 X)
+    // 투명 레이어로 0.01 opacity — 시각적으로 안 보이되 html2canvas는 정상 읽음
+    el.style.position = 'fixed';
+    el.style.top = '0';
+    el.style.left = '0';
+    el.style.opacity = '1';            // 렌더 픽셀 확보
+    el.style.zIndex = '99999';         // 잠시 최상단
+    el.style.pointerEvents = 'none';
+
+    // 페인트 기회 부여 (한 프레임)
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
     try {
       const html2pdf = (await import('html2pdf.js')).default;
       const fname = `${(meeting.title || '회의록').replace(/[\\/:*?"<>|]/g, '_')}_${safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyyMMdd_HHmm', 'export')}.pdf`;
       await html2pdf()
         .set({
-          margin: 0,                          // 템플릿 자체에 패딩 있음
+          margin: 0,
           filename: fname,
           image: { type: 'jpeg', quality: 0.96 },
           html2canvas: {
-            scale: 2,                          // 고해상도
+            scale: 2,
             useCORS: true,
             backgroundColor: '#ffffff',
             logging: false,
-            // 전체 요소를 한 번에 캡처해 한 페이지에 압축
+            width: 794,
+            height: 1123,
             windowWidth: 794,
             windowHeight: 1123,
+            scrollX: 0,
+            scrollY: 0,
           },
           jsPDF: {
             unit: 'mm',
@@ -347,16 +375,17 @@ export default function MeetingSummary() {
             orientation: 'portrait',
             compress: true,
           },
-          // 페이지 나눔 비활성화 — 단일 페이지 보장
           pagebreak: { mode: [], avoid: '*' },
         })
-        .from(printableRef.current)
+        .from(el)
         .save();
       addToast?.('PDF 다운로드 완료', 'success', 2500);
     } catch (err) {
       console.error('[downloadPdf]', err);
       addToast?.('PDF 생성 실패', 'error', 3000);
     } finally {
+      // 스타일 원복
+      Object.assign(el.style, backup);
       setDownloadingPdf(false);
     }
   };
