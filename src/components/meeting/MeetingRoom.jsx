@@ -1006,8 +1006,17 @@ export default function MeetingRoom() {
     // 백그라운드에서 회의록 생성
     setSummaryGeneratingId(id);
     try {
-      await endMeeting(id, { messages, agendas: meeting.agendas || [] });
-      addToast('회의록 작성이 완료되었습니다! 📝', 'success', 5000);
+      const result = await endMeeting(id, { messages, agendas: meeting.agendas || [] });
+      if (result?.failed) {
+        // 요약 실패 — 명확한 경고 토스트 + 재시도 유도
+        addToast(
+          '회의록 자동 생성에 실패했습니다. 회의록 목록에서 다시 시도할 수 있어요.',
+          'error',
+          6000
+        );
+      } else if (result?.summary) {
+        addToast('회의록 작성이 완료되었습니다! 📝', 'success', 5000);
+      }
     } catch (err) {
       console.error('[handleConfirmEnd]', err);
       addToast('회의록 작성 중 오류가 발생했습니다.', 'error', 5000);
@@ -1016,14 +1025,18 @@ export default function MeetingRoom() {
     }
   };
 
-  // 회의록 없이 종료
+  // 회의록 없이 종료 — summary_skipped=true → 회의록 목록에서 제외
   const handleEndWithoutSummary = async () => {
     setConfirmingEnd(false);
     setActiveMeetingId(null);
     setLeavingConfirmed(true);
     clearSessionState(id);
 
-    const patch = { status: 'completed', ended_at: new Date().toISOString() };
+    const patch = {
+      status: 'completed',
+      ended_at: new Date().toISOString(),
+      summary_skipped: true,   // 회의록 페이지에서 제외되도록 표시
+    };
     const { updateMeeting: storePatch } = useMeetingStore.getState();
     storePatch(id, patch);
     if (!!import.meta.env.VITE_SUPABASE_URL) {
@@ -1031,7 +1044,7 @@ export default function MeetingRoom() {
     }
 
     navigate('/');
-    addToast('회의가 종료되었습니다.', 'info', 3000);
+    addToast('회의가 종료되었습니다. (요약 없이 종료 — 회의록 목록에 표시되지 않아요)', 'info', 4000);
   };
 
   const handleSend = async (content) => {

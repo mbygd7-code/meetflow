@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
-import { FileText, Loader2, Sparkles, Search, X } from 'lucide-react';
+import { FileText, Loader2, Sparkles, Search, X, AlertCircle } from 'lucide-react';
 import { Card, Badge, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -75,14 +75,16 @@ function SummaryList() {
     : null;
 
   // 완료된 회의 전체 (필터 적용 전) — 카운트 합산/빈 상태 판단에 사용
-  // 메시지가 0건인 "빈 회의"는 목록에서 숨김 (회의록 오염 방지)
+  // - 메시지 0건인 빈 회의 숨김 (회의록 오염 방지)
+  // - 사용자가 "요약 취소"로 종료한 회의(summary_skipped=true) 숨김
   const allCompleted = useMemo(
     () =>
       meetings.filter(
         (m) =>
           m.status === 'completed' &&
           m.id !== summaryGeneratingId &&
-          (m.message_count ?? 0) > 0
+          (m.message_count ?? 0) > 0 &&
+          !m.summary_skipped
       ),
     [meetings, summaryGeneratingId]
   );
@@ -242,6 +244,7 @@ function SummaryList() {
             <div className="space-y-3">
               {filtered.map((m) => {
                 const summary = summariesMap[m.id];
+                const failed = m.summary_failed === true && !summary;
                 // 점수 계산 — summary가 로드된 경우에만 (없으면 뱃지 숨김)
                 // 리스트 뷰이므로 messages를 비워 전달 (score 유틸이 agenda.status로 대체 판정)
                 let scoreData = null;
@@ -291,6 +294,15 @@ function SummaryList() {
                         >
                           <MeetingFeedback meetingId={m.id} compact />
                           {scoreData && <MeetingScoreBadge score={scoreData} compact />}
+                          {failed && (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold bg-status-error/10 text-status-error border border-status-error/25"
+                              title="AI 요약 생성 실패 — 상세 페이지에서 다시 시도해보세요"
+                            >
+                              <AlertCircle size={10} strokeWidth={2.6} />
+                              요약 실패
+                            </span>
+                          )}
                           <Badge variant="outline">완료</Badge>
                         </div>
                       </div>

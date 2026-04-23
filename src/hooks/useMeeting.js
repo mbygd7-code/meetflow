@@ -233,7 +233,11 @@ export function useMeeting() {
         return null;
       }
 
-      const patch = { status: 'completed', ended_at: new Date().toISOString() };
+      const patch = {
+        status: 'completed',
+        ended_at: new Date().toISOString(),
+        summary_skipped: false,  // 요약 시도했음 (취소 아님)
+      };
       if (canUseDB) {
         await supabase.from('meetings').update(patch).eq('id', id);
       }
@@ -242,11 +246,29 @@ export function useMeeting() {
       // AI 요약 생성 시도 — Phase 2: meetingTitle 전달 (RAG 인덱싱 시 파일명 가독성↑)
       const meetingTitle = useMeetingStore.getState().meetings.find((m) => m.id === id)?.title || null;
       let summary = null;
+      let summaryError = null;
       try {
         summary = await generateSummary({ meetingId: id, messages, agendas, meetingTitle });
         console.log('[endMeeting] AI 요약 생성 완료:', summary);
       } catch (err) {
-        console.warn('[endMeeting] AI 요약 생성 실패 (데모 요약 사용):', err.message);
+        summaryError = err;
+        console.warn('[endMeeting] AI 요약 생성 실패:', err?.message);
+      }
+
+      // 실패 시 summary_failed=true 기록 → SummariesPage에서 "요약 실패" 뱃지 표시
+      if (!summary || summaryError) {
+        const failPatch = { summary_failed: true };
+        if (canUseDB) {
+          try { await supabase.from('meetings').update(failPatch).eq('id', id); } catch {}
+        }
+        updateMeeting(id, failPatch);
+      } else {
+        // 성공했으면 summary_failed=false (재시도로 복구되는 경우도 처리)
+        const okPatch = { summary_failed: false };
+        if (canUseDB) {
+          try { await supabase.from('meetings').update(okPatch).eq('id', id); } catch {}
+        }
+        updateMeeting(id, okPatch);
       }
 
       // DB 저장은 Edge Function(generate-summary)에서 자동 처리됨
@@ -302,7 +324,8 @@ export function useMeeting() {
         console.log('[데모] 회의 종료 — Slack 종료 알림 + Notion 동기화는 Supabase 연결 후 활성화됩니다.');
       }
 
-      return summary;
+      // 요약 결과 + 실패 정보 반환 — 호출자가 UI 피드백에 활용
+      return { summary, error: summaryError, failed: !summary || !!summaryError };
     },
     [updateMeeting, user]
   );
