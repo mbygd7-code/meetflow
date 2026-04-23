@@ -23,6 +23,7 @@ import MeetingMetaBar from './MeetingMetaBar';
 import MeetingParticipants from './MeetingParticipants';
 import MeetingFeedback from './MeetingFeedback';
 import MeetingScoreBadge from './MeetingScoreBadge';
+import MeetingSummaryPrintable from './MeetingSummaryPrintable';
 import { computeMeetingScore } from '@/utils/meetingScoreUtils';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -123,6 +124,7 @@ export default function MeetingSummary() {
   const [generating, setGenerating] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const contentRef = useRef(null);
+  const printableRef = useRef(null);
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
   const isAdmin = useAuthStore((s) => s.isAdmin?.() || false);
@@ -318,29 +320,37 @@ export default function MeetingSummary() {
     });
   }, [meeting?.agendas, messages]);
 
-  // PDF 다운로드 — html2pdf.js로 contentRef 영역을 A4 PDF로 저장
+  // PDF 다운로드 — 전용 A4 단일 페이지 템플릿(MeetingSummaryPrintable)을 캡처
   const handleDownloadPdf = async () => {
-    if (!contentRef.current || !meeting || downloadingPdf) return;
+    if (!printableRef.current || !meeting || downloadingPdf) return;
     setDownloadingPdf(true);
     try {
-      // 동적 import — 초기 번들에서 ~50KB 절감
       const html2pdf = (await import('html2pdf.js')).default;
       const fname = `${(meeting.title || '회의록').replace(/[\\/:*?"<>|]/g, '_')}_${safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyyMMdd_HHmm', 'export')}.pdf`;
       await html2pdf()
         .set({
-          margin: [12, 10, 12, 10],  // mm (top, left, bottom, right)
+          margin: 0,                          // 템플릿 자체에 패딩 있음
           filename: fname,
-          image: { type: 'jpeg', quality: 0.95 },
+          image: { type: 'jpeg', quality: 0.96 },
           html2canvas: {
-            scale: 2,               // 고해상도
+            scale: 2,                          // 고해상도
             useCORS: true,
             backgroundColor: '#ffffff',
             logging: false,
+            // 전체 요소를 한 번에 캡처해 한 페이지에 압축
+            windowWidth: 794,
+            windowHeight: 1123,
           },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+          jsPDF: {
+            unit: 'mm',
+            format: 'a4',
+            orientation: 'portrait',
+            compress: true,
+          },
+          // 페이지 나눔 비활성화 — 단일 페이지 보장
+          pagebreak: { mode: [], avoid: '*' },
         })
-        .from(contentRef.current)
+        .from(printableRef.current)
         .save();
       addToast?.('PDF 다운로드 완료', 'success', 2500);
     } catch (err) {
@@ -654,6 +664,15 @@ export default function MeetingSummary() {
 
       </div>
       {/* PDF 캡처 대상 끝 */}
+
+      {/* PDF 전용 오프스크린 템플릿 — A4 한 페이지 */}
+      <MeetingSummaryPrintable
+        ref={printableRef}
+        meeting={meeting}
+        summary={summary}
+        stats={stats}
+        meetingScore={meetingScore}
+      />
 
       {/* 하단 액션 — PDF에 포함되지 않음 */}
       <div className="flex items-center gap-2 md:gap-3 pt-3 border-t border-border-divider flex-wrap">
