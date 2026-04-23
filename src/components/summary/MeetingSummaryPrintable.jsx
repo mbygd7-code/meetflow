@@ -39,7 +39,8 @@ const Chip = ({ label, value }) => (
 );
 
 const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
-  { meeting, summary, stats, meetingScore },
+  // meetingScore prop은 더 이상 PDF에 포함하지 않음 (평가 뱃지 제거 요청)
+  { meeting, summary, stats },
   ref
 ) {
   if (!meeting) return null;
@@ -84,35 +85,14 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
         pointerEvents: 'none',
       }}
     >
-      {/* ═══ 1. 헤더 ═══ */}
+      {/* ═══ 1. 헤더 (평가 뱃지 제거) ═══ */}
       <header style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 9, letterSpacing: 1.5, color: '#a855f7', fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>
-              MEETING MINUTES
-            </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#18181b', margin: 0, lineHeight: 1.2 }}>
-              {meeting.title || '회의록'}
-            </h1>
-          </div>
-          {meetingScore && (
-            <div style={{
-              flexShrink: 0,
-              textAlign: 'center',
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: '2px solid #a855f7',
-              background: '#faf5ff',
-              minWidth: 72,
-            }}>
-              <div style={{ fontSize: 8, letterSpacing: 1, color: '#a855f7', fontWeight: 700 }}>평가</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#7e22ce', lineHeight: 1 }}>
-                {meetingScore.grade.label}
-              </div>
-              <div style={{ fontSize: 8, color: '#71717a' }}>{meetingScore.score}/100</div>
-            </div>
-          )}
+        <div style={{ fontSize: 9, letterSpacing: 1.5, color: '#a855f7', fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>
+          MEETING MINUTES
         </div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#18181b', margin: 0, lineHeight: 1.2 }}>
+          {meeting.title || '회의록'}
+        </h1>
 
         {/* 메타 정보 한 줄 */}
         <div style={{
@@ -246,38 +226,39 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
       {actions.length > 0 && (
         <section style={{ marginBottom: 12 }}>
           <SectionTitle count={actions.length}>후속 태스크</SectionTitle>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: '#f4f4f5', color: '#3f3f46' }}>
-                <th style={{ textAlign: 'left', padding: '4px 6px', width: 18, fontWeight: 600 }}>#</th>
+                <th style={{ textAlign: 'left', padding: '4px 6px', width: 20, fontWeight: 600 }}>#</th>
                 <th style={{ textAlign: 'left', padding: '4px 6px', fontWeight: 600 }}>업무</th>
-                <th style={{ textAlign: 'left', padding: '4px 6px', width: 70, fontWeight: 600 }}>담당</th>
-                <th style={{ textAlign: 'left', padding: '4px 6px', width: 60, fontWeight: 600 }}>기한</th>
-                <th style={{ textAlign: 'center', padding: '4px 6px', width: 40, fontWeight: 600 }}>우선</th>
+                <th style={{ textAlign: 'left', padding: '4px 6px', width: 72, fontWeight: 600 }}>담당</th>
+                <th style={{ textAlign: 'left', padding: '4px 6px', width: 64, fontWeight: 600 }}>기한</th>
+                <th style={{ textAlign: 'left', padding: '4px 6px', width: 58, fontWeight: 600 }}>우선순위</th>
               </tr>
             </thead>
             <tbody>
               {actions.slice(0, MAX_ACTIONS).map((a, i) => {
                 const priMap = {
                   urgent: { label: '긴급', color: '#dc2626' },
-                  high: { label: '높음', color: '#ea580c' },
+                  high:   { label: '높음', color: '#ea580c' },
                   medium: { label: '보통', color: '#a855f7' },
-                  low: { label: '낮음', color: '#71717a' },
+                  low:    { label: '낮음', color: '#71717a' },
                 };
                 const pri = priMap[a.priority] || priMap.medium;
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid #f4f4f5' }}>
-                    <td style={{ padding: '3px 6px', color: '#71717a' }}>{i + 1}</td>
-                    <td style={{ padding: '3px 6px', color: '#18181b' }}>{a.title}</td>
-                    <td style={{ padding: '3px 6px', color: '#52525b' }}>{a.assignee_hint || '-'}</td>
-                    <td style={{ padding: '3px 6px', color: '#52525b' }}>{a.due_hint || '-'}</td>
-                    <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                    <td style={{ padding: '4px 6px', color: '#71717a', verticalAlign: 'top' }}>{i + 1}</td>
+                    <td style={{ padding: '4px 6px', color: '#18181b', verticalAlign: 'top', wordBreak: 'break-word' }}>{a.title}</td>
+                    <td style={{ padding: '4px 6px', color: '#52525b', verticalAlign: 'top' }}>{a.assignee_hint || '-'}</td>
+                    <td style={{ padding: '4px 6px', color: '#52525b', verticalAlign: 'top' }}>{a.due_hint || '-'}</td>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'top', color: pri.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
                       <span style={{
-                        fontSize: 8.5, fontWeight: 700, padding: '1px 4px',
-                        borderRadius: 3, color: pri.color, border: `1px solid ${pri.color}`,
-                      }}>
-                        {pri.label}
-                      </span>
+                        display: 'inline-block',
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: pri.color, marginRight: 4,
+                        verticalAlign: 'middle',
+                      }} />
+                      {pri.label}
                     </td>
                   </tr>
                 );
