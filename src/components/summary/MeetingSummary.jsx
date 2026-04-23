@@ -664,7 +664,7 @@ export default function MeetingSummary() {
           title="현재 회의록을 PDF 파일로 저장"
         >
           {downloadingPdf ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-          {downloadingPdf ? 'PDF 생성 중...' : 'PDF 다운로드'}
+          {downloadingPdf ? '생성 중...' : '다운로드'}
         </button>
         {messages && messages.length >= 2 && (
           <button
