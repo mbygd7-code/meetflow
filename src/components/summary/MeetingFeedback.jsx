@@ -2,7 +2,7 @@
 // 차이점: 사이즈를 키워 헤더에서 눈에 띄게 표시
 // DB 매핑: 👍 → reaction='loved', 👎 → reaction='poor' (migration 034 CHECK 호환)
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ThumbsUp, ThumbsDown, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,12 +23,17 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
   const [myReaction, setMyReaction] = useState(null);
   const [busy, setBusy] = useState(null);
   const [loading, setLoading] = useState(true);
+  const channelRef = useRef(null);
 
   // 로드 + Realtime 구독
   useEffect(() => {
     if (!meetingId) return;
     let cancelled = false;
-    let channel = null;
+    // 이전 effect의 채널이 남아있으면 제거 (StrictMode 이중 실행 / deps 변경 대비)
+    if (channelRef.current) {
+      try { supabase.removeChannel(channelRef.current); } catch {}
+      channelRef.current = null;
+    }
 
     async function load() {
       setLoading(true);
@@ -66,8 +71,10 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
     load();
 
     if (SUPABASE_ENABLED && !isDemoMeeting(meetingId)) {
-      channel = supabase
-        .channel(`meeting_reactions:${meetingId}:${Date.now()}`)
+      // 유니크 채널 이름 (meetingId + 랜덤 suffix) — 같은 ms에 여러 카드 마운트 시 충돌 방지
+      const channelName = `mr:${meetingId}:${Math.random().toString(36).slice(2, 10)}`;
+      const ch = supabase
+        .channel(channelName)
         .on(
           'postgres_changes',
           {
@@ -79,11 +86,15 @@ export default function MeetingFeedback({ meetingId, compact = false }) {
           () => { if (!cancelled) load(); }
         )
         .subscribe();
+      channelRef.current = ch;
     }
 
     return () => {
       cancelled = true;
-      if (channel) supabase.removeChannel(channel);
+      if (channelRef.current) {
+        try { supabase.removeChannel(channelRef.current); } catch {}
+        channelRef.current = null;
+      }
     };
   }, [meetingId, user?.id]);
 
