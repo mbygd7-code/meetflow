@@ -256,13 +256,6 @@ export default function TaskDetailPanel({
             />
           </Section>
 
-          {/* ── 회의 컨텍스트 ── */}
-          {task.meeting_id && (
-            <Section title="회의 컨텍스트" icon={Sparkles}>
-              <MeetingContextCard meetingId={task.meeting_id} taskTitle={task.title} />
-            </Section>
-          )}
-
           {/* ── 댓글 ── */}
           <Section
             title={`댓글${comments.length > 0 ? ` (${comments.length})` : ''}`}
