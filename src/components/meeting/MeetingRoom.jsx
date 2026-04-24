@@ -190,8 +190,9 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
     if (!isZoomed) return;
     const el = scrollRef.current;
     if (!el) return;
-    // 슬라이더/버튼 영역 클릭은 무시
-    if (e.target.closest('button, input, a')) return;
+    // 슬라이더 컨테이너/버튼/input/링크 영역 클릭은 무시
+    if (e.target.closest('button, input, a, [role="slider"]')) return;
+    if (sliderContainerRef.current && sliderContainerRef.current.contains(e.target)) return;
 
     panRef.current = {
       startX: e.clientX,
@@ -278,6 +279,9 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
         {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
         <div
           ref={sliderContainerRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
           className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2"
         >
           {sliderOpen && (
@@ -299,6 +303,9 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
                 step={5}
                 value={zoomScale}
                 onChange={(e) => setZoomScale(parseInt(e.target.value, 10))}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 orient="vertical"
                 aria-label="이미지 크기 조절"
                 style={{
