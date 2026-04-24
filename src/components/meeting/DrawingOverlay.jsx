@@ -156,10 +156,29 @@ export default function DrawingOverlay({
 
   // 저장 — meeting_drawings 테이블에 upsert
   const handleSave = async () => {
-    if (!SUPABASE_ENABLED || !meetingId || !targetKey || saving) return;
+    if (!SUPABASE_ENABLED) {
+      addToast?.('Supabase 미연결 상태에서는 저장 불가', 'error', 3500);
+      return;
+    }
+    if (!meetingId) {
+      addToast?.('회의 ID가 없어 저장할 수 없습니다', 'error', 3500);
+      return;
+    }
+    if (!targetKey) {
+      addToast?.('자료 키가 없어 저장할 수 없습니다', 'error', 3500);
+      return;
+    }
+    if (saving) return;
+
+    // 디버그 로그 (문제 진단용)
+    console.log('[DrawingOverlay] save start:', {
+      meetingId, targetKey, strokes_count: strokes.length, user_id: user?.id,
+    });
+
     setSaving(true);
-    skipNextRealtimeLoadRef.current = true;  // 자기 에코 스킵
+    skipNextRealtimeLoadRef.current = true;
     try {
+      // .maybeSingle() 로 레코드 없어도 에러 안 나게
       const { data, error } = await supabase
         .from('meeting_drawings')
         .upsert(
@@ -171,18 +190,34 @@ export default function DrawingOverlay({
           },
           { onConflict: 'meeting_id,target_key' }
         )
-        .select('updated_at')
-        .single();
+        .select('id, updated_at')
+        .maybeSingle();
+
       if (error) throw error;
-      setSavedAt(data?.updated_at || new Date().toISOString());
-      addToast?.(`드로잉을 저장했습니다 (${strokes.length}건)`, 'success', 2500);
+      if (!data) {
+        // 권한 통과했지만 row가 반환되지 않은 경우 → select 권한 없음
+        throw new Error('저장 후 조회 실패 — RLS 정책 확인 필요 (SELECT 권한 누락)');
+      }
+      console.log('[DrawingOverlay] save ok:', data);
+      setSavedAt(data.updated_at || new Date().toISOString());
+      addToast?.(`드로잉 저장 완료 (${strokes.length}건)`, 'success', 2500);
     } catch (err) {
-      console.error('[DrawingOverlay] save failed:', err);
+      console.error('[DrawingOverlay] save failed — full error:', err);
       const code = err?.code || '';
-      const msg = code === '42P01'
-        ? 'DB 테이블 없음 — migration 039 실행 필요'
-        : `저장 실패: ${err.message?.slice(0, 80) || ''}`;
-      addToast?.(msg, 'error', 4000);
+      const errMsg = err?.message || String(err);
+      let friendly = '저장 실패';
+      if (code === '42P01') {
+        friendly = 'DB 테이블 없음 — Supabase SQL Editor 에서 migration 039 실행 필요';
+      } else if (code === '42501' || /row-level security|policy/i.test(errMsg)) {
+        friendly = 'RLS 권한 오류 — migration 039 RLS 정책 적용 필요';
+      } else if (code === '23503') {
+        friendly = '외래키 오류 — meeting_id 또는 user_id 유효하지 않음';
+      } else if (code === '23505') {
+        friendly = 'UNIQUE 충돌 — onConflict 설정 확인';
+      } else if (errMsg) {
+        friendly = `저장 실패 [${code}]: ${errMsg.slice(0, 120)}`;
+      }
+      addToast?.(friendly, 'error', 6000);
       skipNextRealtimeLoadRef.current = false;
     } finally {
       setSaving(false);
