@@ -50,6 +50,13 @@ export default function DrawingOverlay({
   const channelRef = useRef(null);
   const myIdRef = useRef(user?.id || `anon-${Math.random().toString(36).slice(2, 8)}`);
 
+  // 현재 사용자 정보 — 각 stroke에 첨부되어 원격 참여자 화면에 아바타 표시
+  const myInfo = useMemo(() => ({
+    id: myIdRef.current,
+    name: user?.name || '사용자',
+    color: user?.avatar_color || '#723CEB',
+  }), [user?.name, user?.avatar_color]);
+
   // Realtime 채널 구독 — 같은 meetingId+targetKey 단위로 격리
   useEffect(() => {
     if (!SUPABASE_ENABLED || !meetingId || !targetKey) return;
@@ -145,6 +152,8 @@ export default function DrawingOverlay({
     drawingRef.current = {
       id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       user_id: myIdRef.current,
+      user_name: myInfo.name,
+      user_color: myInfo.color,
       color,
       points: [n],
     };
@@ -208,6 +217,26 @@ export default function DrawingOverlay({
 
   const toolbarCommonCls = 'inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors';
 
+  // 각 stroke의 bounding box 우상단에 아바타 — 겹치는 stroke는 가장 최신만
+  // (한 사용자가 같은 근처에 여러 번 그려도 아바타 도배 방지)
+  const avatarMarkers = useMemo(() => {
+    // stroke별로 last point의 pixel 좌표 + 사용자 정보
+    const markers = [];
+    for (const s of strokes) {
+      if (!s.points || s.points.length === 0) continue;
+      const last = s.points[s.points.length - 1];
+      markers.push({
+        strokeId: s.id,
+        x: last.x * (width || 0),
+        y: last.y * (height || 0),
+        name: s.user_name || '사용자',
+        color: s.user_color || s.color || '#723CEB',
+        strokeColor: s.color || '#EF4444',
+      });
+    }
+    return markers;
+  }, [strokes, width, height]);
+
   return (
     <>
       {/* 드로잉 레이어 — target 위에 absolute 오버랩 */}
@@ -225,6 +254,35 @@ export default function DrawingOverlay({
           zIndex: 5,
         }}
       />
+
+      {/* 각 stroke 끝 지점에 사용자 아바타 — 호버 시 풀네임 노출 */}
+      {avatarMarkers.map((m) => (
+        <div
+          key={m.strokeId}
+          className="group/dmark absolute z-[6] pointer-events-auto"
+          style={{
+            left: `${m.x}px`,
+            top: `${m.y}px`,
+            transform: 'translate(-50%, -130%)',  // 포인트 바로 위
+          }}
+        >
+          <div
+            className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+            style={{
+              backgroundColor: m.color,
+              // 흰 테두리 + 스트로크 색 링 — 배경 자료에 대비
+              boxShadow: `0 0 0 1.5px #fff, 0 0 0 3px ${m.strokeColor}, 0 2px 4px rgba(0,0,0,0.3)`,
+            }}
+            title={m.name}
+          >
+            {(m.name || '?')[0]}
+          </div>
+          {/* 호버 툴팁 */}
+          <span className="opacity-0 group-hover/dmark:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-7 whitespace-nowrap px-2 py-0.5 rounded bg-black/80 text-white text-[10px] font-medium pointer-events-none">
+            {m.name}
+          </span>
+        </div>
+      ))}
 
       {/* 플로팅 툴바 — 우측 상단 */}
       <div
