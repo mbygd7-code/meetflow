@@ -1526,9 +1526,8 @@ export default function CompletedMeetingView({ meeting }) {
         )}
       </div>
 
-      {/* ═══ V5: 태스크 패널 ═══ */}
-      {(meetingTasks.length > 0 || pendingSuggestions.length > 0) && (
-        <div className="border-b border-border-divider bg-bg-secondary/30">
+      {/* ═══ V5: 태스크 패널 — 항상 표시 (태스크 0건이어도 섹션 노출) ═══ */}
+      <div className="border-b border-border-divider bg-bg-secondary/30">
           <button
             onClick={() => setTasksExpanded((v) => !v)}
             className="w-full flex items-center gap-2.5 px-3 md:px-6 py-2.5 hover:bg-bg-tertiary/40 transition-colors"
@@ -1538,15 +1537,23 @@ export default function CompletedMeetingView({ meeting }) {
             </div>
             <div className="flex items-center gap-2.5 flex-1 text-left">
               <span className="text-sm font-semibold text-txt-primary">후속 태스크</span>
+              {/* 총 개수 — 0 포함 항상 크게 표시 */}
+              <span className={`inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md border ${
+                meetingTasks.length > 0
+                  ? 'bg-brand-purple/10 border-brand-purple/20'
+                  : 'bg-bg-tertiary border-border-subtle'
+              }`}>
+                <span className={`text-xl md:text-2xl font-bold leading-none ${
+                  meetingTasks.length > 0 ? 'text-brand-purple' : 'text-txt-muted'
+                }`}>
+                  {taskStats.total}
+                </span>
+                <span className={`text-[10px] font-medium ${
+                  meetingTasks.length > 0 ? 'text-brand-purple/80' : 'text-txt-muted'
+                }`}>개</span>
+              </span>
               {meetingTasks.length > 0 ? (
                 <>
-                  {/* 총 개수 — 크게 강조 */}
-                  <span className="inline-flex items-baseline gap-1 px-2 py-0.5 rounded-md bg-brand-purple/10 border border-brand-purple/20">
-                    <span className="text-xl md:text-2xl font-bold text-brand-purple leading-none">
-                      {taskStats.total}
-                    </span>
-                    <span className="text-[10px] font-medium text-brand-purple/80">개</span>
-                  </span>
                   {/* 완료 진행 */}
                   <span className="text-xs text-txt-muted hidden sm:inline-flex items-baseline gap-0.5">
                     <span className="text-status-success font-semibold text-sm">{taskStats.done}</span>
@@ -1561,7 +1568,9 @@ export default function CompletedMeetingView({ meeting }) {
                   </div>
                 </>
               ) : (
-                <span className="text-xs text-txt-muted">미등록</span>
+                <span className="text-xs text-txt-muted hidden sm:inline">
+                  {pendingSuggestions.length > 0 ? 'AI 제안 대기' : '등록된 태스크 없음'}
+                </span>
               )}
               {pendingSuggestions.length > 0 && (
                 <Badge variant="purple" className="!text-[10px]">
@@ -2183,10 +2192,20 @@ export default function CompletedMeetingView({ meeting }) {
                   </ul>
                 </div>
               )}
+
+              {/* 빈 상태 안내 */}
+              {meetingTasks.length === 0 && pendingSuggestions.length === 0 && (
+                <div className="text-center py-8 md:py-10 border border-dashed border-border-subtle rounded-lg">
+                  <ListTodo size={22} className="text-txt-muted mx-auto mb-2 opacity-40" strokeWidth={1.6} />
+                  <p className="text-sm text-txt-secondary mb-1">등록된 후속 태스크가 없어요</p>
+                  <p className="text-[11px] text-txt-muted">
+                    이 회의에서 도출된 실행 항목이 없거나, AI가 자동 추출하지 못한 상태입니다.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
 
       {/* ═══ 메인 ═══ */}
       <div className="flex flex-1 overflow-hidden">
