@@ -73,6 +73,43 @@ export default function PdfViewer({ url }) {
     };
   }, [pageAspect]);
 
+  // ── 드래그로 스크롤(pan) — 확대 시 PDF 이동 ──
+  const panRef = useRef(null);
+  const isOverflowingRef = useRef(false);
+  const onPanStart = useCallback((e) => {
+    if (e.button !== 0) return;  // 좌클릭만
+    if (e.target.closest('button, input, a, select, textarea')) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const canScroll =
+      el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    isOverflowingRef.current = canScroll;
+    if (!canScroll) return;  // 스크롤 영역 없으면 pan 의미 없음
+    panRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origScrollLeft: el.scrollLeft,
+      origScrollTop: el.scrollTop,
+    };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev) => {
+      if (!panRef.current) return;
+      el.scrollLeft = panRef.current.origScrollLeft - (ev.clientX - panRef.current.startX);
+      el.scrollTop = panRef.current.origScrollTop - (ev.clientY - panRef.current.startY);
+    };
+    const onUp = () => {
+      panRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  }, []);
+
   if (loadError) {
     return (
       <div className="flex flex-col items-center gap-2 text-txt-muted py-8 px-4 text-center">
@@ -140,14 +177,19 @@ export default function PdfViewer({ url }) {
         </div>
       </div>
 
-      {/* PDF 렌더링 영역 — ResizeObserver로 컨테이너 크기 따라감, 오버플로우 시 스크롤 */}
+      {/* PDF 렌더링 영역 — ResizeObserver로 컨테이너 크기 따라감, 오버플로우 시 드래그 스크롤 */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-auto bg-bg-tertiary/30 flex p-2"
+        onMouseDown={onPanStart}
+        className={`flex-1 min-h-0 overflow-auto bg-bg-tertiary/30 flex p-2 ${
+          zoom > 1 ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
         style={{
           justifyContent: 'safe center',
           alignItems: 'safe start',
+          overflowAnchor: 'none',
         }}
+        title={zoom > 1 ? '드래그로 이동' : ''}
       >
         <Document
           file={url}
