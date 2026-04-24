@@ -253,6 +253,9 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
           style={{
             justifyContent: 'safe center',
             alignItems: 'safe center',
+            // 브라우저의 overflow-anchor 자동 스크롤 조정 비활성화
+            // → 이미지 크기 변할 때 스크롤이 제멋대로 움직이지 않음
+            overflowAnchor: 'none',
           }}
         >
           {url ? (
@@ -263,13 +266,14 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
               draggable={false}
               style={
                 zoomScale === 100
-                  ? undefined
+                  ? { overflowAnchor: 'none' }
                   : {
                       width: `${zoomScale}%`,
                       height: 'auto',
                       maxWidth: 'none',
                       maxHeight: 'none',
-                      flexShrink: 0, // 컨테이너보다 큰 이미지가 축소되지 않도록
+                      flexShrink: 0,
+                      overflowAnchor: 'none',
                     }
               }
               className={`select-none pointer-events-none ${
@@ -309,7 +313,23 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
                 max={300}
                 step={5}
                 value={zoomScale}
-                onChange={(e) => setZoomScale(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  const newScale = parseInt(e.target.value, 10);
+                  // 줌 변경 시 스크롤 중심점 유지 (이미지가 튀지 않음)
+                  const el = scrollRef.current;
+                  if (el && newScale !== zoomScale) {
+                    const ratio = newScale / zoomScale;
+                    const cx = el.scrollLeft + el.clientWidth / 2;
+                    const cy = el.scrollTop + el.clientHeight / 2;
+                    const nextLeft = cx * ratio - el.clientWidth / 2;
+                    const nextTop = cy * ratio - el.clientHeight / 2;
+                    requestAnimationFrame(() => {
+                      el.scrollLeft = Math.max(0, nextLeft);
+                      el.scrollTop = Math.max(0, nextTop);
+                    });
+                  }
+                  setZoomScale(newScale);
+                }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
