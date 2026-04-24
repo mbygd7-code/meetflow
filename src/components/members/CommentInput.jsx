@@ -184,7 +184,7 @@ export default function CommentInput({ members = [], onSubmit, onCancel, placeho
                 className="p-1.5 rounded text-txt-muted hover:bg-bg-secondary hover:text-txt-primary disabled:opacity-40"
                 title="취소 (Esc)"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             )}
             <button
@@ -196,11 +196,11 @@ export default function CommentInput({ members = [], onSubmit, onCancel, placeho
               title={sending ? '전송 중...' : justSent ? '전송 완료' : '전송 (Enter)'}
             >
               {sending ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
               ) : justSent ? (
-                <Check size={14} />
+                <Check size={16} />
               ) : (
-                <Send size={14} />
+                <Send size={16} />
               )}
             </button>
           </div>
@@ -211,12 +211,12 @@ export default function CommentInput({ members = [], onSubmit, onCancel, placeho
           <div className="mt-1.5 text-[10px] flex items-center gap-1.5">
             {sending ? (
               <>
-                <Loader2 size={10} className="animate-spin text-brand-purple" />
+                <Loader2 size={12} className="animate-spin text-brand-purple" />
                 <span className="text-brand-purple">댓글 전송 중...</span>
               </>
             ) : (
               <>
-                <Check size={10} className="text-status-success" />
+                <Check size={12} className="text-status-success" />
                 <span className="text-status-success">댓글이 등록되었어요</span>
               </>
             )}
@@ -228,7 +228,7 @@ export default function CommentInput({ members = [], onSubmit, onCancel, placeho
       {showMention && filteredMembers.length > 0 && (
         <div className="absolute bottom-full left-0 mb-1 bg-bg-secondary border border-border-subtle rounded-md shadow-lg py-1 z-20 min-w-[220px] max-w-xs">
           <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-txt-muted font-medium uppercase tracking-wider border-b border-border-divider">
-            <AtSign size={10} /> 멘션할 멤버
+            <AtSign size={12} /> 멘션할 멤버
           </div>
           {filteredMembers.map((m, i) => (
             <button

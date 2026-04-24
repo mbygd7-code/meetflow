@@ -1,7 +1,7 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -171,11 +171,29 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
   const [sliderOpen, setSliderOpen] = useState(false);
   const [drawingActive, setDrawingActive] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  // 드로잉 툴바를 헤더 아래 슬롯에 포털 배치하기 위한 타겟
+  const [toolbarHost, setToolbarHost] = useState(null);
   const scrollRef = useRef(null);
   const panRef = useRef(null);
   const sliderContainerRef = useRef(null);
   const imageRef = useRef(null);
   const isZoomed = zoomScale > 100;
+
+  // 이미지 리사이즈 감지 — 줌/뷰포트/폭 변화 모두 캔버스에 즉시 반영
+  // (img의 clientWidth/Height가 바뀌면 DrawingOverlay width/height prop이 새 값으로 갱신됨)
+  useEffect(() => {
+    const el = imageRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      setCanvasSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [url, zoomScale]);
 
   // 슬라이더 외부 클릭 → 닫기 (이미지/채팅창/입력창 어디든 밖을 클릭하면 닫힘)
   useEffect(() => {
@@ -237,19 +255,33 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
             title={drawingActive ? '드로잉 종료' : '드로잉 켜기 (실시간 공유)'}
             aria-label="드로잉 토글"
           >
-            <Pencil size={14} />
+            <Pencil size={16} />
           </button>
           {url && (
-            <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
-               className="text-[11px] text-brand-purple hover:underline px-1.5">
-              다운로드
+            <a
+              href={url}
+              download={file.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 rounded text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+              aria-label="다운로드"
+              title="다운로드"
+            >
+              <Download size={16} />
             </a>
           )}
           <button onClick={onClose} className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded" aria-label="닫기">
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       </div>
+      {/* 드로잉 툴바 슬롯 — 헤더(편집 버튼) 바로 아래 고정. 드로잉 활성 시만 표시 */}
+      {drawingActive && (
+        <div
+          ref={setToolbarHost}
+          className="flex items-center justify-end gap-2 px-3 py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60"
+        />
+      )}
       <div className="flex-1 relative bg-bg-tertiary/30 overflow-hidden">
         {/* 이미지 스크롤 컨테이너 — 확대 시 드래그/스크롤로 전체 접근 가능
             safe center: 내용 오버플로우 시 start로 fallback하여 왼쪽/위 영역도 스크롤 도달 */}
@@ -311,11 +343,13 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
               {drawingActive && (
                 <DrawingOverlay
                   targetKey={`img:${file.id || file.name}`}
+                  fileName={file?.name}
                   meetingId={meetingId}
-                  width={imageRef.current?.clientWidth || canvasSize.w}
-                  height={imageRef.current?.clientHeight || canvasSize.h}
+                  width={canvasSize.w || imageRef.current?.clientWidth || 0}
+                  height={canvasSize.h || imageRef.current?.clientHeight || 0}
                   messages={messages}
                   onClose={() => setDrawingActive(false)}
+                  toolbarContainer={toolbarHost}
                 />
               )}
             </div>
@@ -339,7 +373,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
                 className="p-1 rounded-md text-[#555] hover:text-brand-purple hover:bg-black/5 transition-colors"
                 aria-label="확대"
               >
-                <ZoomIn size={14} />
+                <ZoomIn size={16} />
               </button>
               <span className="text-[10px] font-semibold text-[#222] min-w-[30px] text-center tabular-nums">
                 {zoomScale}%
@@ -385,7 +419,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
                 className="p-1 rounded-md text-[#555] hover:text-brand-purple hover:bg-black/5 transition-colors"
                 aria-label="축소"
               >
-                <ZoomOut size={14} />
+                <ZoomOut size={16} />
               </button>
               <button
                 onClick={() => setZoomScale(100)}
@@ -417,6 +451,8 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
 // ── 문서 플로팅 윈도우 (드래그/리사이즈 가능, 배경 오버레이 없음) ──
 function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }) {
   const [drawingActive, setDrawingActive] = useState(false);
+  // 드로잉 툴바를 헤더 아래 슬롯에 포털 배치
+  const [toolbarHost, setToolbarHost] = useState(null);
   const bodyRef = useRef(null);
   const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -575,7 +611,7 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
         className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-bg-primary select-none shrink-0 cursor-grab active:cursor-grabbing"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <GripVertical size={14} className="text-txt-muted shrink-0" />
+          <GripVertical size={16} className="text-txt-muted shrink-0" />
           <p className="text-xs font-medium text-txt-primary truncate">{file.name}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
@@ -590,13 +626,20 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
               title={drawingActive ? '드로잉 종료' : '드로잉 켜기 (실시간 공유)'}
               aria-label="드로잉 토글"
             >
-              <Pencil size={13} />
+              <Pencil size={15} />
             </button>
           )}
           {url && !minimized && (
-            <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
-               className="text-[11px] text-brand-purple hover:underline px-1.5">
-              다운로드
+            <a
+              href={url}
+              download={file.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 rounded-md text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+              aria-label="다운로드"
+              title="다운로드"
+            >
+              <Download size={16} />
             </a>
           )}
           {!minimized && (
@@ -605,23 +648,40 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
               className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
               aria-label="최소화" title="최소화"
             >
-              <Minus size={14} />
+              <Minus size={16} />
             </button>
           )}
           <button onClick={(e) => { e.stopPropagation(); onClose(); }}
             className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
             aria-label="닫기">
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       </div>
+      {/* 드로잉 툴바 슬롯 — 헤더 바로 아래, 드로잉 활성 시만 표시 */}
+      {drawingActive && !minimized && (
+        <div
+          ref={setToolbarHost}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="flex items-center justify-end gap-2 px-3 py-1.5 border-b border-border-subtle shrink-0 bg-bg-tertiary/50"
+        />
+      )}
       {/* 바디 — PDF는 react-pdf로 렌더, 이미지/기타는 기존 방식. min-h-0으로 flex overflow 허용 */}
       <div
         ref={bodyRef}
         className={`flex-1 min-h-0 relative ${isPdf ? '' : 'overflow-auto bg-bg-primary/50 flex items-center justify-center p-2'}`}
       >
         {isPdf && url ? (
-          <PdfViewer url={url} />
+          <PdfViewer
+            url={url}
+            drawingActive={drawingActive}
+            onCloseDrawing={() => setDrawingActive(false)}
+            meetingId={meetingId}
+            fileId={file.id || file.name}
+            fileName={file.name}
+            messages={messages}
+            toolbarContainer={toolbarHost}
+          />
         ) : isImage && url ? (
           <img src={url} alt={file.name} className="max-w-full max-h-full object-contain" />
         ) : url ? (
@@ -637,15 +697,17 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
           <p className="text-xs text-txt-muted">로딩 중...</p>
         )}
 
-        {/* 드로잉 오버레이 — 바디 전체 영역 덮음 */}
-        {drawingActive && bodySize.w > 0 && bodySize.h > 0 && (
+        {/* 비-PDF 바디 오버레이 — PDF는 PdfViewer 내부에서 페이지별 렌더 */}
+        {!isPdf && drawingActive && bodySize.w > 0 && bodySize.h > 0 && (
           <DrawingOverlay
             targetKey={`doc:${file.id || file.name}`}
+            fileName={file?.name}
             meetingId={meetingId}
             width={bodySize.w}
             height={bodySize.h}
             messages={messages}
             onClose={() => setDrawingActive(false)}
+            toolbarContainer={toolbarHost}
           />
         )}
       </div>
@@ -686,7 +748,7 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
 // - 문서 썸네일: 고정 140px 중앙 정렬
 // - 이미지 클릭: 패널 내부 오버레이로 확대 (다른 자료 덮음)
 // - 문서 클릭: 드래그/리사이즈 가능한 플로팅 윈도우 (body portal, 오버레이 없음)
-function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
+function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerChange }) {
   // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
   const [width, setWidth] = useState(() => {
     try {
@@ -707,6 +769,14 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
     try { localStorage.setItem('meetflow_doc_panel_width', String(width)); } catch {}
   }, [width, zoomFile]);
 
+  // 풀사이즈 뷰어(이미지 확대 or 문서 윈도우) 활성 여부를 부모에 전달 →
+  // 활성 중에는 AI 자동 개입 중단 (호출한 경우에만 응답).
+  useEffect(() => {
+    if (typeof onViewerChange === 'function') {
+      onViewerChange(!!zoomFile || !!docFile);
+    }
+  }, [zoomFile, docFile, onViewerChange]);
+
   // 이미지/문서 구분
   const isImageFile = (f) => !!f?.type?.startsWith('image/');
 
@@ -724,6 +794,9 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
       if (widthBeforeZoom === null) setWidthBeforeZoom(width);
       setZoomFile(file);
       setZoomUrl(url);
+      // 이미지 로드 전 최소 폭(툴바+여유) 즉시 확보 → 뷰어 깜빡임 방지
+      const max = getMaxPanelWidth();
+      if (width < 480) setWidth(Math.min(480, max));
     } else {
       setDocFile(file);
       setDocUrl(url);
@@ -745,7 +818,8 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
   // 여백 없이 이미지가 꽉 차 보이도록 함
   const handleImageLoaded = (naturalWidth) => {
     if (!naturalWidth) return;
-    const MIN = 240;               // 너무 작은 이미지도 읽기 편한 최소 폭
+    // 드로잉 툴바(~365px) + 100px 여유 확보 → 풀사이즈 뷰어 최소 480px
+    const MIN = 480;
     const max = getMaxPanelWidth();
     const target = Math.min(Math.max(naturalWidth + 48, MIN), max);
     setWidth(target);
@@ -763,13 +837,15 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
   }, [files, zoomFile, docFile]);
 
   // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-340px (채팅창 최소 340px 보장)
+  // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
   const onResizerDown = (e) => {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
+    const minWForDrag = (zoomFile || docFile) ? 480 : 80;
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
-      const next = Math.max(80, Math.min(window.innerWidth - 340, startW + dx));
+      const next = Math.max(minWForDrag, Math.min(window.innerWidth - 340, startW + dx));
       setWidth(next);
     };
     const onUp = () => {
@@ -788,7 +864,10 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
   // 사용자의 저장된 폭은 그대로 유지 (파일 업로드 시 복원됨)
   const MIN_WIDTH = 80;
   const isEmpty = files.length === 0;
-  const effectiveWidth = isEmpty ? MIN_WIDTH : width;
+  // 풀사이즈 뷰어(zoom/doc) 열려 있으면 state값이 작아도 480px 이상 보장
+  const viewerActive = !!(zoomFile || docFile);
+  const baseWidth = isEmpty ? MIN_WIDTH : width;
+  const effectiveWidth = viewerActive ? Math.max(480, baseWidth) : baseWidth;
 
   // 항상 1열 유지 — 패널 폭이 커질수록 썸네일도 같이 커짐 (세로 리스트)
   const isCompact = effectiveWidth < 180; // 매우 좁을 때: 헤더/파일명 숨김
@@ -798,7 +877,11 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
     <>
       <aside
         className="hidden md:flex flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative transition-[width] duration-200 ease-out"
-        style={{ width: effectiveWidth }}
+        style={{
+          width: effectiveWidth,
+          // 풀사이즈 뷰어 활성 중엔 CSS로 최소 폭 강제 (드로잉 툴바 ~365px + 여유 100px)
+          minWidth: viewerActive ? 480 : undefined,
+        }}
       >
         {/* 헤더 — 컴팩트 모드에서는 심플하게 */}
         <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
@@ -909,6 +992,9 @@ export default function MeetingRoom() {
   useEffect(() => {
     try { localStorage.setItem('meetflow_auto_intervene', String(aiAutoIntervene)); } catch {}
   }, [aiAutoIntervene]);
+  // 풀스크린 자료 뷰어(이미지 확대/문서 윈도우) 활성 여부
+  // — 활성 중엔 AI 자동 개입 중단. 유저가 @-호출 시에만 응답.
+  const [materialViewerActive, setMaterialViewerActive] = useState(false);
   // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
   // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
   const { files: meetingFiles, uploadFile: uploadMeetingFile, getDownloadUrl: getMeetingFileUrl } = useMeetingFiles(id);
@@ -1041,7 +1127,9 @@ export default function MeetingRoom() {
   useMilo({
     messages, agenda: currentAgenda, onRespond: handleMiloRespond,
     onThinking: handleThinking, onError: handleAiError,
-    meetingId: id, alwaysRespond: isAiOnlyMeeting, autoIntervene: aiAutoIntervene,
+    meetingId: id, alwaysRespond: isAiOnlyMeeting,
+    // 자료 풀스크린 뷰어가 열려있으면 자동 개입 중단 — @호출 시에만 응답
+    autoIntervene: aiAutoIntervene && !materialViewerActive,
   });
 
   // AI 인사
@@ -1166,8 +1254,11 @@ export default function MeetingRoom() {
     addToast('회의가 종료되었습니다. (요약 없이 종료 — 회의록 목록에 표시되지 않아요)', 'info', 4000);
   };
 
-  const handleSend = async (content) => {
-    await sendMessage(content, { agendaId: currentAgenda?.id });
+  const handleSend = async (content, opts = {}) => {
+    await sendMessage(content, {
+      agendaId: currentAgenda?.id,
+      metadata: opts.metadata || null,
+    });
   };
 
   return (
@@ -1181,7 +1272,7 @@ export default function MeetingRoom() {
               onClick={handleCancelEnd}
               className="absolute top-3 right-3 p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
             <div className="w-14 h-14 rounded-full bg-gradient-brand shadow-glow flex items-center justify-center mx-auto mb-4">
               <Sparkles size={24} className="text-white" strokeWidth={2} />
@@ -1211,7 +1302,7 @@ export default function MeetingRoom() {
       <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button onClick={() => safeNavigate('/meetings')} className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0">
-            <X size={16} />
+            <X size={18} />
           </button>
           <h1 className="text-base md:text-[22px] font-medium text-txt-primary tracking-tight truncate">
             {meeting.title}
@@ -1246,7 +1337,7 @@ export default function MeetingRoom() {
             className={`md:hidden p-1.5 rounded-md transition-colors ${aiAutoIntervene ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted'}`}
             title={aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만'}
           >
-            {aiAutoIntervene ? <Zap size={16} /> : <ZapOff size={16} />}
+            {aiAutoIntervene ? <Zap size={18} /> : <ZapOff size={18} />}
           </button>
 
           {/* 요약 버튼 */}
@@ -1254,7 +1345,7 @@ export default function MeetingRoom() {
             to={`/summaries/${id}`}
             className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-md text-xs font-medium text-brand-purple bg-brand-purple/10 border border-brand-purple/20 hover:bg-brand-purple/20 transition-colors"
           >
-            <Sparkles size={13} />
+            <Sparkles size={15} />
             <span className="hidden md:inline">요약</span>
           </Link>
 
@@ -1263,7 +1354,7 @@ export default function MeetingRoom() {
             onClick={handleEndClick}
             className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
           >
-            <Square size={14} strokeWidth={2.4} />
+            <Square size={16} strokeWidth={2.4} />
             <span className="hidden md:inline">회의 종료</span>
             <span className="md:hidden">종료</span>
           </button>
@@ -1281,6 +1372,7 @@ export default function MeetingRoom() {
           getUrl={getMeetingFileUrl}
           meetingId={id}
           messages={messages}
+          onViewerChange={setMaterialViewerActive}
         />
 
         {/* 채팅 영역 */}

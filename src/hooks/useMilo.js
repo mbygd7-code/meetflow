@@ -210,6 +210,16 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
       return;
     }
 
+    // 드로잉 주석 태그가 붙은 메시지 → 자료에 대한 작업 맥락.
+    // 사용자가 명시적으로 @밀로/@전문가를 부르지 않았다면 AI는 침묵.
+    const hasDrawingAnnotation = Array.isArray(lastMsg?.metadata?.drawing_annotations)
+      && lastMsg.metadata.drawing_annotations.length > 0;
+    if (hasDrawingAnnotation && !mentioned && !directEmployeeMention) {
+      logOrchestrationSkip({ meetingId, reason: 'drawing_annotation_no_mention', messageId: lastMsg.id });
+      runningRef.current = false;
+      return;
+    }
+
     // 직접 요청은 멘션처럼 쿨다운/턴 제한 건너뜀
     if (!mentioned && !directEmployeeMention && !isDirectRequest) {
       if (!alwaysRespond) {

@@ -201,7 +201,18 @@ serve(async (req) => {
         } else {
           label = m.user?.name || '참가자';
         }
-        return `[${label}] ${c}${tail}`;
+        // 드로잉 주석 컨텍스트 주입 — AI가 "이 메시지는 자료 위 특정 드로잉에 대한 주석"임을 인식하여
+        //   자유 대화 요청으로 오해하지 않도록 프리픽스 삽입
+        const anns = m?.metadata?.drawing_annotations;
+        let ctxPrefix = '';
+        if (Array.isArray(anns) && anns.length > 0) {
+          const parts = anns.map((a: any) => {
+            const f = a.file_name ? `자료 "${a.file_name}"` : '회의 자료';
+            return `${f} 위 ${a.user_name}님의 #${a.seq} 드로잉`;
+          });
+          ctxPrefix = `(📌 ${parts.join(', ')}에 대한 주석) `;
+        }
+        return `[${label}] ${ctxPrefix}${c}${tail}`;
       };
       const t1Text = t1.map((m) => fmt(m, 1500)).join('\n');
       const t2Text = t2.map((m) => fmt(m, 400)).join('\n');

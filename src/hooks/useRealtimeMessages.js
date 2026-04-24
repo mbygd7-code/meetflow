@@ -426,6 +426,7 @@ export function useRealtimeMessages(meetingId) {
       searchMode = null,
       orchestrationVersion = null,  // Phase 0 계측: 'parallel_v1' | 'parallel_synthesize_v1' | 'agent_loop_v1'
       miloSynthesisId = null,       // Phase 0 계측: 같은 종합 세션의 그룹 키 (현재는 null)
+      metadata = null,              // drawing_annotations 등 부가 컨텍스트 (migration 040)
     } = {}) => {
       if (!content?.trim()) return;
 
@@ -474,12 +475,26 @@ export function useRealtimeMessages(meetingId) {
       // Phase 0 계측 필드 (migration 028 적용 전이면 DB가 unknown column 에러를 낼 수 있음 → null일 때는 생략)
       if (orchestrationVersion) insertData.orchestration_version = orchestrationVersion;
       if (miloSynthesisId) insertData.milo_synthesis_id = miloSynthesisId;
+      // metadata (migration 040) — 적용 전이면 42703 에러 가능 → 값 없을 때는 생략
+      if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+        insertData.metadata = metadata;
+      }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('messages')
         .insert(insertData)
         .select('*, user:users(id,name,email,avatar_color)')
         .single();
+      // metadata 컬럼 미적용 (42703) → 제거 후 재시도 (graceful degradation)
+      if (error && error.code === '42703' && insertData.metadata) {
+        console.warn('[sendMessage] metadata 컬럼 없음 — migration 040 미적용. 제거 후 재시도');
+        const { metadata: _drop, ...fallback } = insertData;
+        ({ data, error } = await supabase
+          .from('messages')
+          .insert(fallback)
+          .select('*, user:users(id,name,email,avatar_color)')
+          .single());
+      }
       if (error) {
         console.error('[sendMessage]', error);
         return null;

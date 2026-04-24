@@ -49,7 +49,7 @@ function GeneratingSummaryCard({ meeting }) {
                 {meeting?.title || '회의'}
               </h3>
               <Badge variant="purple" className="!text-[10px] inline-flex items-center gap-1">
-                <Sparkles size={10} strokeWidth={2.4} /> AI 작성 중
+                <Sparkles size={12} strokeWidth={2.4} /> AI 작성 중
               </Badge>
             </div>
             <p className="text-xs text-txt-secondary">
@@ -240,7 +240,7 @@ function SummaryList() {
           <div className="flex items-center gap-2 pb-2">
             {searchOpen ? (
               <div className="flex items-center gap-1 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle focus-within:border-brand-purple/50">
-                <Search size={14} className="text-txt-muted shrink-0" />
+                <Search size={16} className="text-txt-muted shrink-0" />
                 <input
                   autoFocus
                   value={searchQuery}
@@ -253,7 +253,7 @@ function SummaryList() {
                   className="text-txt-muted hover:text-txt-primary"
                   title="검색 닫기"
                 >
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               </div>
             ) : (
@@ -262,7 +262,7 @@ function SummaryList() {
                 className="p-2 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
                 title="검색"
               >
-                <Search size={16} />
+                <Search size={18} />
               </button>
             )}
           </div>
@@ -341,7 +341,7 @@ function SummaryList() {
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold bg-status-error/10 text-status-error border border-status-error/25"
                               title="AI 요약 생성 실패"
                             >
-                              <AlertCircle size={10} strokeWidth={2.6} />
+                              <AlertCircle size={12} strokeWidth={2.6} />
                               요약 실패
                             </span>
                           )}
@@ -353,8 +353,8 @@ function SummaryList() {
                               title="회의 삭제 (관리자 전용)"
                             >
                               {deletingId === m.id
-                                ? <Loader2 size={14} className="animate-spin" />
-                                : <Trash2 size={14} />}
+                                ? <Loader2 size={16} className="animate-spin" />
+                                : <Trash2 size={16} />}
                             </button>
                           )}
                         </div>
@@ -377,7 +377,7 @@ function SummaryList() {
                                 className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[10px] font-semibold bg-status-error/10 text-status-error border border-status-error/25"
                                 title="AI 요약 생성 실패"
                               >
-                                <AlertCircle size={10} strokeWidth={2.6} />
+                                <AlertCircle size={12} strokeWidth={2.6} />
                               </span>
                             )}
                             {isAdmin && (
@@ -388,8 +388,8 @@ function SummaryList() {
                                 title="회의 삭제"
                               >
                                 {deletingId === m.id
-                                  ? <Loader2 size={12} className="animate-spin" />
-                                  : <Trash2 size={12} />}
+                                  ? <Loader2 size={14} className="animate-spin" />
+                                  : <Trash2 size={14} />}
                               </button>
                             )}
                           </div>

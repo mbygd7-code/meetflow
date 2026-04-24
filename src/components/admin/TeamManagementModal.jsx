@@ -500,7 +500,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                   active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={16} />
                 {t.label}
                 {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-purple rounded-full" />}
               </button>
@@ -515,7 +515,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
             {/* 초대 섹션 */}
             <div className="p-5 border-b border-border-divider bg-bg-tertiary/30 shrink-0">
               <div className="flex items-center gap-2 mb-3">
-                <Mail size={14} className="text-brand-purple" />
+                <Mail size={16} className="text-brand-purple" />
                 <h3 className="text-sm font-semibold text-txt-primary">새 직원 초대</h3>
                 <span className="text-[10px] text-txt-muted">이메일로 초대 링크가 발송됩니다</span>
               </div>
@@ -555,7 +555,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                   disabled={inviting || !inviteEmail.trim()}
                   className="md:col-span-2 px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center justify-center gap-1"
                 >
-                  {inviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                  {inviting ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
                   {inviting ? '발송 중' : '초대'}
                 </button>
 
@@ -590,7 +590,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                   전체 직원 <span className="text-txt-muted">({members.length})</span>
                 </h3>
                 <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted" />
+                  <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted" />
                   <input
                     type="text"
                     value={memberSearch}
@@ -662,7 +662,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 rounded transition-all"
                             title="직원 정보 편집"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={16} />
                           </button>
 
                           <button
@@ -672,8 +672,8 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             title="비밀번호 재설정 링크 생성 (초대 메일이 안 닿은 경우)"
                           >
                             {resetLinkLoadingId === m.id
-                              ? <Loader2 size={14} className="animate-spin" />
-                              : <KeyRound size={14} />}
+                              ? <Loader2 size={16} className="animate-spin" />
+                              : <KeyRound size={16} />}
                           </button>
 
                           <button
@@ -682,7 +682,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all disabled:opacity-20 disabled:cursor-not-allowed"
                             title={isSelf ? '자기 자신은 삭제할 수 없음' : '직원 삭제'}
                           >
-                            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                           </button>
                         </div>
                       );
@@ -718,7 +718,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                     disabled={!newTeamName.trim() || creating}
                     className="px-3.5 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center gap-1.5"
                   >
-                    {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                     {creating ? '생성 중' : '추가'}
                   </button>
                 </div>
@@ -729,7 +729,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
               <div className="flex-1 overflow-y-auto p-2 scrollbar-hide">
                 {loading ? (
                   <div className="flex items-center justify-center py-8 text-txt-muted">
-                    <Loader2 size={16} className="animate-spin mr-2" />
+                    <Loader2 size={18} className="animate-spin mr-2" />
                     <span className="text-xs">로딩 중...</span>
                   </div>
                 ) : teams.length === 0 ? (
@@ -759,7 +759,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                           } ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}
                           onClick={() => !isEditing && !isDeleting && setSelectedTeamId(team.id)}
                         >
-                          <Users size={14} className={`shrink-0 ${isSelected ? 'text-brand-purple' : 'text-txt-muted'}`} />
+                          <Users size={16} className={`shrink-0 ${isSelected ? 'text-brand-purple' : 'text-txt-muted'}`} />
                           {isEditing ? (
                             <input
                               autoFocus
@@ -795,7 +795,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                                   className="p-1 text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 rounded transition-all"
                                   title="이름 변경"
                                 >
-                                  <Edit2 size={11} />
+                                  <Edit2 size={13} />
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -805,14 +805,14 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                                   className="p-1 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all"
                                   title="팀 삭제"
                                 >
-                                  <Trash2 size={11} />
+                                  <Trash2 size={13} />
                                 </button>
                               </div>
                               {isSelected && !isDeleting && (
-                                <ChevronRight size={12} className="text-brand-purple shrink-0" />
+                                <ChevronRight size={14} className="text-brand-purple shrink-0" />
                               )}
                               {isDeleting && (
-                                <Loader2 size={12} className="text-txt-muted animate-spin shrink-0" />
+                                <Loader2 size={14} className="text-txt-muted animate-spin shrink-0" />
                               )}
                             </>
                           )}
@@ -847,7 +847,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                   <div className="px-6 py-4 border-b border-border-divider bg-bg-secondary/50 shrink-0">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-brand-purple/15 flex items-center justify-center">
-                        <Users size={16} className="text-brand-purple" />
+                        <Users size={18} className="text-brand-purple" />
                       </div>
                       <div>
                         <h3 className="text-base font-semibold text-txt-primary">{selectedTeam?.name}</h3>
@@ -895,13 +895,13 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             onClick={handleAddMultiple}
                             className="px-3 py-1 bg-brand-purple text-white rounded-md text-[11px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-1"
                           >
-                            <UserPlus size={11} />
+                            <UserPlus size={13} />
                             {multiSelectIds.size}명 일괄 추가
                           </button>
                         )}
                       </div>
                       <div className="relative mb-2">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted" />
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted" />
                         <input
                           ref={searchInputRef}
                           type="text"
@@ -915,7 +915,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             onClick={() => setSearchQuery('')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary"
                           >
-                            <X size={13} />
+                            <X size={15} />
                           </button>
                         )}
                       </div>
@@ -1050,7 +1050,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                 onClick={() => setResetLinkModal(null)}
                 className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
@@ -1079,7 +1079,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                       : 'bg-brand-purple text-white hover:bg-brand-purple/90'
                   }`}
                 >
-                  {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                  {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                   {linkCopied ? '복사됨' : '링크 복사'}
                 </button>
                 <button
@@ -1138,7 +1138,7 @@ function MemberRow({ member, isPending, action, isSelected, onToggleSelect, onAc
           }`}
           title="일괄 추가용 선택"
         >
-          {isSelected && <Check size={10} className="text-white" strokeWidth={3} />}
+          {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
         </button>
       )}
 
@@ -1162,14 +1162,14 @@ function MemberRow({ member, isPending, action, isSelected, onToggleSelect, onAc
       </div>
 
       {isPending ? (
-        <Loader2 size={14} className="text-txt-muted animate-spin shrink-0" />
+        <Loader2 size={16} className="text-txt-muted animate-spin shrink-0" />
       ) : isAddAction ? (
         <button
           onClick={(e) => { e.stopPropagation(); onAction?.(); }}
           className="px-2.5 py-1 rounded-md bg-brand-purple/10 text-brand-purple text-[11px] font-semibold hover:bg-brand-purple hover:text-white transition-all flex items-center gap-1 shrink-0"
           title="팀에 추가"
         >
-          <UserPlus size={11} />
+          <UserPlus size={13} />
           추가
         </button>
       ) : (
@@ -1178,7 +1178,7 @@ function MemberRow({ member, isPending, action, isSelected, onToggleSelect, onAc
           className="px-2.5 py-1 rounded-md bg-status-error/10 text-status-error text-[11px] font-semibold hover:bg-status-error hover:text-white transition-all flex items-center gap-1 shrink-0"
           title="팀에서 제거"
         >
-          <UserMinus size={11} />
+          <UserMinus size={13} />
           제거
         </button>
       )}
@@ -1343,7 +1343,7 @@ function SlackIdInlineEdit({ member, onSaved }) {
           className="p-1 rounded bg-brand-purple text-white hover:opacity-90 disabled:opacity-40"
           title="저장 (Enter)"
         >
-          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
         </button>
         <button
           onClick={() => {
@@ -1354,7 +1354,7 @@ function SlackIdInlineEdit({ member, onSaved }) {
           className="p-1 rounded text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary"
           title="취소 (Esc)"
         >
-          <X size={11} />
+          <X size={13} />
         </button>
       </div>
     );
@@ -1385,7 +1385,7 @@ function SlackIdInlineEdit({ member, onSaved }) {
           title="테스트 DM 발송"
         >
           {testing
-            ? <Loader2 size={10} className="animate-spin" />
+            ? <Loader2 size={12} className="animate-spin" />
             : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
           }
         </button>
@@ -1496,7 +1496,7 @@ function EditMemberDialog({ member, allTeams, memberTeamIds, onClose, onSaved })
             onClick={onClose}
             className="p-1.5 rounded text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
@@ -1637,7 +1637,7 @@ function EditMemberDialog({ member, allTeams, memberTeamIds, onClose, onSaved })
             disabled={saving}
             className="px-4 py-1.5 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
           >
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
             {saving ? '저장 중' : '저장'}
           </button>
         </div>

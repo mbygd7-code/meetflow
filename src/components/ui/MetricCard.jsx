@@ -35,7 +35,7 @@ export default function MetricCard({
         </p>
         {Icon && (
           <Icon
-            size={16}
+            size={18}
             className={isGradient ? 'text-white/70' : 'text-txt-muted'}
           />
         )}
@@ -59,8 +59,8 @@ export default function MetricCard({
                   : 'text-txt-secondary'
           }`}
         >
-          {up && <TrendingUp size={12} strokeWidth={2.5} />}
-          {down && <TrendingDown size={12} strokeWidth={2.5} />}
+          {up && <TrendingUp size={14} strokeWidth={2.5} />}
+          {down && <TrendingDown size={14} strokeWidth={2.5} />}
           <span>{typeof change === 'number' ? `${up ? '+' : ''}${change}%` : change}</span>
         </div>
       )}

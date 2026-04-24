@@ -430,7 +430,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
         <div className="rounded-lg border border-brand-purple/30 bg-brand-purple/[0.04] p-3 md:p-4">
           <div className="flex items-start gap-2.5">
             <div className="w-8 h-8 rounded-md bg-brand-purple/15 flex items-center justify-center shrink-0">
-              <Sparkles size={14} className="text-brand-purple" strokeWidth={2.4} />
+              <Sparkles size={16} className="text-brand-purple" strokeWidth={2.4} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-txt-primary mb-0.5">
@@ -462,9 +462,9 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
               className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-brand-purple text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
               {registering ? (
-                <><Loader2 size={12} className="animate-spin" />등록 중</>
+                <><Loader2 size={14} className="animate-spin" />등록 중</>
               ) : (
-                <><Plus size={12} strokeWidth={2.6} />모두 등록 ({unregisteredSuggestions.length})</>
+                <><Plus size={14} strokeWidth={2.6} />모두 등록 ({unregisteredSuggestions.length})</>
               )}
             </button>
           </div>
@@ -478,13 +478,13 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
             {meetingTasks.length > 0 ? (
               <>
                 <span className="inline-flex items-center gap-1">
-                  <CheckCircle2 size={12} className="text-status-success" />
+                  <CheckCircle2 size={14} className="text-status-success" />
                   <span className="text-txt-primary font-semibold">{stats.confirmed}</span>
                   <span>확인</span>
                 </span>
                 <span className="text-border-default">·</span>
                 <span className="inline-flex items-center gap-1">
-                  <AlertCircle size={12} className="text-brand-orange" />
+                  <AlertCircle size={14} className="text-brand-orange" />
                   <span className="text-txt-primary font-semibold">{stats.pending}</span>
                   <span>미확인</span>
                 </span>
@@ -498,7 +498,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
               onClick={() => setAdding(true)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium text-txt-secondary border border-border-subtle hover:text-txt-primary hover:border-border-hover transition-colors"
             >
-              <Plus size={11} strokeWidth={2.4} />
+              <Plus size={13} strokeWidth={2.4} />
               태스크 추가
             </button>
           )}
@@ -530,7 +530,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
             onClick={() => { setAdding(false); setNewTitle(''); }}
             className="p-1.5 text-txt-muted hover:text-txt-primary"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       )}
@@ -577,9 +577,9 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                     }
                   >
                     {busy ? (
-                      <Loader2 size={12} className="text-white animate-spin" />
+                      <Loader2 size={14} className="text-white animate-spin" />
                     ) : t.confirmed ? (
-                      <Check size={12} className="text-white" strokeWidth={3} />
+                      <Check size={14} className="text-white" strokeWidth={3} />
                     ) : null}
                   </button>
 
@@ -610,7 +610,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                             className="opacity-0 group-hover/item:opacity-100 p-0.5 text-txt-muted hover:text-brand-purple transition-opacity shrink-0"
                             title="제목 편집"
                           >
-                            <Pencil size={11} />
+                            <Pencil size={13} />
                           </button>
                         )}
                       </div>
@@ -631,7 +631,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                             {t.assignee?.name || t.assignee_name}
                           </>
                         ) : (
-                          <><UserPlus size={10} />담당자 지정</>
+                          <><UserPlus size={12} />담당자 지정</>
                         )}
                         active={!!(t.assignee?.name || t.assignee_name)}
                         disabled={!editable}
@@ -652,7 +652,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                                 >
                                   <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: m.avatar_color || '#723CEB' }} />
                                   <span className="flex-1 text-left truncate">{m.name}</span>
-                                  {active && <Check size={10} />}
+                                  {active && <Check size={12} />}
                                 </button>
                               );
                             })}
@@ -663,7 +663,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                                   onClick={() => handleAssigneeChange(t, null)}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-status-error hover:bg-bg-tertiary"
                                 >
-                                  <X size={10} />담당 해제
+                                  <X size={12} />담당 해제
                                 </button>
                               </>
                             )}
@@ -676,7 +676,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                         open={openMenu === `${t.id}:due`}
                         onOpen={() => editable && setOpenMenu(`${t.id}:due`)}
                         onClose={() => setOpenMenu(null)}
-                        label={<><Calendar size={10} />{t.due_date || '기한 없음'}</>}
+                        label={<><Calendar size={12} />{t.due_date || '기한 없음'}</>}
                         active={!!t.due_date}
                         disabled={!editable}
                         noBorder
@@ -704,7 +704,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                         open={openMenu === `${t.id}:priority`}
                         onOpen={() => editable && setOpenMenu(`${t.id}:priority`)}
                         onClose={() => setOpenMenu(null)}
-                        label={<><Flag size={10} />{pri?.label || '보통'}</>}
+                        label={<><Flag size={12} />{pri?.label || '보통'}</>}
                         active
                         tone={pri?.tone}
                         bg={pri?.bg}
@@ -721,7 +721,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${info.dot}`} />
                             <span className="flex-1 text-left">{info.label}</span>
-                            {t.priority === key && <Check size={10} />}
+                            {t.priority === key && <Check size={12} />}
                           </button>
                         ))}
                       </MetaDropdown>
@@ -729,14 +729,14 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                       {/* AI 제안 표시 */}
                       {t.ai_suggested && !t.confirmed && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-purple">
-                          <Sparkles size={9} />AI 초안
+                          <Sparkles size={11} />AI 초안
                         </span>
                       )}
 
                       {/* 확인 정보 */}
                       {t.confirmed && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] text-status-success">
-                          <CheckCircle2 size={10} />
+                          <CheckCircle2 size={12} />
                           {t.confirmed_by === user?.id ? '내가 확인함' : (members.find((m) => m.id === t.confirmed_by)?.name || '확인됨')}
                         </span>
                       )}
@@ -758,7 +758,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
                       className="opacity-0 group-hover/item:opacity-100 p-1 text-txt-muted hover:text-status-error transition-all shrink-0"
                       title="태스크 삭제"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={15} />
                     </button>
                   )}
                 </div>
@@ -777,7 +777,7 @@ export default function ActionItemsSection({ meeting, summary, messages = [] }) 
             onClick={() => setAdding(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 transition-colors"
           >
-            <Plus size={12} strokeWidth={2.4} />
+            <Plus size={14} strokeWidth={2.4} />
             태스크 직접 추가
           </button>
         </div>
@@ -826,7 +826,7 @@ function MetaDropdown({
         } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
       >
         {label}
-        {!disabled && <ChevronDown size={9} className="opacity-60" />}
+        {!disabled && <ChevronDown size={11} className="opacity-60" />}
       </button>
       {open && (
         <>

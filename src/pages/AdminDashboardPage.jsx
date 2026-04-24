@@ -158,7 +158,7 @@ export default function AdminDashboardPage() {
             to="/admin/tokens"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/20 hover:bg-brand-purple/20 transition-colors"
           >
-            <Coins size={14} />
+            <Coins size={16} />
             <span className="hidden md:inline">토큰 관리</span>
           </Link>
         </div>
@@ -173,11 +173,11 @@ export default function AdminDashboardPage() {
             >
               <div className="flex items-start justify-between">
                 <p className="text-xs uppercase tracking-wider mb-3 text-txt-muted">팀 수</p>
-                <UsersRound size={16} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
+                <UsersRound size={18} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
               </div>
               <p className="text-[32px] font-bold leading-none text-txt-primary">{teams.length}</p>
               <p className="text-[10px] text-brand-purple mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                <Settings2 size={9} /> 관리하기
+                <Settings2 size={11} /> 관리하기
               </p>
             </button>
 
@@ -188,11 +188,11 @@ export default function AdminDashboardPage() {
             >
               <div className="flex items-start justify-between">
                 <p className="text-xs uppercase tracking-wider mb-3 text-txt-muted">직원 수</p>
-                <Users size={16} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
+                <Users size={18} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
               </div>
               <p className="text-[32px] font-bold leading-none text-txt-primary">{stats.totalEmployees}</p>
               <p className="text-[10px] text-brand-purple mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                <Settings2 size={9} /> 팀 배정
+                <Settings2 size={11} /> 팀 배정
               </p>
             </button>
 
@@ -252,7 +252,7 @@ export default function AdminDashboardPage() {
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: team.color + '20' }}
                     >
-                      <Users size={16} style={{ color: team.color }} />
+                      <Users size={18} style={{ color: team.color }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-txt-primary truncate">{team.name}</h3>
@@ -266,19 +266,19 @@ export default function AdminDashboardPage() {
                   {/* 팀 지표 */}
                   <div className="px-5 py-4 space-y-3">
                     <div className="flex justify-between text-xs">
-                      <span className="text-txt-muted flex items-center gap-1"><Calendar size={11} /> 회의 참여</span>
+                      <span className="text-txt-muted flex items-center gap-1"><Calendar size={13} /> 회의 참여</span>
                       <span className="font-medium text-txt-primary">{team.meetingCount}회</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-txt-muted flex items-center gap-1"><CheckCircle2 size={11} /> 완료 태스크</span>
+                      <span className="text-txt-muted flex items-center gap-1"><CheckCircle2 size={13} /> 완료 태스크</span>
                       <span className="font-medium text-txt-primary">{team.doneTasks}/{team.totalTasks}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-txt-muted flex items-center gap-1"><Clock size={11} /> 진행 중</span>
+                      <span className="text-txt-muted flex items-center gap-1"><Clock size={13} /> 진행 중</span>
                       <span className="font-medium text-txt-primary">{team.inProgress}건</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-txt-muted flex items-center gap-1"><MessageSquare size={11} /> 1인 평균</span>
+                      <span className="text-txt-muted flex items-center gap-1"><MessageSquare size={13} /> 1인 평균</span>
                       <span className="font-medium text-txt-primary">{team.avgMeetingPerMember}회</span>
                     </div>
 
@@ -356,7 +356,7 @@ export default function AdminDashboardPage() {
                 <Card key={m.id} className="!p-3.5 hover:border-border-hover-strong">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
-                      <FileText size={14} className="text-brand-purple" />
+                      <FileText size={16} className="text-brand-purple" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-txt-primary truncate">{m.title}</p>
@@ -365,7 +365,7 @@ export default function AdminDashboardPage() {
                         {' · '}어젠다 {m.agendas?.length || 0} · 참여 {m.participants?.length || 0}
                       </p>
                     </div>
-                    <ArrowRight size={13} className="text-txt-muted shrink-0" />
+                    <ArrowRight size={15} className="text-txt-muted shrink-0" />
                   </div>
                 </Card>
               ))}

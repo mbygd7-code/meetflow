@@ -30,7 +30,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Vote size={14} className="text-brand-purple" />
+          <Vote size={16} className="text-brand-purple" />
           <h3 className="text-sm font-semibold text-txt-primary">투표</h3>
           {polls.length > 0 && (
             <span className="text-[11px] text-txt-muted">{polls.length}개</span>
@@ -41,7 +41,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
             onClick={() => setCreating(true)}
             className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
           >
-            <Plus size={13} /> 새 투표
+            <Plus size={15} /> 새 투표
           </button>
         )}
       </div>
@@ -75,7 +75,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
                     onClick={() => setOptions(options.filter((_, j) => j !== i))}
                     className="p-1 text-txt-muted hover:text-status-error"
                   >
-                    <X size={12} />
+                    <X size={14} />
                   </button>
                 )}
               </div>
@@ -85,7 +85,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
                 onClick={() => setOptions([...options, ''])}
                 className="text-[11px] text-brand-purple hover:text-txt-primary flex items-center gap-1 ml-6"
               >
-                <Plus size={11} /> 선택지 추가
+                <Plus size={13} /> 선택지 추가
               </button>
             )}
           </div>
@@ -101,7 +101,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
               disabled={!question.trim() || options.filter((o) => o.trim()).length < 2}
               className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-purple rounded-md hover:opacity-90 disabled:opacity-40 transition-opacity flex items-center gap-1"
             >
-              <Check size={12} /> 투표 생성
+              <Check size={14} /> 투표 생성
             </button>
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function PollPanel({ polls = [], onCreatePoll, onVote }) {
                     )}
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {isMyVote && <Check size={12} className="text-brand-purple" />}
+                        {isMyVote && <Check size={14} className="text-brand-purple" />}
                         <span className={`font-medium ${isMyVote ? 'text-brand-purple' : 'text-txt-primary'}`}>
                           {opt}
                         </span>

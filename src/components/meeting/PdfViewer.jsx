@@ -3,6 +3,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import DrawingOverlay from './DrawingOverlay';
 
 // PDF.js worker 설정 — Vite + unpkg CDN
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -13,7 +14,17 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
  * - 확대/축소 (50% ~ 300%)
  * - 카드 크기(width/height) 변화에 맞춰 자연스럽게 fit 조정 (ResizeObserver)
  */
-export default function PdfViewer({ url }) {
+export default function PdfViewer({
+  url,
+  // 드로잉 관련 — 활성 시 현재 페이지 위에 per-page 오버레이 렌더
+  drawingActive = false,
+  onCloseDrawing,
+  meetingId,
+  fileId,
+  fileName,
+  messages = [],
+  toolbarContainer,
+}) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [zoom, setZoom] = useState(1); // 0.5 ~ 3.0
@@ -21,6 +32,27 @@ export default function PdfViewer({ url }) {
   const [pageAspect, setPageAspect] = useState(0.707); // A4 기본 (w/h)
   const [fitWidth, setFitWidth] = useState(400);       // 컨테이너 기준 자동 계산
   const scrollContainerRef = useRef(null);
+  // 페이지 렌더 박스 — DrawingOverlay 캔버스 치수 동기화용
+  //   zoom/fitWidth 변화에 따라 ResizeObserver로 자동 갱신 → 드로잉이 페이지와 같이 스케일
+  const pageWrapRef = useRef(null);
+  const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = pageWrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setPageBox((prev) =>
+        prev.w === Math.round(r.width) && prev.h === Math.round(r.height)
+          ? prev
+          : { w: Math.round(r.width), h: Math.round(r.height) }
+      );
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [pageNumber, fitWidth, zoom]);
 
   const onDocumentLoadSuccess = useCallback(async (pdf) => {
     setNumPages(pdf.numPages);
@@ -137,7 +169,7 @@ export default function PdfViewer({ url }) {
             className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="이전 페이지"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={18} />
           </button>
           <span className="text-[11px] text-txt-primary tabular-nums min-w-[56px] text-center">
             {numPages ? `${pageNumber} / ${numPages}` : '—'}
@@ -148,7 +180,7 @@ export default function PdfViewer({ url }) {
             className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="다음 페이지"
           >
-            <ChevronRight size={16} />
+            <ChevronRight size={18} />
           </button>
         </div>
 
@@ -158,7 +190,7 @@ export default function PdfViewer({ url }) {
             className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
             aria-label="축소" title="축소"
           >
-            <ZoomOut size={14} />
+            <ZoomOut size={16} />
           </button>
           <button
             onClick={() => setZoom(1)}
@@ -172,7 +204,7 @@ export default function PdfViewer({ url }) {
             className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
             aria-label="확대" title="확대"
           >
-            <ZoomIn size={14} />
+            <ZoomIn size={16} />
           </button>
         </div>
       </div>
@@ -197,19 +229,35 @@ export default function PdfViewer({ url }) {
           onLoadError={onDocumentLoadError}
           loading={
             <div className="flex items-center gap-2 text-txt-muted py-8">
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={18} className="animate-spin" />
               <span className="text-xs">PDF 불러오는 중...</span>
             </div>
           }
           className="shrink-0"
         >
-          <Page
-            pageNumber={pageNumber}
-            width={pageWidth}
-            renderAnnotationLayer={false}
-            renderTextLayer={false}
-            className="shadow-lg"
-          />
+          {/* 페이지 + 드로잉 오버레이 컨테이너 — relative로 묶어 오버레이가 페이지와 함께 이동/스케일 */}
+          <div ref={pageWrapRef} className="relative shrink-0 inline-block">
+            <Page
+              pageNumber={pageNumber}
+              width={pageWidth}
+              renderAnnotationLayer={false}
+              renderTextLayer={false}
+              className="shadow-lg"
+            />
+            {drawingActive && pageBox.w > 0 && pageBox.h > 0 && fileId && (
+              <DrawingOverlay
+                // 페이지별 target_key — 각 페이지는 독립된 드로잉 레이어
+                targetKey={`doc:${fileId}:p${pageNumber}`}
+                fileName={fileName ? `${fileName} p.${pageNumber}` : null}
+                meetingId={meetingId}
+                width={pageBox.w}
+                height={pageBox.h}
+                messages={messages}
+                onClose={onCloseDrawing}
+                toolbarContainer={toolbarContainer}
+              />
+            )}
+          </div>
         </Document>
       </div>
     </div>

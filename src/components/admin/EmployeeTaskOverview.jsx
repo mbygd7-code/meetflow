@@ -138,7 +138,7 @@ export default function EmployeeTaskOverview({ employees, tasks }) {
       {/* 툴바 */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex-1 min-w-[180px] max-w-sm flex items-center gap-1.5 bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1.5 focus-within:border-brand-purple/50">
-          <Search size={12} strokeWidth={2} className="text-txt-muted shrink-0" />
+          <Search size={14} strokeWidth={2} className="text-txt-muted shrink-0" />
           <input
             type="text"
             placeholder="직원 이름·팀 검색"
@@ -152,7 +152,7 @@ export default function EmployeeTaskOverview({ employees, tasks }) {
               className="text-txt-muted hover:text-txt-primary shrink-0"
               aria-label="검색어 지우기"
             >
-              <X size={11} />
+              <X size={13} />
             </button>
           )}
         </div>
@@ -228,7 +228,7 @@ function EmployeeTaskCard({ emp, expanded, onToggle }) {
               className="text-txt-muted hover:text-txt-primary"
               aria-label="상세 페이지"
             >
-              <ChevronRight size={13} />
+              <ChevronRight size={15} />
             </Link>
           </div>
           <p className="text-[10px] text-txt-muted truncate">{emp.team || '미지정'}</p>
@@ -236,7 +236,7 @@ function EmployeeTaskCard({ emp, expanded, onToggle }) {
         <span
           className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusStyles[emp.statusTone] || statusStyles.outline}`}
         >
-          {emp.overdue.length > 0 && <AlertCircle size={9} className="inline mr-0.5 -mt-0.5" />}
+          {emp.overdue.length > 0 && <AlertCircle size={11} className="inline mr-0.5 -mt-0.5" />}
           {emp.statusLabel}
         </span>
       </div>
@@ -275,7 +275,7 @@ function EmployeeTaskCard({ emp, expanded, onToggle }) {
       {emp.currentFocus && (
         <div className="mx-3 mb-2 p-2.5 rounded-md bg-bg-tertiary/60 border border-border-divider">
           <div className="flex items-center gap-1.5 mb-1">
-            <TrendingUp size={11} strokeWidth={2.4} className="text-brand-purple" />
+            <TrendingUp size={13} strokeWidth={2.4} className="text-brand-purple" />
             <span className="text-[10px] text-txt-muted font-semibold uppercase tracking-wider">
               지금 집중 중
             </span>
@@ -294,7 +294,7 @@ function EmployeeTaskCard({ emp, expanded, onToggle }) {
           {expanded ? '접기' : `전체 보기 (${emp.activeCount}건)`}
         </span>
         <ChevronRight
-          size={12}
+          size={14}
           className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
         />
       </button>
@@ -339,7 +339,7 @@ function StatBox({ icon: Icon, color, label, value, highlight = false }) {
         highlight ? 'bg-bg-tertiary' : ''
       }`}
     >
-      <Icon size={11} className={`${color} mx-auto mb-0.5`} strokeWidth={2.4} />
+      <Icon size={13} className={`${color} mx-auto mb-0.5`} strokeWidth={2.4} />
       <div className="text-[13px] font-bold text-txt-primary leading-none">{value}</div>
       <div className="text-[9px] text-txt-muted mt-0.5">{label}</div>
     </div>
@@ -353,11 +353,11 @@ function TaskLine({ task }) {
   return (
     <div className="flex items-start gap-2">
       {isDone ? (
-        <CheckCircle2 size={12} className="text-status-success shrink-0 mt-0.5" />
+        <CheckCircle2 size={14} className="text-status-success shrink-0 mt-0.5" />
       ) : task.status === 'in_progress' ? (
-        <CircleDot size={12} className="text-brand-purple shrink-0 mt-0.5" />
+        <CircleDot size={14} className="text-brand-purple shrink-0 mt-0.5" />
       ) : (
-        <Circle size={12} className="text-txt-muted shrink-0 mt-0.5" />
+        <Circle size={14} className="text-txt-muted shrink-0 mt-0.5" />
       )}
       <div className="flex-1 min-w-0">
         <p className={`text-xs leading-snug ${isDone ? 'text-txt-muted line-through' : 'text-txt-primary'}`}>

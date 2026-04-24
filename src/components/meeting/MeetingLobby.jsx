@@ -116,12 +116,12 @@ export default function MeetingLobby({ pageTitle }) {
             title={summaryGeneratingId ? '요약을 생성 중입니다. 클릭하면 목록으로 이동합니다.' : '회의록 목록으로'}
           >
             {summaryGeneratingId ? (
-              <Loader2 size={16} strokeWidth={2.4} className="animate-spin" />
+              <Loader2 size={18} strokeWidth={2.4} className="animate-spin" />
             ) : (
-              <FileText size={16} strokeWidth={2.4} />
+              <FileText size={18} strokeWidth={2.4} />
             )}
             <span>{summaryGeneratingId ? '회의록 작성중...' : '회의록 보기'}</span>
-            <ArrowRight size={14} strokeWidth={2.4} className="transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight size={16} strokeWidth={2.4} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       </div>
@@ -158,7 +158,7 @@ export default function MeetingLobby({ pageTitle }) {
           <div className="flex items-center gap-2 pb-2">
             {searchOpen ? (
               <div className="flex items-center gap-1 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle focus-within:border-brand-purple/50">
-                <Search size={14} className="text-txt-muted shrink-0" />
+                <Search size={16} className="text-txt-muted shrink-0" />
                 <input
                   autoFocus
                   value={searchQuery}
@@ -167,7 +167,7 @@ export default function MeetingLobby({ pageTitle }) {
                   className="bg-transparent text-sm text-txt-primary placeholder:text-txt-muted outline-none w-32 lg:w-48"
                 />
                 <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="text-txt-muted hover:text-txt-primary">
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               </div>
             ) : (
@@ -176,7 +176,7 @@ export default function MeetingLobby({ pageTitle }) {
                 className="p-2 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
                 title="검색"
               >
-                <Search size={16} />
+                <Search size={18} />
               </button>
             )}
           </div>

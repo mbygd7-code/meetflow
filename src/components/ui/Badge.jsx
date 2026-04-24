@@ -24,7 +24,7 @@ export default function Badge({
       `}
       {...props}
     >
-      {Icon && <Icon size={12} strokeWidth={2.4} />}
+      {Icon && <Icon size={14} strokeWidth={2.4} />}
       {children}
     </span>
   );

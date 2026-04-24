@@ -59,7 +59,7 @@ export default function Sidebar({ mobile = false, onClose }) {
         <div className="flex items-center justify-between px-2 pb-3 mb-2" style={{ borderBottom: '1px solid var(--sidebar-divider)' }}>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center">
-              <Sparkles size={16} className="text-white" strokeWidth={2.5} />
+              <Sparkles size={18} className="text-white" strokeWidth={2.5} />
             </div>
             <span className="text-base font-bold" style={{ color: 'var(--sidebar-text)' }}>MeetFlow</span>
           </div>
@@ -111,7 +111,7 @@ export default function Sidebar({ mobile = false, onClose }) {
               <p className="text-[11px] truncate" style={{ color: 'var(--sidebar-text-dim)' }}>{user?.email}</p>
             </div>
             <button onClick={handleLogout} className="p-1.5 rounded transition-colors" style={{ color: 'var(--sidebar-text-dim)' }} title="로그아웃">
-              <LogOut size={15} strokeWidth={2.2} />
+              <LogOut size={17} strokeWidth={2.2} />
             </button>
           </div>
         </div>
@@ -264,7 +264,7 @@ export default function Sidebar({ mobile = false, onClose }) {
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--sidebar-text-dim)'; e.currentTarget.style.background = ''; }}
             title="로그아웃"
           >
-            <LogOut size={15} strokeWidth={2.2} />
+            <LogOut size={17} strokeWidth={2.2} />
           </button>
         </div>
       </div>

@@ -52,7 +52,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
       {/* 검색 */}
       <div className="p-3 border-b border-border-divider">
         <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted" />
           <input
             type="text"
             value={query}
@@ -65,7 +65,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
               onClick={() => setQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary"
             >
-              <X size={13} />
+              <X size={15} />
             </button>
           )}
         </div>
@@ -83,7 +83,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
           }`}
         >
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-orange/20 to-brand-purple/20 flex items-center justify-center shrink-0">
-            <Users size={14} className="text-brand-purple" />
+            <Users size={16} className="text-brand-purple" />
           </div>
           <div className="flex-1 min-w-0 text-left">
             <p className={`text-sm font-semibold ${selectedId === null ? 'text-txt-primary' : 'text-txt-primary/90'}`}>
@@ -94,7 +94,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
               {totalStats.overdue > 0 && <span className="text-status-error"> · 지연 {totalStats.overdue}</span>}
             </p>
           </div>
-          {selectedId === null && <ChevronRight size={12} className="text-brand-purple" />}
+          {selectedId === null && <ChevronRight size={14} className="text-brand-purple" />}
         </button>
 
         {/* 구분선 */}
@@ -171,7 +171,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
                   </div>
                 </div>
 
-                {isSelected && <ChevronRight size={12} className="text-brand-purple shrink-0 mt-1" />}
+                {isSelected && <ChevronRight size={14} className="text-brand-purple shrink-0 mt-1" />}
               </button>
             );
           })

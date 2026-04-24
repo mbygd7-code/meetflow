@@ -164,7 +164,7 @@ export default function TokenUsagePage() {
             ))}
           </div>
           <button onClick={loadLogs} className="p-2 text-txt-muted hover:text-brand-purple transition-colors" title="새로고침">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>

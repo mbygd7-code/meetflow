@@ -56,7 +56,7 @@ function ImageThumb({ att, onRemove }) {
           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-status-error transition-colors opacity-0 group-hover:opacity-100"
           title="제거"
         >
-          <X size={10} />
+          <X size={12} />
         </button>
       )}
     </div>
@@ -91,7 +91,7 @@ function FileChip({ att, onRemove, compact }) {
         className="shrink-0 p-0.5 rounded text-txt-muted hover:text-brand-purple opacity-0 group-hover:opacity-100 transition-opacity"
         title="다운로드"
       >
-        <Download size={10} />
+        <Download size={12} />
       </a>
       {onRemove && (
         <button
@@ -99,7 +99,7 @@ function FileChip({ att, onRemove, compact }) {
           className="shrink-0 p-0.5 rounded text-txt-muted hover:text-status-error transition-colors"
           title="제거"
         >
-          <X size={10} />
+          <X size={12} />
         </button>
       )}
     </div>

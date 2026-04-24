@@ -37,19 +37,33 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
     return () => clearTimeout(bannerTimerRef.current);
   }, [autoIntervene]);
 
-  // 드로잉 태그 이벤트 리스너 — DrawingOverlay 아바타 클릭 시 input에 태그 주입
+  // 드로잉 태그 이벤트 리스너 — DrawingOverlay 아바타 클릭 시 input에 태그 주입 +
+  //   구조화 참조(drawing_annotations metadata)를 송신 시 포함할 수 있도록 누적.
+  const [pendingDrawingRefs, setPendingDrawingRefs] = useState([]);
+  const pendingDrawingRefsRef = useRef([]);
+  useEffect(() => { pendingDrawingRefsRef.current = pendingDrawingRefs; }, [pendingDrawingRefs]);
   useEffect(() => {
     const handler = (e) => {
       const tag = e?.detail?.tag;
       if (!tag) return;
       setInput((prev) => {
-        // 이미 태그가 있으면 중복 추가 방지
         if (prev.includes(tag.trim())) return prev;
-        // 끝에 공백 확보
         const sep = prev && !prev.endsWith(' ') ? ' ' : '';
         return prev + sep + tag;
       });
-      // 입력창 포커스
+      // 구조화 참조 누적 (중복 제거)
+      const ref = {
+        target_key: e.detail.targetKey || null,
+        file_name: e.detail.fileName || null,
+        user_name: e.detail.userName || null,
+        seq: e.detail.seq || null,
+        stroke_id: e.detail.strokeId || null,
+      };
+      setPendingDrawingRefs((prev) => {
+        const key = `${ref.user_name}-${ref.seq}-${ref.stroke_id}`;
+        if (prev.some((r) => `${r.user_name}-${r.seq}-${r.stroke_id}` === key)) return prev;
+        return [...prev, ref];
+      });
       requestAnimationFrame(() => textareaRef.current?.focus());
     };
     window.addEventListener('meetflow:drawing-tag', handler);
@@ -97,13 +111,18 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
 
   const handleSend = async () => {
     if (!input.trim() || disabled) return;
-    // 인용 원문 전체 저장 (클릭 시 전체 펼침 가능하도록) — 디스플레이는 line-clamp로 제어
     const text = quotedMessage
       ? `[quote:${quotedMessage.senderName}]${quotedMessage.content}[/quote]\n${input}`
       : input;
+    // 현재 input 에 남아 있는 `@name-seq` 태그에 대응하는 refs만 첨부
+    const refsToAttach = pendingDrawingRefsRef.current.filter((r) =>
+      r.user_name && typeof r.seq === 'number' && text.includes(`@${r.user_name}-${r.seq}`)
+    );
+    const metadata = refsToAttach.length > 0 ? { drawing_annotations: refsToAttach } : null;
     setInput('');
     setQuotedMessage(null);
-    await onSend?.(text);
+    setPendingDrawingRefs([]);
+    await onSend?.(text, { metadata });
   };
 
   const handleKeyDown = (e) => {
@@ -176,12 +195,12 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           >
             {banner.kind === 'off' ? (
               <>
-                <ZapOff size={13} strokeWidth={2.4} />
+                <ZapOff size={15} strokeWidth={2.4} />
                 <span>AI 자동 개입 OFF — <span className="font-bold">@밀로</span>/<span className="font-bold">@전문가</span>로 호출하세요</span>
               </>
             ) : (
               <>
-                <Zap size={13} strokeWidth={2.4} />
+                <Zap size={15} strokeWidth={2.4} />
                 <span>AI 자동 개입 ON — 필요한 순간 AI가 자동 응답합니다</span>
               </>
             )}
@@ -190,7 +209,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
         {/* AI 에러 토스트 — API 실패/서킷 오픈 시 표시 */}
         {aiError && (
           <div className="inline-flex items-center gap-2 mb-2 px-3 py-1.5 rounded-md text-xs font-medium shadow-sm bg-status-error text-white border border-status-error animate-pulse">
-            <AlertTriangle size={13} strokeWidth={2.4} />
+            <AlertTriangle size={15} strokeWidth={2.4} />
             <span>AI 응답 실패 — 자동 재시도 중...</span>
           </div>
         )}
@@ -202,7 +221,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
               <p className="text-txt-secondary mt-0.5 line-clamp-2">{quotedMessage.content}</p>
             </div>
             <button onClick={() => setQuotedMessage(null)} className="p-0.5 text-txt-muted hover:text-txt-primary shrink-0">
-              <X size={12} />
+              <X size={14} />
             </button>
           </div>
         )}
@@ -231,7 +250,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   onClick={() => setPlusMenuOpen(!plusMenuOpen)}
                   className={`p-2 rounded-full transition-colors ${plusMenuOpen ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted hover:text-brand-purple'}`}
                 >
-                  <Plus size={16} strokeWidth={2.4} />
+                  <Plus size={18} strokeWidth={2.4} />
                 </button>
                 {plusMenuOpen && (
                   <>
@@ -241,14 +260,14 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                         onClick={() => { setPlusMenuOpen(false); fileInputRef.current?.click(); }}
                         className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
                       >
-                        <Paperclip size={15} className="text-txt-muted" />
+                        <Paperclip size={17} className="text-txt-muted" />
                         자료 업로드
                       </button>
                       <button
                         onClick={() => { setPlusMenuOpen(false); setVoiceMode(true); }}
                         className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
                       >
-                        <Mic size={15} className="text-txt-muted" />
+                        <Mic size={17} className="text-txt-muted" />
                         음성 모드
                       </button>
                     </div>
@@ -287,7 +306,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 onClick={() => { setInput((v) => (v ? v + ' @Milo ' : '@Milo ')); textareaRef.current?.focus(); }}
                 title="Milo 호출"
               >
-                <AtSign size={16} strokeWidth={2.2} />
+                <AtSign size={18} strokeWidth={2.2} />
               </button>
               <button
                 type="button"
@@ -295,7 +314,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                 disabled={!input.trim() || disabled}
                 className="w-9 h-9 rounded-full bg-brand-purple text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shrink-0"
               >
-                <ArrowUp size={16} strokeWidth={2.4} />
+                <ArrowUp size={18} strokeWidth={2.4} />
               </button>
             </div>
             <p className="text-[11px] text-txt-muted mt-2 text-center w-full">
@@ -318,7 +337,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="Milo 호출"
                 >
-                  <AtSign size={13} />
+                  <AtSign size={15} />
                 </button>
               </div>
 
@@ -330,7 +349,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-brand-purple hover:border-brand-purple/30 hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="자료 업로드"
                 >
-                  <Plus size={13} />
+                  <Plus size={15} />
                 </button>
 
                 {/* 마이크 */}
@@ -355,7 +374,7 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   className="w-7 h-7 rounded-full bg-bg-tertiary border border-border-subtle text-txt-muted hover:text-txt-primary hover:border-border-hover hover:scale-125 hover:shadow-md flex items-center justify-center transition-all duration-200"
                   title="텍스트 모드"
                 >
-                  <Keyboard size={13} />
+                  <Keyboard size={15} />
                 </button>
               </div>
 

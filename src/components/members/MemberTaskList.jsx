@@ -211,7 +211,7 @@ function NewTaskButton({ onClick }) {
       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-brand-purple text-white rounded-md text-xs font-medium hover:opacity-90 transition-opacity"
       title="새 태스크 생성"
     >
-      <Plus size={14} />
+      <Plus size={16} />
       <span className="hidden md:inline">새 태스크</span>
     </button>
   );
@@ -336,19 +336,19 @@ function TaskCard({ task, assignee, creator, commentCount, onClick }) {
             )}
             {dueInfo && (
               <span className={`inline-flex items-center gap-1 ${dueInfo.colorClass}`}>
-                <Calendar size={10} />
+                <Calendar size={12} />
                 {dueInfo.label}
               </span>
             )}
             {commentCount > 0 && (
               <span className="inline-flex items-center gap-1 text-txt-muted">
-                <MessageSquare size={10} />
+                <MessageSquare size={12} />
                 {commentCount}
               </span>
             )}
             {task.meeting_id && (
               <span className="inline-flex items-center gap-1 text-brand-purple/80">
-                <FileText size={10} />
+                <FileText size={12} />
                 회의
               </span>
             )}
@@ -365,7 +365,7 @@ function TaskCard({ task, assignee, creator, commentCount, onClick }) {
           title="태스크 상세 보기"
         >
           <span>상세보기</span>
-          <ChevronRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
         </button>
       </div>
     </div>

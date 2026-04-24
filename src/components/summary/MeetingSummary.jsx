@@ -65,7 +65,7 @@ function SourceLink({ meetingId, item, messages }) {
       className="inline-flex items-center gap-1 text-[10px] text-brand-purple hover:text-brand-purple-deep transition-colors mt-1"
       title="원본 대화로 이동"
     >
-      <Quote size={10} strokeWidth={2.4} />
+      <Quote size={12} strokeWidth={2.4} />
       원본 대화 보기
     </Link>
   );
@@ -80,14 +80,14 @@ function Section({ icon: Icon, title, color, children, count, defaultOpen = true
         className="w-full flex items-center gap-2.5 px-5 py-3.5 border-b border-border-divider hover:bg-bg-tertiary/30 transition-colors"
       >
         <div className={`w-7 h-7 rounded-md flex items-center justify-center ${color}`}>
-          <Icon size={14} strokeWidth={2.4} />
+          <Icon size={16} strokeWidth={2.4} />
         </div>
         <h3 className="text-[13px] font-semibold text-txt-primary">{title}</h3>
         {typeof count === 'number' && (
           <span className="ml-1 text-xs text-txt-muted">{count}</span>
         )}
         <span className="ml-auto text-txt-muted">
-          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </span>
       </button>
       {open && <div className="px-5 py-4">{children}</div>}
@@ -106,7 +106,7 @@ function formatDurationLabel(minutes) {
 function StatCard({ icon: Icon, label, value, sub, color = 'text-brand-purple' }) {
   return (
     <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-lg bg-bg-tertiary/50">
-      <Icon size={14} className={`${color} shrink-0 md:w-4 md:h-4`} />
+      <Icon size={16} className={`${color} shrink-0 md:w-4 md:h-4`} />
       <div className="min-w-0">
         <p className="text-base md:text-lg font-bold text-txt-primary leading-none truncate">{value}</p>
         <p className="text-[10px] text-txt-muted mt-0.5 truncate">{label}{sub ? ` · ${sub}` : ''}</p>
@@ -387,7 +387,7 @@ export default function MeetingSummary() {
           to="/summaries"
           className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4 transition-colors"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={16} />
           회의록 목록으로
         </Link>
         <div className="mb-4">
@@ -429,7 +429,7 @@ export default function MeetingSummary() {
         to="/summaries"
         className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-3 md:mb-4 transition-colors"
       >
-        <ArrowLeft size={14} />
+        <ArrowLeft size={16} />
         회의록 목록으로
       </Link>
 
@@ -520,7 +520,7 @@ export default function MeetingSummary() {
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-sm font-semibold text-txt-primary">Milo 인사이트</span>
                 <Badge variant="purple" className="!text-[10px]">
-                  <Sparkles size={10} strokeWidth={2.4} /> AI
+                  <Sparkles size={12} strokeWidth={2.4} /> AI
                 </Badge>
               </div>
               <p className="text-sm text-txt-secondary leading-relaxed">{summary.milo_insights}</p>
@@ -550,7 +550,7 @@ export default function MeetingSummary() {
             <ul className="space-y-3">
               {summary.decisions.map((d, i) => (
                 <li key={i} className="flex gap-2">
-                  <CheckCircle2 size={14} className="text-status-success mt-0.5 shrink-0" />
+                  <CheckCircle2 size={16} className="text-status-success mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
@@ -578,7 +578,7 @@ export default function MeetingSummary() {
             <ul className="space-y-3">
               {summary.discussions.map((d, i) => (
                 <li key={i} className="flex gap-2">
-                  <MessageCircle size={14} className="text-brand-yellow mt-0.5 shrink-0" />
+                  <MessageCircle size={16} className="text-brand-yellow mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.detail && <p className="text-xs text-txt-secondary mt-0.5">{d.detail}</p>}
@@ -609,7 +609,7 @@ export default function MeetingSummary() {
             <ul className="space-y-3">
               {summary.deferred.map((d, i) => (
                 <li key={i} className="flex gap-2">
-                  <PauseCircle size={14} className="text-txt-muted mt-0.5 shrink-0" />
+                  <PauseCircle size={16} className="text-txt-muted mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-txt-primary">{d.title}</p>
                     {d.reason && <p className="text-xs text-txt-muted mt-0.5">{d.reason}</p>}
@@ -659,7 +659,7 @@ export default function MeetingSummary() {
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors disabled:opacity-50"
           title="현재 회의록을 PDF 파일로 저장"
         >
-          {downloadingPdf ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+          {downloadingPdf ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
           {downloadingPdf ? '생성 중...' : '다운로드'}
         </button>
         {messages && messages.length >= 2 && (
@@ -669,7 +669,7 @@ export default function MeetingSummary() {
             className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors disabled:opacity-50"
             title="대화 기록을 다시 분석해 요약을 새로 생성합니다"
           >
-            {generating ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {generating ? <Loader size={16} className="animate-spin" /> : <RefreshCw size={16} />}
             {generating ? '재생성 중...' : '요약 재생성'}
           </button>
         )}
@@ -682,7 +682,7 @@ export default function MeetingSummary() {
             className={`${messages && messages.length >= 2 ? '' : 'ml-auto'} flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-status-error/10 border border-status-error/25 text-status-error hover:bg-status-error/15 transition-colors disabled:opacity-50`}
             title="회의를 완전히 삭제합니다 (관리자 전용)"
           >
-            {deleting ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {deleting ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
             {deleting ? '삭제 중...' : '회의 삭제'}
           </button>
         )}

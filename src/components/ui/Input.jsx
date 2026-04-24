@@ -24,7 +24,7 @@ const Input = forwardRef(function Input(
       <div className="relative">
         {Icon && (
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-txt-muted">
-            <Icon size={16} strokeWidth={2} />
+            <Icon size={18} strokeWidth={2} />
           </span>
         )}
         <input
@@ -48,7 +48,7 @@ const Input = forwardRef(function Input(
         />
         {IconRight && (
           <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-txt-muted">
-            <IconRight size={16} strokeWidth={2} />
+            <IconRight size={18} strokeWidth={2} />
           </span>
         )}
       </div>

@@ -177,7 +177,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
           </span>
           {isAi && (
             <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
-              <Sparkles size={10} strokeWidth={2.4} /> AI
+              <Sparkles size={12} strokeWidth={2.4} /> AI
             </Badge>
           )}
           {message.source === 'slack' && (
@@ -196,7 +196,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
               </span>
               {isAi && (
                 <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
-                  <Sparkles size={10} strokeWidth={2.4} /> AI
+                  <Sparkles size={12} strokeWidth={2.4} /> AI
                 </Badge>
               )}
               <span className="text-txt-muted text-xs">{time}</span>
@@ -209,7 +209,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                       key={key}
                       className="group/react relative inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary cursor-default"
                     >
-                      <Icon size={14} />
+                      <Icon size={16} />
                       {data.count}
                       <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded-md text-[10px] whitespace-nowrap bg-bg-primary border border-border-subtle shadow-md opacity-0 pointer-events-none group-hover/react:opacity-100 transition-opacity z-10">
                         {data.users.join(', ')}
@@ -236,7 +236,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
             {/* 질문 표시 */}
             {isQuestion && (
               <div className="flex items-center gap-1.5 mb-2 text-brand-orange">
-                <HelpCircle size={14} strokeWidth={2.5} />
+                <HelpCircle size={16} strokeWidth={2.5} />
                 <span className="text-[11px] font-semibold uppercase tracking-wider">질문</span>
               </div>
             )}
@@ -289,7 +289,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                 return (
                   <div className="mt-3 pt-3 border-t border-brand-purple/10">
                     <p className="text-[10px] text-txt-muted font-medium uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                      <ExternalLink size={10} /> 이미지 결과 ({message.search_sources.length})
+                      <ExternalLink size={12} /> 이미지 결과 ({message.search_sources.length})
                     </p>
                     <div
                       className="grid gap-2"
@@ -345,7 +345,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
               return (
                 <div className="mt-3 pt-3 border-t border-brand-purple/10">
                   <p className="text-[10px] text-txt-muted font-medium uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                    <ExternalLink size={10} /> 참고 자료
+                    <ExternalLink size={12} /> 참고 자료
                   </p>
                   <div
                     className="grid gap-2"
@@ -432,11 +432,11 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
           <div className="flex items-center gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
             <div className="flex gap-1.5">
             <button onClick={handleCopy} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="복사">
-              {copied ? <Check size={16} className="text-status-success" /> : <Copy size={16} />}
+              {copied ? <Check size={18} className="text-status-success" /> : <Copy size={18} />}
             </button>
             {!readonly && (<>
             <button onClick={(e) => { e.stopPropagation(); handleQuote(); }} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="인용 답글">
-              <Reply size={16} />
+              <Reply size={18} />
             </button>
             {/* 리액션 토글 */}
             <div className="relative">
@@ -445,7 +445,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                 className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors"
                 title="반응"
               >
-                <SmilePlus size={16} />
+                <SmilePlus size={18} />
               </button>
               {reactOpen && (
                 <div className="absolute bottom-full right-0 mb-1 flex gap-1 px-2 py-1.5 rounded-lg bg-bg-secondary border border-border-subtle shadow-md z-10">

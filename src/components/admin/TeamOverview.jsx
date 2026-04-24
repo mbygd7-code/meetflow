@@ -13,7 +13,7 @@ export default function TeamOverview({ teams = [] }) {
           >
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-md bg-brand-purple/10 flex items-center justify-center">
-                <Users size={14} className="text-brand-purple" />
+                <Users size={16} className="text-brand-purple" />
               </div>
               <div>
                 <p className="text-sm font-medium text-txt-primary">{team.name}</p>

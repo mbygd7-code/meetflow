@@ -86,15 +86,15 @@ export default function TopBar() {
 
     // 기본 자동 생성 메시지
     const autoSegments = [
-      { icon: <Hand size={15} />, text: `안녕하세요, ${name}님! ${today}, 오늘도 화이팅입니다` },
-      { icon: <Calendar size={15} />, text: meetingPart },
-      { icon: <ClipboardList size={15} />, text: taskPart },
+      { icon: <Hand size={17} />, text: `안녕하세요, ${name}님! ${today}, 오늘도 화이팅입니다` },
+      { icon: <Calendar size={17} />, text: meetingPart },
+      { icon: <ClipboardList size={17} />, text: taskPart },
     ];
 
     // 커스텀 메시지
     const customSegments = customTicker.messages
       .filter((m) => m.trim())
-      .map((msg) => ({ icon: <Sparkles size={15} />, text: msg }));
+      .map((msg) => ({ icon: <Sparkles size={17} />, text: msg }));
 
     if (customSegments.length === 0) return autoSegments;
     if (customTicker.showGreeting) return [...autoSegments, ...customSegments];
@@ -141,7 +141,7 @@ export default function TopBar() {
       {/* 모바일 로고 */}
       <div className="flex md:hidden items-center gap-2 shrink-0">
         <div className="w-8 h-8 rounded-md bg-gradient-brand shadow-glow flex items-center justify-center">
-          <Sparkles size={16} className="text-white" strokeWidth={2.5} />
+          <Sparkles size={18} className="text-white" strokeWidth={2.5} />
         </div>
         <span className="text-base font-bold tracking-tight text-txt-primary">MeetFlow</span>
       </div>
@@ -170,7 +170,7 @@ export default function TopBar() {
                   className="p-1.5 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors shrink-0"
                   title="티커 메시지 편집"
                 >
-                  <Pencil size={14} />
+                  <Pencil size={16} />
                 </button>
               )}
             </>
@@ -219,7 +219,7 @@ export default function TopBar() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border-divider">
               <h3 className="text-base font-semibold text-txt-primary">티커 메시지 편집</h3>
               <button onClick={() => setEditOpen(false)} className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary">
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
             <div className="p-5 space-y-4">
@@ -265,7 +265,7 @@ export default function TopBar() {
                       onClick={() => setEditMessages(editMessages.filter((_, j) => j !== i))}
                       className="p-1.5 text-txt-muted hover:text-status-error transition-colors"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   )}
                 </div>
@@ -275,7 +275,7 @@ export default function TopBar() {
                   onClick={() => setEditMessages([...editMessages, ''])}
                   className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors"
                 >
-                  <Plus size={13} /> 메시지 추가
+                  <Plus size={15} /> 메시지 추가
                 </button>
               )}
             </div>
@@ -291,7 +291,7 @@ export default function TopBar() {
                   취소
                 </button>
                 <button onClick={handleSaveEdit} className="px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-md hover:opacity-90 transition-opacity flex items-center gap-1">
-                  <Check size={13} /> 저장
+                  <Check size={15} /> 저장
                 </button>
               </div>
             </div>

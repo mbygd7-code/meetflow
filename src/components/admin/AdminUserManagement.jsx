@@ -130,7 +130,7 @@ export default function AdminUserManagement() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-1">
-        <Shield size={14} className="text-brand-purple" />
+        <Shield size={16} className="text-brand-purple" />
         <h4 className="text-xs font-semibold text-txt-primary">관리자 계정 관리</h4>
       </div>
 
@@ -154,7 +154,7 @@ export default function AdminUserManagement() {
                 className="p-1.5 rounded text-txt-muted hover:text-status-error hover:bg-status-error/10 transition-colors"
                 title="관리자 제거"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             )}
           </div>

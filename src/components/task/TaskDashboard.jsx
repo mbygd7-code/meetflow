@@ -159,7 +159,7 @@ export default function TaskDashboard({ pageTitle }) {
                       : 'text-txt-secondary hover:text-txt-primary'
                   }`}
                 >
-                  <s.icon size={13} strokeWidth={2.2} />
+                  <s.icon size={15} strokeWidth={2.2} />
                   {s.label}
                 </button>
               ))}
@@ -192,7 +192,7 @@ export default function TaskDashboard({ pageTitle }) {
           <div className="flex items-center gap-2 px-3 md:px-4 pt-4 pb-3 border-b border-border-divider flex-wrap">
             {/* 검색 */}
             <div className="flex-1 min-w-[180px] max-w-sm flex items-center gap-1.5 bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1.5 focus-within:border-brand-purple/50">
-              <Search size={12} strokeWidth={2} className="text-txt-muted shrink-0" />
+              <Search size={14} strokeWidth={2} className="text-txt-muted shrink-0" />
               <input
                 type="text"
                 placeholder="제목·설명·태그·회의 검색"
@@ -206,7 +206,7 @@ export default function TaskDashboard({ pageTitle }) {
                   className="text-txt-muted hover:text-txt-primary shrink-0"
                   aria-label="검색어 지우기"
                 >
-                  <X size={11} />
+                  <X size={13} />
                 </button>
               )}
             </div>
@@ -266,7 +266,7 @@ export default function TaskDashboard({ pageTitle }) {
                       : 'text-txt-secondary hover:text-txt-primary'
                   }`}
                 >
-                  <v.icon size={13} strokeWidth={2.2} />
+                  <v.icon size={15} strokeWidth={2.2} />
                   {v.label}
                 </button>
               ))}

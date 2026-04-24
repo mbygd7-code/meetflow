@@ -119,7 +119,7 @@ export default function FeedbackButtons({ messageId, compact = false }) {
               className="text-txt-muted hover:text-txt-primary"
               aria-label="닫기"
             >
-              <X size={11} />
+              <X size={13} />
             </button>
           </div>
           {REASON_OPTIONS.map((opt) => (

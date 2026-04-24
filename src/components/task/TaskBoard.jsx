@@ -153,7 +153,7 @@ export default function TaskBoard({ tasks, onToggle, onCardClick, selectedId, on
                 className="text-txt-muted hover:text-txt-primary transition-colors p-1 rounded hover:bg-bg-tertiary"
                 aria-label={`${col.label}에 태스크 추가`}
               >
-                <Plus size={14} />
+                <Plus size={16} />
               </button>
             </div>
 

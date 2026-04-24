@@ -66,15 +66,15 @@ export default function SummaryAgendaList({ agendas = [] }) {
                 <span className="mt-0.5 shrink-0">
                   {notExecuted ? (
                     <span className="w-5 h-5 rounded-full bg-txt-muted/15 flex items-center justify-center">
-                      <CircleSlash size={11} className="text-txt-muted" strokeWidth={2.2} />
+                      <CircleSlash size={13} className="text-txt-muted" strokeWidth={2.2} />
                     </span>
                   ) : isDone ? (
                     <span className="w-5 h-5 rounded-full bg-status-success/20 flex items-center justify-center">
-                      <Check size={11} className="text-status-success" strokeWidth={3} />
+                      <Check size={13} className="text-status-success" strokeWidth={3} />
                     </span>
                   ) : isActive ? (
                     <span className="w-5 h-5 rounded-full bg-brand-purple flex items-center justify-center">
-                      <CircleDot size={11} className="text-white" strokeWidth={2.4} />
+                      <CircleDot size={13} className="text-white" strokeWidth={2.4} />
                     </span>
                   ) : (
                     <span className="w-5 h-5 rounded-full border border-border-default text-[10px] font-semibold text-txt-muted flex items-center justify-center">
@@ -105,7 +105,7 @@ export default function SummaryAgendaList({ agendas = [] }) {
                 <div className="shrink-0 flex items-center gap-1.5 text-[11px]">
                   {planned != null && (
                     <span className="inline-flex items-center gap-1 text-txt-muted">
-                      <Clock size={10} strokeWidth={2} />
+                      <Clock size={12} strokeWidth={2} />
                       목표 {planned}분
                     </span>
                   )}
@@ -146,7 +146,7 @@ export default function SummaryAgendaList({ agendas = [] }) {
                     />
                   </div>
                   <span className="text-[10px] text-txt-muted inline-flex items-center gap-1 shrink-0">
-                    <MessageSquare size={9} strokeWidth={2} />
+                    <MessageSquare size={11} strokeWidth={2} />
                     {a.messageCount}건
                     <span className="text-txt-secondary font-semibold ml-0.5">
                       {a.focusPct || 0}%

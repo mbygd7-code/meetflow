@@ -16,21 +16,21 @@ function RankCell({ index }) {
   if (index === 0) {
     return (
       <span className="w-6 h-6 rounded-full flex items-center justify-center bg-brand-orange text-white shrink-0">
-        <Trophy size={12} />
+        <Trophy size={14} />
       </span>
     );
   }
   if (index === 1) {
     return (
       <span className="w-6 h-6 rounded-full flex items-center justify-center bg-brand-purple text-white shrink-0">
-        <Medal size={12} />
+        <Medal size={14} />
       </span>
     );
   }
   if (index === 2) {
     return (
       <span className="w-6 h-6 rounded-full flex items-center justify-center bg-brand-yellow text-txt-primary shrink-0">
-        <Award size={12} />
+        <Award size={14} />
       </span>
     );
   }
@@ -185,7 +185,7 @@ export default function EmployeeTable({ employees = [] }) {
 
             <div className="text-center">{getStatusBadge(emp.completion_rate || 0)}</div>
 
-            <ChevronRight size={14} className="text-txt-muted justify-self-end" />
+            <ChevronRight size={16} className="text-txt-muted justify-self-end" />
           </div>
         ))}
       </div>
@@ -210,7 +210,7 @@ export default function EmployeeTable({ employees = [] }) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {getStatusBadge(emp.completion_rate || 0)}
-                <ChevronRight size={14} className="text-txt-muted" />
+                <ChevronRight size={16} className="text-txt-muted" />
               </div>
             </div>
 

@@ -424,7 +424,7 @@ export default function MembersPage() {
             className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
             title="팀·직원 관리"
           >
-            <UserCog size={14} />
+            <UserCog size={16} />
             <span className="hidden sm:inline">팀·직원 관리</span>
             <span className="sm:hidden">관리</span>
           </button>

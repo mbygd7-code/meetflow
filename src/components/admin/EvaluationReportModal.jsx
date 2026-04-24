@@ -14,7 +14,7 @@ function MiniBar({ label, value, icon: Icon }) {
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[11px] text-txt-secondary">
-          {Icon && <Icon size={11} />}{label}
+          {Icon && <Icon size={13} />}{label}
         </span>
         <span className="text-[11px] font-semibold text-txt-primary">{Math.round(value)}</span>
       </div>
@@ -30,9 +30,9 @@ function MiniBar({ label, value, icon: Icon }) {
 
 // ── 감정 아이콘 ──
 function SentimentIcon({ sentiment }) {
-  if (sentiment === 'positive') return <ThumbsUp size={12} className="text-status-success" />;
-  if (sentiment === 'negative') return <ThumbsDown size={12} className="text-status-error" />;
-  return <Minus size={12} className="text-txt-muted" />;
+  if (sentiment === 'positive') return <ThumbsUp size={14} className="text-status-success" />;
+  if (sentiment === 'negative') return <ThumbsDown size={14} className="text-status-error" />;
+  return <Minus size={14} className="text-txt-muted" />;
 }
 
 // ── 카테고리 라벨 ──
@@ -140,7 +140,7 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
           {strengths.length > 0 && (
             <div className="bg-bg-tertiary rounded-lg p-4">
               <h5 className="text-xs font-semibold text-status-success uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Star size={12} /> 강점
+                <Star size={14} /> 강점
               </h5>
               <ul className="space-y-1.5">
                 {strengths.map((s, i) => (
@@ -155,7 +155,7 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
           {improvements.length > 0 && (
             <div className="bg-bg-tertiary rounded-lg p-4">
               <h5 className="text-xs font-semibold text-brand-orange uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <AlertTriangle size={12} /> 개선 영역
+                <AlertTriangle size={14} /> 개선 영역
               </h5>
               <ul className="space-y-1.5">
                 {improvements.map((s, i) => (

@@ -45,9 +45,9 @@ export default function Button({
       {...props}
     >
       {loading ? (
-        <Loader2 size={16} className="animate-spin" />
+        <Loader2 size={18} className="animate-spin" />
       ) : (
-        Icon && <Icon size={16} strokeWidth={2.2} />
+        Icon && <Icon size={18} strokeWidth={2.2} />
       )}
       {children}
     </button>

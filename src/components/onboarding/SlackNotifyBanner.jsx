@@ -60,7 +60,7 @@ export default function SlackNotifyBanner() {
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-brand-purple/5 transition-colors"
       >
         <div className="shrink-0 w-8 h-8 rounded-full bg-brand-purple/20 flex items-center justify-center">
-          <Bell size={16} className="text-brand-purple" />
+          <Bell size={18} className="text-brand-purple" />
         </div>
         <div className="flex-1 min-w-0 pr-6">
           <p className="text-sm font-semibold text-txt-primary">
@@ -75,9 +75,9 @@ export default function SlackNotifyBanner() {
             {expanded ? '접기' : '자세히'}
           </span>
           {expanded ? (
-            <ChevronUp size={16} className="text-txt-muted" />
+            <ChevronUp size={18} className="text-txt-muted" />
           ) : (
-            <ChevronDown size={16} className="text-txt-muted" />
+            <ChevronDown size={18} className="text-txt-muted" />
           )}
         </div>
       </button>
@@ -89,7 +89,7 @@ export default function SlackNotifyBanner() {
         title="다시 보지 않기"
         aria-label="닫기"
       >
-        <X size={14} />
+        <X size={16} />
       </button>
 
       {/* 상세 — 펼쳤을 때만 */}
@@ -104,7 +104,7 @@ export default function SlackNotifyBanner() {
               <li>Slack 사이드바 → <b>앱</b> 섹션에서 <b>Meetflow</b> 우클릭</li>
               <li><b>대화 설정</b> → <b>알림</b> → <b>"모든 새 메시지"</b> 선택</li>
               <li className="flex items-center gap-1.5">
-                <Star size={12} className="text-brand-yellow fill-brand-yellow" />
+                <Star size={14} className="text-brand-yellow fill-brand-yellow" />
                 <span>별 눌러 사이드바 상단 고정 추천</span>
               </li>
             </ol>

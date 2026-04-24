@@ -122,7 +122,7 @@ function parseInline(text, keyPrefix = '') {
           parts.push(
             <Icon
               key={`${keyPrefix}e${match.index}`}
-              size={14}
+              size={16}
               strokeWidth={2.2}
               className={`${mapping.color} inline-block align-text-bottom mx-0.5`}
             />

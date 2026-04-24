@@ -21,7 +21,7 @@ function InfoRow({ icon: Icon, label, children }) {
   return (
     <div className="flex items-start gap-3">
       <div className="flex items-center gap-1.5 w-[72px] text-[11px] text-txt-muted shrink-0 pt-0.5">
-        <Icon size={11} />
+        <Icon size={13} />
         <span>{label}</span>
       </div>
       <div className="flex-1 min-w-0 text-xs text-txt-primary">{children}</div>
@@ -124,14 +124,14 @@ export default function TaskSlidePanel({ task, onClose }) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-divider">
         <div className="flex items-center gap-2">
           <div className={`w-7 h-7 rounded-md ${status.bg} flex items-center justify-center shrink-0`}>
-            <StatusIcon size={14} className={status.color} />
+            <StatusIcon size={16} className={status.color} />
           </div>
           <Badge variant={task.status === 'done' ? 'success' : task.status === 'in_progress' ? 'info' : 'outline'}>
             {status.label}
           </Badge>
           {task.ai_suggested && (
             <Badge variant="purple" className="!text-[9px]">
-              <Sparkles size={9} strokeWidth={2.4} /> AI
+              <Sparkles size={11} strokeWidth={2.4} /> AI
             </Badge>
           )}
         </div>
@@ -149,7 +149,7 @@ export default function TaskSlidePanel({ task, onClose }) {
                 className="p-1.5 rounded-md text-brand-purple hover:bg-brand-purple/10 transition-colors"
                 aria-label="저장"
               >
-                <Save size={14} />
+                <Save size={16} />
               </button>
             </>
           ) : (
@@ -158,7 +158,7 @@ export default function TaskSlidePanel({ task, onClose }) {
               className="p-1.5 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
               aria-label="편집"
             >
-              <Pencil size={14} />
+              <Pencil size={16} />
             </button>
           )}
           <button
@@ -166,7 +166,7 @@ export default function TaskSlidePanel({ task, onClose }) {
             className="p-1 rounded-md text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
             aria-label="닫기"
           >
-            <X size={15} />
+            <X size={17} />
           </button>
         </div>
       </div>
@@ -276,7 +276,7 @@ export default function TaskSlidePanel({ task, onClose }) {
                 className="inline-flex items-center gap-1 text-brand-purple hover:underline"
               >
                 {task.meeting_title}
-                <ExternalLink size={10} />
+                <ExternalLink size={12} />
               </Link>
             </InfoRow>
           )}

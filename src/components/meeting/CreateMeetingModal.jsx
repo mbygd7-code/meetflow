@@ -369,7 +369,7 @@ export default function CreateMeetingModal({ open, onClose }) {
             disabled={!title.trim() || busy}
             className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-brand-orange to-brand-purple rounded-md hover:opacity-90 disabled:opacity-40 transition-opacity"
           >
-            <Zap size={14} /> 즉시 시작
+            <Zap size={16} /> 즉시 시작
           </button>
           <Button
             variant="gradient"
@@ -438,7 +438,7 @@ export default function CreateMeetingModal({ open, onClose }) {
               onClick={addAgenda}
               className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
             >
-              <Plus size={14} strokeWidth={2.4} />
+              <Plus size={16} strokeWidth={2.4} />
               추가
             </button>
           </div>
@@ -456,7 +456,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                   className="flex-1 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:border-brand-purple/50"
                 />
                 <div className="flex items-center gap-1 bg-bg-tertiary border border-border-subtle rounded-md px-2 py-2 w-24">
-                  <Clock size={13} className="text-txt-muted" />
+                  <Clock size={15} className="text-txt-muted" />
                   <input
                     type="number"
                     min={1}
@@ -474,7 +474,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                     onClick={() => removeAgenda(i)}
                     className="text-txt-muted hover:text-status-error p-1.5 transition-colors"
                   >
-                    <X size={14} />
+                    <X size={16} />
                   </button>
                 )}
               </div>
@@ -495,11 +495,11 @@ export default function CreateMeetingModal({ open, onClose }) {
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all border bg-brand-purple/10 border-brand-purple/20"
             >
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-orange via-brand-purple to-brand-purple flex items-center justify-center shrink-0">
-                <Sparkles size={11} className="text-white" />
+                <Sparkles size={13} className="text-white" />
               </div>
               <p className="text-sm font-medium text-txt-primary flex-1">AI Crew</p>
               <span className="text-[11px] text-txt-muted">7명의 AI 전문가</span>
-              <Check size={13} className="text-brand-purple shrink-0 ml-1" />
+              <Check size={15} className="text-brand-purple shrink-0 ml-1" />
               <span className="text-[9px] text-brand-purple font-semibold">기본</span>
             </button>
 
@@ -524,11 +524,11 @@ export default function CreateMeetingModal({ open, onClose }) {
                   }`}
                 >
                   <div className="w-6 h-6 rounded-md bg-brand-purple/15 flex items-center justify-center shrink-0">
-                    <Users size={12} className="text-brand-purple" />
+                    <Users size={14} className="text-brand-purple" />
                   </div>
                   <p className="text-sm font-medium text-txt-primary flex-1">{team.name}</p>
                   <span className="text-[11px] text-txt-muted">{memberCount}명</span>
-                  {selected && <Check size={13} className="text-brand-purple shrink-0 ml-1" />}
+                  {selected && <Check size={15} className="text-brand-purple shrink-0 ml-1" />}
                 </button>
               );
             })}
@@ -580,7 +580,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                       {memberTeamNames.length > 1 && ` +${memberTeamNames.length - 1}`}
                     </span>
                   )}
-                  {selected && <Check size={13} className="text-brand-purple shrink-0 ml-1" />}
+                  {selected && <Check size={15} className="text-brand-purple shrink-0 ml-1" />}
                 </button>
               );
             })}
@@ -590,7 +590,7 @@ export default function CreateMeetingModal({ open, onClose }) {
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {/* AI Crew 뱃지 */}
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gradient-to-r from-brand-orange/20 to-brand-purple/20 text-brand-purple">
-                <Sparkles size={10} />
+                <Sparkles size={12} />
                 AI Crew
               </span>
               {selectedTeams.map((tid) => {
@@ -600,10 +600,10 @@ export default function CreateMeetingModal({ open, onClose }) {
                     key={tid}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-purple/15 text-brand-purple"
                   >
-                    <Users size={10} />
+                    <Users size={12} />
                     {t.name}
                     <button type="button" onClick={() => toggleTeam(tid)} className="hover:text-status-error ml-0.5">
-                      <X size={10} />
+                      <X size={12} />
                     </button>
                   </span>
                 );
@@ -619,7 +619,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                     >
                       {m.name}
                       <button type="button" onClick={() => toggleMember(id)} className="hover:text-status-error ml-0.5">
-                        <X size={10} />
+                        <X size={12} />
                       </button>
                     </span>
                   );
@@ -676,7 +676,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                       onClick={() => { setScheduledTime(time); setShowTimeSuggestions(false); }}
                       className="w-full text-left px-3 py-2 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
                     >
-                      <Clock size={12} className="text-txt-muted" />
+                      <Clock size={14} className="text-txt-muted" />
                       {time}
                     </button>
                   ))}
@@ -713,7 +713,7 @@ export default function CreateMeetingModal({ open, onClose }) {
               onClick={() => fileInputRef.current?.click()}
               className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
             >
-              <Paperclip size={14} strokeWidth={2.4} />
+              <Paperclip size={16} strokeWidth={2.4} />
               첨부
             </button>
             <input
@@ -745,7 +745,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                     key={f.id}
                     className="flex items-center gap-2.5 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2"
                   >
-                    <IconComp size={16} className="text-brand-purple shrink-0" />
+                    <IconComp size={18} className="text-brand-purple shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-txt-primary truncate">{f.name}</p>
                       <p className="text-[11px] text-txt-muted">{formatFileSize(f.size)}</p>
@@ -755,7 +755,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                       onClick={() => removeFile(f.id)}
                       className="text-txt-muted hover:text-status-error p-1 transition-colors shrink-0"
                     >
-                      <X size={14} />
+                      <X size={16} />
                     </button>
                   </div>
                 );
@@ -765,7 +765,7 @@ export default function CreateMeetingModal({ open, onClose }) {
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full border border-dashed border-border-default rounded-md py-2 text-xs text-txt-muted hover:border-brand-purple/30 hover:text-txt-secondary transition-colors flex items-center justify-center gap-1"
               >
-                <Plus size={12} />
+                <Plus size={14} />
                 파일 추가
               </button>
             </div>

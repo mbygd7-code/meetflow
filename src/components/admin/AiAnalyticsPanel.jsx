@@ -146,14 +146,14 @@ export default function AiAnalyticsPanel() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card className="!p-3.5">
             <div className="flex items-center gap-2 text-[10px] text-txt-muted uppercase tracking-wider mb-1.5">
-              <MessageSquare size={11} /> AI 응답
+              <MessageSquare size={13} /> AI 응답
             </div>
             <p className="text-2xl font-bold text-txt-primary">{totalResponses}</p>
             <p className="text-[10px] text-txt-muted mt-1">최근 7일</p>
           </Card>
           <Card className="!p-3.5">
             <div className="flex items-center gap-2 text-[10px] text-txt-muted uppercase tracking-wider mb-1.5">
-              <TrendingUp size={11} /> Milo 종합률
+              <TrendingUp size={13} /> Milo 종합률
             </div>
             <p className="text-2xl font-bold text-txt-primary">
               {totalResponses > 0
@@ -172,7 +172,7 @@ export default function AiAnalyticsPanel() {
           </Card>
           <Card className="!p-3.5">
             <div className="flex items-center gap-2 text-[10px] text-txt-muted uppercase tracking-wider mb-1.5">
-              <ThumbsUp size={11} className="text-status-success" /> 만족도
+              <ThumbsUp size={13} className="text-status-success" /> 만족도
             </div>
             <p className="text-2xl font-bold text-txt-primary">
               {overallSat === null ? '—' : `${overallSat}%`}
@@ -181,7 +181,7 @@ export default function AiAnalyticsPanel() {
           </Card>
           <Card className="!p-3.5">
             <div className="flex items-center gap-2 text-[10px] text-txt-muted uppercase tracking-wider mb-1.5">
-              <ThumbsDown size={11} className="text-status-error" /> 개선 제안
+              <ThumbsDown size={13} className="text-status-error" /> 개선 제안
             </div>
             <p className="text-2xl font-bold text-txt-primary">
               {totalFeedback - totalUp}

@@ -29,7 +29,7 @@ export default function MiloMessage({ message }) {
         <div className="flex items-center gap-2 mb-1 text-xs">
           <span className="font-medium text-brand-purple">{name}</span>
           <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
-            <Sparkles size={10} strokeWidth={2.4} /> AI
+            <Sparkles size={12} strokeWidth={2.4} /> AI
           </Badge>
           <span className="text-txt-muted">{time}</span>
         </div>

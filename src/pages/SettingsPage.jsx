@@ -142,11 +142,11 @@ function SharedKnowledgeCard() {
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             {files.length > 0 && (
               <span className="text-[10px] text-txt-muted flex items-center gap-0.5">
-                <FileText size={10} /> {files.length}
+                <FileText size={12} /> {files.length}
               </span>
             )}
             <span className="p-1 md:p-1.5 text-txt-muted">
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </span>
           </div>
         </div>
@@ -177,7 +177,7 @@ function SharedKnowledgeCard() {
                 );
                 return (
                   <div key={f.id} className="flex items-center gap-2 p-2 bg-bg-primary rounded-md border border-border-subtle">
-                    <FileText size={13} className="text-brand-purple shrink-0" />
+                    <FileText size={15} className="text-brand-purple shrink-0" />
                     <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
                     {statusBadge}
                     <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
@@ -186,7 +186,7 @@ function SharedKnowledgeCard() {
                       className="p-0.5 text-txt-muted hover:text-status-error"
                       title="삭제"
                     >
-                      <X size={12} />
+                      <X size={14} />
                     </button>
                   </div>
                 );
@@ -197,7 +197,7 @@ function SharedKnowledgeCard() {
             onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
             className="w-full border border-dashed border-brand-purple/30 rounded-md p-3 text-center hover:border-brand-purple/60 hover:bg-brand-purple/[0.05] transition-all"
           >
-            <Upload size={14} className="mx-auto mb-1 text-brand-purple" />
+            <Upload size={16} className="mx-auto mb-1 text-brand-purple" />
             <p className="text-[11px] text-txt-secondary">공통 MD/TXT 파일 업로드 (최대 500KB)</p>
             <p className="text-[10px] text-txt-muted mt-0.5">예: 회사 개요, 제품 스펙, 개인정보 처리방침 등</p>
           </button>
@@ -270,11 +270,11 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
             </select>
             {fileCount > 0 && (
               <span className="hidden md:flex text-[10px] text-txt-muted items-center gap-0.5">
-                <FileText size={10} /> {fileCount}
+                <FileText size={12} /> {fileCount}
               </span>
             )}
             <span className="p-1 md:p-1.5 text-txt-muted">
-              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </span>
             {!employee.isDefault && (
               <button
@@ -309,7 +309,7 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
           </select>
           {fileCount > 0 && (
             <span className="text-[10px] text-txt-muted flex items-center gap-0.5 shrink-0">
-              <FileText size={10} /> {fileCount}
+              <FileText size={12} /> {fileCount}
             </span>
           )}
         </div>
@@ -584,7 +584,7 @@ function GoogleDocsIndexButton({ employeeId }) {
         }`}
       >
         {indexing ? (
-          <><Loader2 size={10} className="animate-spin" />RAG 인덱싱 중...</>
+          <><Loader2 size={12} className="animate-spin" />RAG 인덱싱 중...</>
         ) : result === 'success' ? (
           'RAG 인덱싱 완료'
         ) : result === 'error' ? (
@@ -666,7 +666,7 @@ function DefaultDocsPanel({ employee }) {
               }`}
               title={isLoading ? '로드 중...' : isIndexed ? '인덱싱 완료 (클릭하여 재인덱싱)' : '클릭하여 로드 + 인덱싱'}
             >
-              <FileText size={9} />
+              <FileText size={11} />
               {f}
               {isIndexed && !isLoading && (
                 <>
@@ -761,12 +761,12 @@ function ExpandedEmployeePanel({ employee }) {
               );
               return (
                 <div key={f.id} className="flex items-center gap-2 p-2 bg-bg-primary rounded-md border border-border-subtle">
-                  <FileText size={13} className="text-brand-purple shrink-0" />
+                  <FileText size={15} className="text-brand-purple shrink-0" />
                   <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
                   {statusBadge}
                   <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
                   <button onClick={() => store.removeKnowledgeFile(employee.id, f.id)} className="p-0.5 text-txt-muted hover:text-status-error">
-                    <X size={12} />
+                    <X size={14} />
                   </button>
                 </div>
               );
@@ -777,7 +777,7 @@ function ExpandedEmployeePanel({ employee }) {
           onClick={() => fileInputRef.current?.click()}
           className="w-full border border-dashed border-border-subtle rounded-md p-3 text-center hover:border-brand-purple/40 hover:bg-brand-purple/[0.03] transition-all"
         >
-          <Upload size={14} className="mx-auto mb-1 text-txt-muted" />
+          <Upload size={16} className="mx-auto mb-1 text-txt-muted" />
           <p className="text-[11px] text-txt-secondary">MD/TXT 파일 업로드 (최대 500KB)</p>
         </button>
         <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" multiple className="hidden" onChange={handleFileUpload} />
@@ -977,7 +977,7 @@ export default function SettingsPage() {
 
   // ── 연결 상태 Badge 렌더 헬퍼 ──
   const renderStatusBadge = (status) => {
-    if (status === 'loading') return <Badge variant="outline"><Loader2 size={10} className="animate-spin mr-1" />확인 중</Badge>;
+    if (status === 'loading') return <Badge variant="outline"><Loader2 size={12} className="animate-spin mr-1" />확인 중</Badge>;
     if (status === 'connected') return <Badge variant="success">연결됨</Badge>;
     return <Badge variant="outline">미연결</Badge>;
   };
@@ -1056,7 +1056,7 @@ export default function SettingsPage() {
         {/* 기본 회의 프리셋 */}
         <div className="bg-bg-tertiary rounded-[7px] p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
-            <Settings size={14} className="text-brand-purple" />
+            <Settings size={16} className="text-brand-purple" />
             <h3 className="text-sm font-semibold text-txt-primary">기본 회의 프리셋</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -1121,7 +1121,7 @@ export default function SettingsPage() {
             }}
             className="flex items-center gap-2 px-4 py-2 text-sm text-txt-secondary hover:text-status-error transition-colors"
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={16} />
             초기값으로 리셋
           </button>
         </div>
@@ -1137,7 +1137,7 @@ export default function SettingsPage() {
         <div className="bg-bg-tertiary rounded-[7px] p-4 mb-3">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Slack size={14} className="text-brand-purple" />
+              <Slack size={16} className="text-brand-purple" />
               <div>
                 <h3 className="text-xs font-semibold text-txt-primary">Slack</h3>
                 <p className="text-[10px] text-txt-secondary">양방향 동기화</p>
@@ -1148,7 +1148,7 @@ export default function SettingsPage() {
 
           {slackStatus === 'connected' && slackChannel && (
             <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
-              <Check size={12} />
+              <Check size={14} />
               <span className="text-[11px] font-medium">채널 {slackChannel} 연결됨</span>
             </div>
           )}
@@ -1180,7 +1180,7 @@ export default function SettingsPage() {
         <div className="bg-bg-tertiary rounded-[7px] p-4">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <FileText size={14} className="text-brand-orange" />
+              <FileText size={16} className="text-brand-orange" />
               <div>
                 <h3 className="text-xs font-semibold text-txt-primary">Notion</h3>
                 <p className="text-[10px] text-txt-secondary">회의록 자동 아카이브</p>
@@ -1191,7 +1191,7 @@ export default function SettingsPage() {
 
           {notionStatus === 'connected' && notionDbId && (
             <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
-              <Check size={12} />
+              <Check size={14} />
               <span className="text-[11px] font-medium">DB {notionDbId.slice(0, 8)}... 연결됨</span>
             </div>
           )}
@@ -1211,7 +1211,7 @@ export default function SettingsPage() {
         <div className="bg-bg-tertiary rounded-[7px] p-4 mt-3">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <CalendarDays size={14} className="text-status-success" />
+              <CalendarDays size={16} className="text-status-success" />
               <div>
                 <h3 className="text-xs font-semibold text-txt-primary">Google Calendar</h3>
                 <p className="text-[10px] text-txt-secondary">회의 일정 자동 동기화</p>
@@ -1243,7 +1243,7 @@ export default function SettingsPage() {
           ) : (
             <>
               <div className="flex items-center gap-2 bg-status-success/10 text-status-success rounded-md px-3 py-2 mb-3">
-                <Check size={12} />
+                <Check size={14} />
                 <span className="text-[11px] font-medium">{user?.email || 'Google 계정'} 연결됨</span>
               </div>
 
@@ -1299,7 +1299,7 @@ export default function SettingsPage() {
         <div className="bg-bg-tertiary rounded-[7px] p-4 mt-3">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Bell size={14} className="text-brand-orange" />
+              <Bell size={16} className="text-brand-orange" />
               <div>
                 <h3 className="text-xs font-semibold text-txt-primary">음성 인식 (STT)</h3>
                 <p className="text-[10px] text-txt-secondary">회의 중 음성 입력 처리</p>
@@ -1321,7 +1321,7 @@ export default function SettingsPage() {
       <SectionPanel title="모양">
         <div className="bg-bg-tertiary rounded-[7px] p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Monitor size={14} className="text-brand-purple" />
+            <Monitor size={16} className="text-brand-purple" />
             <h3 className="text-xs font-semibold text-txt-primary">테마</h3>
           </div>
           <div className="space-y-2">
@@ -1334,7 +1334,7 @@ export default function SettingsPage() {
               }`}
             >
               <div className="w-8 h-8 rounded-md bg-[#131313] border border-border-subtle flex items-center justify-center shrink-0">
-                <Moon size={14} className="text-brand-purple" />
+                <Moon size={16} className="text-brand-purple" />
               </div>
               <div>
                 <p className="text-xs font-medium text-txt-primary">다크 모드</p>
@@ -1350,7 +1350,7 @@ export default function SettingsPage() {
               }`}
             >
               <div className="w-8 h-8 rounded-md bg-[#EDE8E0] border border-border-subtle flex items-center justify-center shrink-0">
-                <Sun size={14} className="text-brand-orange" />
+                <Sun size={16} className="text-brand-orange" />
               </div>
               <div>
                 <p className="text-xs font-medium text-txt-primary">라이트 모드</p>

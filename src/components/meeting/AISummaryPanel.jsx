@@ -38,7 +38,7 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
           <p className="text-[10px] text-txt-muted">매 턴마다 자동 업데이트</p>
         </div>
         <Badge variant="purple" className="!px-2 !py-0.5 !text-[10px]">
-          <Sparkles size={10} strokeWidth={2.4} /> AI
+          <Sparkles size={12} strokeWidth={2.4} /> AI
         </Badge>
       </div>
 
@@ -86,7 +86,7 @@ export default function AISummaryPanel({ meetingId, sections = PLACEHOLDER_SECTI
           to={`/summaries/${meetingId || ''}`}
           className="flex items-center justify-center gap-2 text-xs text-brand-purple hover:text-txt-primary transition-colors"
         >
-          <FileText size={12} />
+          <FileText size={14} />
           전체 회의록 보기
         </Link>
       </div>

@@ -54,7 +54,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
       <div className="p-3 space-y-2">
         {/* 상단: 상태 아이콘 + 제목 + D-Day */}
         <div className="flex items-start gap-2">
-          <StatusIcon size={15} className={`${status.color} mt-0.5 shrink-0`} />
+          <StatusIcon size={17} className={`${status.color} mt-0.5 shrink-0`} />
           <p
             className={`flex-1 text-[13px] font-medium text-txt-primary leading-snug ${
               isDone ? 'line-through decoration-txt-muted' : ''
@@ -78,7 +78,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
           <div className="flex items-center gap-1.5 text-[10px] text-txt-muted flex-wrap pl-[22px]">
             {task.service_name && (
               <span className="inline-flex items-center gap-0.5">
-                <Folder size={9} strokeWidth={2.2} />
+                <Folder size={11} strokeWidth={2.2} />
                 {task.service_name}
               </span>
             )}
@@ -92,7 +92,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
               <>
                 <span className="opacity-40">·</span>
                 <span className="inline-flex items-center gap-0.5">
-                  <Layers size={9} strokeWidth={2.2} />
+                  <Layers size={11} strokeWidth={2.2} />
                   {task.feature_name}
                 </span>
               </>
@@ -107,7 +107,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
             onClick={(e) => e.stopPropagation()}
             className="pl-[22px] flex items-center gap-1 text-[11px] text-brand-purple hover:text-txt-primary transition-colors truncate"
           >
-            <FileText size={10} strokeWidth={2} className="shrink-0" />
+            <FileText size={12} strokeWidth={2} className="shrink-0" />
             <span className="truncate">{task.meeting_title}</span>
           </Link>
         )}
@@ -128,7 +128,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
                 onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                 className="mt-1 text-[10px] text-txt-muted hover:text-txt-secondary inline-flex items-center gap-0.5"
               >
-                {expanded ? <><ChevronUp size={10} /> 접기</> : <><ChevronDown size={10} /> 자세히</>}
+                {expanded ? <><ChevronUp size={12} /> 접기</> : <><ChevronDown size={12} /> 자세히</>}
               </button>
             )}
           </div>
@@ -189,7 +189,7 @@ export default function MyTaskCard({ task, selected, onSelect }) {
           </span>
           {task.due_date && (
             <span className="text-[10px] text-txt-muted inline-flex items-center gap-0.5">
-              <Clock size={9} />
+              <Clock size={11} />
               {formatMonthDay(task.due_date)}
             </span>
           )}

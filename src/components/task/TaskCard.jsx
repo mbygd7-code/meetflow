@@ -75,7 +75,7 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
             </p>
             {task.ai_suggested && (
               <Badge variant="purple" className="!text-[9px] shrink-0">
-                <Sparkles size={9} strokeWidth={2.4} /> AI
+                <Sparkles size={11} strokeWidth={2.4} /> AI
               </Badge>
             )}
           </div>
@@ -88,7 +88,7 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
                 <div className="flex items-center gap-1.5 text-[10px] text-txt-muted flex-wrap mb-1.5">
                   {task.service_name && (
                     <span className="inline-flex items-center gap-0.5">
-                      <Folder size={9} strokeWidth={2.2} />
+                      <Folder size={11} strokeWidth={2.2} />
                       <span className="text-txt-secondary font-medium">{task.service_name}</span>
                     </span>
                   )}
@@ -102,7 +102,7 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
                     <>
                       <span className="opacity-40">·</span>
                       <span className="inline-flex items-center gap-0.5">
-                        <Layers size={9} strokeWidth={2.2} />
+                        <Layers size={11} strokeWidth={2.2} />
                         {task.feature_name}
                       </span>
                     </>
@@ -117,7 +117,7 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-1 text-[11px] text-brand-purple hover:text-txt-primary transition-colors truncate mb-1.5"
                 >
-                  <FileText size={10} strokeWidth={2} className="shrink-0" />
+                  <FileText size={12} strokeWidth={2} className="shrink-0" />
                   <span className="truncate">{task.meeting_title}</span>
                 </Link>
               )}
@@ -182,7 +182,7 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
                   isUrgent ? 'text-status-error font-semibold' : 'text-txt-secondary'
                 }`}
               >
-                <Clock size={10} />
+                <Clock size={12} />
                 <span>{dday.text}</span>
               </div>
             )}

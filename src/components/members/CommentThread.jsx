@@ -209,7 +209,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                   className="p-1 rounded text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary opacity-0 group-hover:opacity-100 transition-opacity"
                   title="리액션"
                 >
-                  <Smile size={12} />
+                  <Smile size={14} />
                 </button>
                 {reactionOpen && (
                   <div className="absolute bottom-full left-0 mb-1 bg-bg-secondary border border-border-subtle rounded-md shadow-lg p-1 flex gap-0.5 z-10">
@@ -235,7 +235,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                   onClick={() => setReplyOpen((v) => !v)}
                   className="text-[11px] text-txt-muted hover:text-brand-purple opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
                 >
-                  <CornerDownRight size={10} />
+                  <CornerDownRight size={12} />
                   답글
                 </button>
               )}
@@ -247,7 +247,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                   className="text-[11px] text-txt-muted hover:text-status-success opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
                   title="이 댓글을 확인했다고 표시"
                 >
-                  <CheckCircle2 size={10} />
+                  <CheckCircle2 size={12} />
                   확인
                 </button>
               )}
@@ -259,7 +259,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                     onClick={() => setMenuOpen((v) => !v)}
                     className="p-1 rounded text-txt-muted hover:bg-bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <MoreHorizontal size={12} />
+                    <MoreHorizontal size={14} />
                   </button>
                   {menuOpen && (
                     <div
@@ -273,7 +273,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                         }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-txt-primary hover:bg-bg-tertiary"
                       >
-                        <Edit2 size={11} /> 수정
+                        <Edit2 size={13} /> 수정
                       </button>
                       <button
                         onClick={() => {
@@ -284,7 +284,7 @@ function CommentItem({ comment, replies = [], members, highlightCommentId = null
                         }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-status-error hover:bg-status-error/10"
                       >
-                        <Trash2 size={11} /> 삭제
+                        <Trash2 size={13} /> 삭제
                       </button>
                     </div>
                   )}
@@ -354,7 +354,7 @@ function AcknowledgeBadges({ acks = [] }) {
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-status-success/10 text-status-success border border-status-success/25"
             title={title}
           >
-            <CheckCircle2 size={10} />
+            <CheckCircle2 size={12} />
             <span>{a.user_name || '담당자'} 확인</span>
             {timeLabel && <span className="text-status-success/70 text-[9px]">· {timeLabel}</span>}
             {a.source === 'slack' && (

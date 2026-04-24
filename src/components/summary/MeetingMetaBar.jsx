@@ -27,7 +27,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
   if (meeting.creator?.name) {
     chips.push(
       <span key="creator" className="inline-flex items-center gap-1.5">
-        <UserCircle size={12} className="text-txt-muted" strokeWidth={2} />
+        <UserCircle size={14} className="text-txt-muted" strokeWidth={2} />
         <span className="text-txt-muted">요청</span>
         <span className="inline-flex items-center gap-1.5 ml-0.5">
           <Avatar
@@ -46,7 +46,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
   if (meeting.scheduled_at) {
     chips.push(
       <span key="scheduled" className="inline-flex items-center gap-1.5">
-        <Calendar size={12} className="text-txt-muted" strokeWidth={2} />
+        <Calendar size={14} className="text-txt-muted" strokeWidth={2} />
         <span className="text-txt-muted">예정</span>
         <span className="text-txt-primary">
           {safeFormatDate(meeting.scheduled_at, 'MM/dd (EEE) HH:mm', '-')}
@@ -64,7 +64,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
     const pattern = sameDayAsScheduled ? 'HH:mm' : 'MM/dd HH:mm';
     chips.push(
       <span key="started" className="inline-flex items-center gap-1.5">
-        <Play size={11} className="text-status-success" strokeWidth={2.4} />
+        <Play size={13} className="text-status-success" strokeWidth={2.4} />
         <span className="text-txt-muted">시작</span>
         <span className="text-txt-primary">{safeFormatDate(meeting.started_at, pattern, '-')}</span>
       </span>
@@ -80,7 +80,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
     const pattern = sameDayAsStart ? 'HH:mm' : 'MM/dd HH:mm';
     chips.push(
       <span key="ended" className="inline-flex items-center gap-1.5">
-        <Square size={10} className="text-status-error" strokeWidth={2.4} />
+        <Square size={12} className="text-status-error" strokeWidth={2.4} />
         <span className="text-txt-muted">종료</span>
         <span className="text-txt-primary">{safeFormatDate(meeting.ended_at, pattern, '-')}</span>
       </span>
@@ -94,7 +94,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
     const label = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
     chips.push(
       <span key="duration" className="inline-flex items-center gap-1.5">
-        <Clock size={12} className="text-brand-orange" strokeWidth={2} />
+        <Clock size={14} className="text-brand-orange" strokeWidth={2} />
         <span className="text-txt-primary font-medium">{label}</span>
         <span className="text-txt-muted">소요</span>
       </span>
@@ -105,7 +105,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
   if (meeting.agendas?.length > 0) {
     chips.push(
       <span key="agendas" className="inline-flex items-center gap-1.5 text-txt-muted">
-        <ListChecks size={12} strokeWidth={2} />
+        <ListChecks size={14} strokeWidth={2} />
         어젠다 <span className="text-txt-primary font-medium">{meeting.agendas.length}</span>개
       </span>
     );
@@ -115,7 +115,7 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
   if (participantCount != null && participantCount > 0) {
     chips.push(
       <span key="participants" className="inline-flex items-center gap-1.5 text-txt-muted">
-        <Users size={12} strokeWidth={2} />
+        <Users size={14} strokeWidth={2} />
         참가자 <span className="text-txt-primary font-medium">{participantCount}</span>명
       </span>
     );

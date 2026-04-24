@@ -70,7 +70,7 @@ function RatingBar({ label, icon: Icon, value, max = 100, delay = 0 }) {
     <div className="space-y-1.5" ref={barRef}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-txt-secondary">
-          <Icon size={13} />
+          <Icon size={15} />
           <span>{label}</span>
         </div>
         <span className="text-xs font-semibold text-txt-primary">{displayValue}점</span>
@@ -410,7 +410,7 @@ export default function EmployeeDetailPage() {
               disabled={reportLoading}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              <Sparkles size={13} />
+              <Sparkles size={15} />
               {reportLoading ? 'AI 분석 중...' : '세부 리포트'}
             </button>
           }
@@ -507,7 +507,7 @@ export default function EmployeeDetailPage() {
                   <Card key={mtg.id} className="!p-3.5">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
-                        <FileText size={14} className="text-brand-purple" />
+                        <FileText size={16} className="text-brand-purple" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-txt-primary truncate">{mtg.title}</p>

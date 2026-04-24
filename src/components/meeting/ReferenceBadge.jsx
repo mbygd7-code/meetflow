@@ -75,7 +75,7 @@ export default function ReferenceBadge({ reference }) {
           bg-white/20 text-[#999] border border-white/15
           hover:bg-white/35 hover:text-[#777] transition-colors cursor-pointer align-baseline"
       >
-        <Hash size={9} strokeWidth={2} className="shrink-0" />
+        <Hash size={11} strokeWidth={2} className="shrink-0" />
         {reference}
       </button>
 

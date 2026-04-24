@@ -1165,7 +1165,7 @@ export default function CompletedMeetingView({ meeting }) {
           >
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-md bg-brand-purple/15 flex items-center justify-center">
-                <Send size={14} className="text-brand-purple" strokeWidth={2.4} />
+                <Send size={16} className="text-brand-purple" strokeWidth={2.4} />
               </div>
               <h3 className="text-sm font-semibold text-txt-primary">
                 {slackMapModal.assigneeName}님의 Slack ID
@@ -1175,7 +1175,7 @@ export default function CompletedMeetingView({ meeting }) {
                 disabled={savingSlackMap}
                 className="ml-auto p-1 text-txt-muted hover:text-txt-primary rounded disabled:opacity-50"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1237,12 +1237,12 @@ export default function CompletedMeetingView({ meeting }) {
               >
                 {savingSlackMap ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin" />
                     저장 중...
                   </>
                 ) : (
                   <>
-                    <Send size={14} strokeWidth={2.6} />
+                    <Send size={16} strokeWidth={2.6} />
                     저장 + DM 전송
                   </>
                 )}
@@ -1264,7 +1264,7 @@ export default function CompletedMeetingView({ meeting }) {
           >
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-md bg-brand-purple/15 flex items-center justify-center">
-                <ListTodo size={14} className="text-brand-purple" strokeWidth={2.4} />
+                <ListTodo size={16} className="text-brand-purple" strokeWidth={2.4} />
               </div>
               <h3 className="text-sm font-semibold text-txt-primary">태스크로 만들기</h3>
               <button
@@ -1272,7 +1272,7 @@ export default function CompletedMeetingView({ meeting }) {
                 disabled={creatingFromMsg}
                 className="ml-auto p-1 text-txt-muted hover:text-txt-primary rounded disabled:opacity-50"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1342,12 +1342,12 @@ export default function CompletedMeetingView({ meeting }) {
               >
                 {creatingFromMsg ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin" />
                     생성 중...
                   </>
                 ) : (
                   <>
-                    <Plus size={14} strokeWidth={2.6} />
+                    <Plus size={16} strokeWidth={2.6} />
                     태스크 생성
                   </>
                 )}
@@ -1368,13 +1368,13 @@ export default function CompletedMeetingView({ meeting }) {
             className="bg-bg-secondary border border-border-subtle rounded-xl p-6 max-w-sm w-full mx-4 shadow-lg"
           >
             <div className="flex items-center gap-2 mb-4">
-              <Keyboard size={16} className="text-brand-purple" />
+              <Keyboard size={18} className="text-brand-purple" />
               <h3 className="text-sm font-semibold text-txt-primary">키보드 단축키</h3>
               <button
                 onClick={() => setShowShortcuts(false)}
                 className="ml-auto p-1 text-txt-muted hover:text-txt-primary rounded"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
             <dl className="space-y-2.5 text-xs">
@@ -1404,13 +1404,13 @@ export default function CompletedMeetingView({ meeting }) {
             className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
             title="회의 목록으로"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
           <h1 className="text-base md:text-[22px] font-medium text-txt-primary tracking-tight truncate">
             {meeting.title}
           </h1>
           <Badge variant="outline">
-            <Check size={11} strokeWidth={2.6} className="mr-1" />
+            <Check size={13} strokeWidth={2.6} className="mr-1" />
             완료
           </Badge>
         </div>
@@ -1419,7 +1419,7 @@ export default function CompletedMeetingView({ meeting }) {
           {/* 검색 */}
           {searchOpen ? (
             <div className="flex items-center gap-1 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle focus-within:border-brand-purple/50">
-              <Search size={14} className="text-txt-muted shrink-0" />
+              <Search size={16} className="text-txt-muted shrink-0" />
               <input
                 ref={searchInputRef}
                 autoFocus
@@ -1436,7 +1436,7 @@ export default function CompletedMeetingView({ meeting }) {
                 className="text-txt-muted hover:text-txt-primary"
                 title="검색 닫기"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
           ) : (
@@ -1445,7 +1445,7 @@ export default function CompletedMeetingView({ meeting }) {
               className="p-2 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
               title="검색 ( / )"
             >
-              <Search size={16} />
+              <Search size={18} />
             </button>
           )}
 
@@ -1455,7 +1455,7 @@ export default function CompletedMeetingView({ meeting }) {
             className="p-2 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
             title="마크다운으로 내보내기"
           >
-            <Download size={16} />
+            <Download size={18} />
           </button>
 
           {/* V4: 단축키 도움말 */}
@@ -1464,7 +1464,7 @@ export default function CompletedMeetingView({ meeting }) {
             className={`p-2 rounded-md transition-colors ${showShortcuts ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary'}`}
             title="단축키 (?)"
           >
-            <Keyboard size={16} />
+            <Keyboard size={18} />
           </button>
 
           {/* 회의록 보기 — 주요 CTA */}
@@ -1473,7 +1473,7 @@ export default function CompletedMeetingView({ meeting }) {
             className="inline-flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-semibold text-white bg-brand-purple hover:opacity-90 shadow-sm hover:shadow-glow transition-all"
             title="AI 회의록 요약 보기"
           >
-            <Sparkles size={14} strokeWidth={2.4} />
+            <Sparkles size={16} strokeWidth={2.4} />
             <span>회의록 보기</span>
           </Link>
         </div>
@@ -1482,7 +1482,7 @@ export default function CompletedMeetingView({ meeting }) {
       {/* ═══ 메타 바 ═══ */}
       <div className="flex items-center gap-4 px-3 md:px-6 py-2.5 border-b border-border-divider bg-bg-secondary/40 text-[11px] text-txt-secondary overflow-x-auto">
         <span className="inline-flex items-center gap-1.5 shrink-0">
-          <Clock size={12} className="text-txt-muted" />
+          <Clock size={14} className="text-txt-muted" />
           {safeFormatDate(meeting.ended_at || meeting.started_at, 'yyyy.MM.dd HH:mm', '—')}
         </span>
         <span className="inline-flex items-center gap-1.5 shrink-0">
@@ -1492,11 +1492,11 @@ export default function CompletedMeetingView({ meeting }) {
           </span>
         </span>
         <span className="inline-flex items-center gap-1.5 shrink-0">
-          <Users size={12} className="text-txt-muted" />
+          <Users size={14} className="text-txt-muted" />
           <span className="text-txt-primary font-medium">{stats.participants}</span>명 참여
         </span>
         <span className="inline-flex items-center gap-1.5 shrink-0">
-          <MessageSquare size={12} className="text-txt-muted" />
+          <MessageSquare size={14} className="text-txt-muted" />
           <span className="text-txt-primary font-medium">{stats.total}</span>건
           <span className="text-txt-muted">(AI {stats.ai})</span>
         </span>
@@ -1521,7 +1521,7 @@ export default function CompletedMeetingView({ meeting }) {
               onChange={(e) => setOnlyCited(e.target.checked)}
               className="w-3 h-3 accent-brand-purple"
             />
-            <Quote size={11} className="text-txt-muted" />
+            <Quote size={13} className="text-txt-muted" />
             <span className="text-txt-muted">인용만 ({citedCount})</span>
           </label>
         )}
@@ -1534,7 +1534,7 @@ export default function CompletedMeetingView({ meeting }) {
             className="w-full flex items-center gap-2.5 px-3 md:px-6 py-2.5 hover:bg-bg-tertiary/40 transition-colors"
           >
             <div className="w-7 h-7 rounded-md bg-brand-purple/15 flex items-center justify-center shrink-0">
-              <ListTodo size={14} className="text-brand-purple" strokeWidth={2.4} />
+              <ListTodo size={16} className="text-brand-purple" strokeWidth={2.4} />
             </div>
             <div className="flex items-center gap-2.5 flex-1 text-left">
               <span className="text-sm font-semibold text-txt-primary">후속 태스크</span>
@@ -1580,7 +1580,7 @@ export default function CompletedMeetingView({ meeting }) {
               )}
             </div>
             <span className="text-txt-muted shrink-0">
-              {tasksExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {tasksExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </span>
           </button>
 
@@ -1611,7 +1611,7 @@ export default function CompletedMeetingView({ meeting }) {
                             : 'text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary border border-transparent'
                         }`}
                       >
-                        {f.id === 'ai' && <Sparkles size={10} />}
+                        {f.id === 'ai' && <Sparkles size={12} />}
                         {f.label}
                         <span className={active ? 'text-brand-purple' : 'text-txt-muted'}>{count}</span>
                       </button>
@@ -1627,9 +1627,9 @@ export default function CompletedMeetingView({ meeting }) {
                       title="등록되지 않은 모든 태스크를 Notion에 전송"
                     >
                       {bulkPushing ? (
-                        <Loader2 size={10} className="animate-spin" />
+                        <Loader2 size={12} className="animate-spin" />
                       ) : (
-                        <ExternalLink size={10} />
+                        <ExternalLink size={12} />
                       )}
                       Notion 일괄 등록
                     </button>
@@ -1677,11 +1677,11 @@ export default function CompletedMeetingView({ meeting }) {
                           }
                         >
                           {isPending ? (
-                            <Loader2 size={12} className="text-white animate-spin" />
+                            <Loader2 size={14} className="text-white animate-spin" />
                           ) : isDone ? (
-                            <Check size={12} className="text-white" strokeWidth={3} />
+                            <Check size={14} className="text-white" strokeWidth={3} />
                           ) : isInProgress ? (
-                            <CirclePlay size={10} className="text-brand-purple" strokeWidth={2.6} />
+                            <CirclePlay size={12} className="text-brand-purple" strokeWidth={2.6} />
                           ) : null}
                         </button>
 
@@ -1721,7 +1721,7 @@ export default function CompletedMeetingView({ meeting }) {
                                 className="opacity-0 group-hover/task:opacity-100 p-0.5 text-txt-muted hover:text-brand-purple transition-opacity shrink-0"
                                 title="제목 편집"
                               >
-                                <Pencil size={11} />
+                                <Pencil size={13} />
                               </button>
                             </div>
                           )}
@@ -1729,13 +1729,13 @@ export default function CompletedMeetingView({ meeting }) {
                             {/* V6: 상태 뱃지 */}
                             {isInProgress && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-purple/15 text-brand-purple border border-brand-purple/25">
-                                <CirclePlay size={9} strokeWidth={2.6} />
+                                <CirclePlay size={11} strokeWidth={2.6} />
                                 진행 중
                               </span>
                             )}
                             {isDone && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success/15 text-status-success border border-status-success/25">
-                                <Check size={9} strokeWidth={3} />
+                                <Check size={11} strokeWidth={3} />
                                 완료
                               </span>
                             )}
@@ -1758,7 +1758,7 @@ export default function CompletedMeetingView({ meeting }) {
                               >
                                 {(t.assignee?.name || t.assignee_name) ? (
                                   <>
-                                    <Users size={9} />
+                                    <Users size={11} />
                                     {t.assignee?.name || t.assignee_name}
                                     {t.assignee?.slack_user_id && (
                                       <Send
@@ -1770,7 +1770,7 @@ export default function CompletedMeetingView({ meeting }) {
                                   </>
                                 ) : (
                                   <>
-                                    <UserPlus size={9} />
+                                    <UserPlus size={11} />
                                     담당자 지정
                                   </>
                                 )}
@@ -1795,7 +1795,7 @@ export default function CompletedMeetingView({ meeting }) {
                                             >
                                               <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: u.color }} />
                                               <span className="flex-1 text-left truncate">{u.name}</span>
-                                              {active && <Check size={10} />}
+                                              {active && <Check size={12} />}
                                             </button>
                                           );
                                         })}
@@ -1808,7 +1808,7 @@ export default function CompletedMeetingView({ meeting }) {
                                           onClick={() => handleAssigneeChange(t, null)}
                                           className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-status-error hover:bg-bg-tertiary"
                                         >
-                                          <X size={10} />
+                                          <X size={12} />
                                           담당 해제
                                         </button>
                                       </>
@@ -1842,7 +1842,7 @@ export default function CompletedMeetingView({ meeting }) {
                                   }`}
                                   title="기한 설정"
                                 >
-                                  <CalendarDays size={9} />
+                                  <CalendarDays size={11} />
                                   {t.due_date || '기한 없음'}
                                 </button>
                               )}
@@ -1850,7 +1850,7 @@ export default function CompletedMeetingView({ meeting }) {
 
                             {t.ai_suggested && (
                               <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-purple">
-                                <Sparkles size={9} />
+                                <Sparkles size={11} />
                                 AI 제안
                               </span>
                             )}
@@ -1858,7 +1858,7 @@ export default function CompletedMeetingView({ meeting }) {
                             {/* V9: Notion 등록 뱃지 */}
                             {t.notion_block_id && (
                               <span className="inline-flex items-center gap-0.5 text-[10px] text-txt-secondary bg-bg-tertiary border border-border-subtle rounded px-1.5 py-0.5">
-                                <ExternalLink size={9} />
+                                <ExternalLink size={11} />
                                 Notion
                               </span>
                             )}
@@ -1870,7 +1870,7 @@ export default function CompletedMeetingView({ meeting }) {
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-brand-purple hover:bg-brand-purple/10 transition-colors"
                                 title="이 태스크의 원본 메시지로 이동"
                               >
-                                <CornerUpLeft size={9} />
+                                <CornerUpLeft size={11} />
                                 원본 메시지
                               </button>
                             )}
@@ -1887,7 +1887,7 @@ export default function CompletedMeetingView({ meeting }) {
                             }`}
                             title={expandedTaskIds.has(t.id) ? '세부정보 접기' : '세부정보 펼치기'}
                           >
-                            {expandedTaskIds.has(t.id) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            {expandedTaskIds.has(t.id) ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                             {t.subtasks?.length > 0 && !expandedTaskIds.has(t.id) && (
                               <span className="ml-0.5 text-[9px] text-txt-muted">
                                 {t.subtasks.filter((s) => s.done).length}/{t.subtasks.length}
@@ -1907,9 +1907,9 @@ export default function CompletedMeetingView({ meeting }) {
                                 title={t.notion_block_id ? 'Notion 등록됨 — 추가 옵션' : 'Slack/Notion으로 푸시'}
                               >
                                 {isPushingTo(t.id, 'slack') || isPushingTo(t.id, 'notion') ? (
-                                  <Loader2 size={13} className="animate-spin" />
+                                  <Loader2 size={15} className="animate-spin" />
                                 ) : (
-                                  <Share2 size={13} />
+                                  <Share2 size={15} />
                                 )}
                               </button>
                               {pushMenuOpenId === t.id && (
@@ -1927,7 +1927,7 @@ export default function CompletedMeetingView({ meeting }) {
                                               onClick={() => handlePushSlack(t)}
                                               className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-primary hover:bg-bg-tertiary"
                                             >
-                                              <Send size={12} className="text-brand-purple" />
+                                              <Send size={14} className="text-brand-purple" />
                                               <span className="flex-1 text-left">{t.assignee?.name || t.assignee_name}님 DM</span>
                                             </button>
                                             {teamIntegrations.slack_channel_id && (
@@ -1935,7 +1935,7 @@ export default function CompletedMeetingView({ meeting }) {
                                                 onClick={() => handlePushSlack(t, { forceChannel: true })}
                                                 className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-secondary hover:bg-bg-tertiary"
                                               >
-                                                <Send size={12} className="text-txt-muted" />
+                                                <Send size={14} className="text-txt-muted" />
                                                 팀 채널로 전송
                                               </button>
                                             )}
@@ -1949,7 +1949,7 @@ export default function CompletedMeetingView({ meeting }) {
                                               onClick={() => handlePushSlack(t)}
                                               className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-primary hover:bg-bg-tertiary"
                                             >
-                                              <Send size={12} className="text-brand-purple" />
+                                              <Send size={14} className="text-brand-purple" />
                                               <span className="flex-1 text-left">
                                                 {t.assignee?.name || t.assignee_name}님에게 DM
                                                 <span className="block text-[9px] text-txt-muted">Slack ID 매핑 필요</span>
@@ -1960,7 +1960,7 @@ export default function CompletedMeetingView({ meeting }) {
                                                 onClick={() => handlePushSlack(t, { forceChannel: true })}
                                                 className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-secondary hover:bg-bg-tertiary"
                                               >
-                                                <Send size={12} className="text-txt-muted" />
+                                                <Send size={14} className="text-txt-muted" />
                                                 팀 채널로 전송
                                               </button>
                                             )}
@@ -1974,7 +1974,7 @@ export default function CompletedMeetingView({ meeting }) {
                                             onClick={() => handlePushSlack(t, { forceChannel: true })}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-primary hover:bg-bg-tertiary"
                                           >
-                                            <Send size={12} className="text-txt-muted" />
+                                            <Send size={14} className="text-txt-muted" />
                                             Slack 채널로 전송
                                           </button>
                                         );
@@ -1986,7 +1986,7 @@ export default function CompletedMeetingView({ meeting }) {
                                         onClick={() => handlePushNotion(t)}
                                         className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-txt-primary hover:bg-bg-tertiary"
                                       >
-                                        <ExternalLink size={12} className="text-txt-muted" />
+                                        <ExternalLink size={14} className="text-txt-muted" />
                                         {t.notion_block_id ? 'Notion 업데이트' : 'Notion에 등록'}
                                       </button>
                                     )}
@@ -2007,7 +2007,7 @@ export default function CompletedMeetingView({ meeting }) {
                                 onClick={() => setDeletingTaskId(null)}
                                 className="p-1 text-txt-muted hover:text-txt-primary"
                               >
-                                <X size={12} />
+                                <X size={14} />
                               </button>
                             </div>
                           ) : (
@@ -2016,7 +2016,7 @@ export default function CompletedMeetingView({ meeting }) {
                               className="opacity-0 group-hover/task:opacity-100 p-1 text-txt-muted hover:text-status-error transition-all"
                               title="태스크 삭제"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={15} />
                             </button>
                           )}
                         </div>
@@ -2028,7 +2028,7 @@ export default function CompletedMeetingView({ meeting }) {
                            {/* 설명 */}
                            <div>
                              <div className="flex items-center gap-1.5 mb-1">
-                               <AlignLeft size={10} className="text-txt-muted" />
+                               <AlignLeft size={12} className="text-txt-muted" />
                                <span className="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">설명</span>
                              </div>
                              {editingDescId === t.id ? (
@@ -2065,7 +2065,7 @@ export default function CompletedMeetingView({ meeting }) {
                            {/* 서브태스크 */}
                            <div>
                              <div className="flex items-center gap-1.5 mb-1.5">
-                               <ListChecks size={10} className="text-txt-muted" />
+                               <ListChecks size={12} className="text-txt-muted" />
                                <span className="text-[10px] font-semibold uppercase tracking-wider text-txt-muted">
                                  체크리스트
                                </span>
@@ -2107,13 +2107,13 @@ export default function CompletedMeetingView({ meeting }) {
                                      className="opacity-0 group-hover/st:opacity-100 p-0.5 text-txt-muted hover:text-status-error transition-opacity shrink-0"
                                      title="서브태스크 삭제"
                                    >
-                                     <X size={11} />
+                                     <X size={13} />
                                    </button>
                                  </li>
                                ))}
                                {/* 새 서브태스크 추가 */}
                                <li className="flex items-center gap-2 text-xs">
-                                 <Plus size={11} className="text-txt-muted shrink-0" />
+                                 <Plus size={13} className="text-txt-muted shrink-0" />
                                  <input
                                    type="text"
                                    value={newSubtaskInputs[t.id] || ''}
@@ -2133,7 +2133,7 @@ export default function CompletedMeetingView({ meeting }) {
                                      className="p-0.5 text-brand-purple hover:text-brand-purple-deep shrink-0"
                                      title="추가"
                                    >
-                                     <Check size={12} strokeWidth={2.6} />
+                                     <Check size={14} strokeWidth={2.6} />
                                    </button>
                                  )}
                                </li>
@@ -2151,7 +2151,7 @@ export default function CompletedMeetingView({ meeting }) {
               {pendingSuggestions.length > 0 && (
                 <div className={`rounded-md border border-dashed border-brand-purple/30 bg-brand-purple/[0.04] p-3 ${meetingTasks.length > 0 ? 'mt-3' : ''}`}>
                   <div className="flex items-center gap-2 mb-2">
-                    <Sparkles size={12} className="text-brand-purple" />
+                    <Sparkles size={14} className="text-brand-purple" />
                     <span className="text-[11px] font-semibold text-brand-purple uppercase tracking-wider">
                       AI가 제안한 후속 태스크
                     </span>
@@ -2162,12 +2162,12 @@ export default function CompletedMeetingView({ meeting }) {
                     >
                       {registering ? (
                         <>
-                          <Loader2 size={11} className="animate-spin" />
+                          <Loader2 size={13} className="animate-spin" />
                           등록 중...
                         </>
                       ) : (
                         <>
-                          <Plus size={11} strokeWidth={2.6} />
+                          <Plus size={13} strokeWidth={2.6} />
                           모두 등록 ({pendingSuggestions.length})
                         </>
                       )}
@@ -2242,10 +2242,10 @@ export default function CompletedMeetingView({ meeting }) {
                     <span className="shrink-0 mt-0.5">
                       {a.status === 'completed' ? (
                         <span className="w-5 h-5 rounded-full bg-status-success/20 flex items-center justify-center">
-                          <Check size={11} className="text-status-success" strokeWidth={3} />
+                          <Check size={13} className="text-status-success" strokeWidth={3} />
                         </span>
                       ) : a.key === UNASSIGNED_KEY ? (
-                        <Circle size={14} className="text-txt-muted" />
+                        <Circle size={16} className="text-txt-muted" />
                       ) : (
                         <span className="w-5 h-5 rounded-full border border-border-default text-[9px] font-semibold text-txt-muted flex items-center justify-center">
                           {i + 1}
@@ -2270,13 +2270,13 @@ export default function CompletedMeetingView({ meeting }) {
           {/* V2: 참여자 발언 비중 */}
           <div className="flex-1 overflow-y-auto border-t border-border-divider">
             <div className="px-4 py-3 flex items-center gap-1.5">
-              <BarChart3 size={12} className="text-txt-muted" />
+              <BarChart3 size={14} className="text-txt-muted" />
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-txt-muted">
                 발언 비중
               </h3>
               {selectedAgendaKey && (
                 <>
-                  <Filter size={10} className="text-brand-purple ml-1" />
+                  <Filter size={12} className="text-brand-purple ml-1" />
                   <button
                     onClick={() => setSelectedAgendaKey(null)}
                     className="ml-auto text-[10px] text-brand-purple hover:text-brand-purple-deep font-medium"
@@ -2372,7 +2372,7 @@ export default function CompletedMeetingView({ meeting }) {
                     <span className="shrink-0">
                       {a.status === 'completed' ? (
                         <span className="w-6 h-6 rounded-full bg-status-success/20 flex items-center justify-center">
-                          <Check size={12} className="text-status-success" strokeWidth={3} />
+                          <Check size={14} className="text-status-success" strokeWidth={3} />
                         </span>
                       ) : a.key === UNASSIGNED_KEY ? (
                         <CircleDot size={18} className="text-txt-muted" />
@@ -2392,7 +2392,7 @@ export default function CompletedMeetingView({ meeting }) {
                       </p>
                     </div>
                     <span className="shrink-0 text-txt-muted">
-                      {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                      {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                     </span>
                   </button>
 
@@ -2417,7 +2417,7 @@ export default function CompletedMeetingView({ meeting }) {
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-purple/10 border border-brand-purple/25"
                                   title="이 메시지는 회의록 요약에 반영되었습니다"
                                 >
-                                  <Quote size={9} strokeWidth={2.6} />
+                                  <Quote size={11} strokeWidth={2.6} />
                                   요약에 반영됨
                                 </span>
                                 {m._inherited && (
@@ -2464,7 +2464,7 @@ export default function CompletedMeetingView({ meeting }) {
                 to={`/summaries/${meeting.id}`}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-brand-purple text-white text-sm font-semibold hover:opacity-90 transition-opacity"
               >
-                <FileText size={15} />
+                <FileText size={17} />
                 AI 회의록 요약 보기
               </Link>
             </div>

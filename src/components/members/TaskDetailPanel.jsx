@@ -114,7 +114,7 @@ export default function TaskDetailPanel({
             </span>
             {task.ai_suggested && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-purple/10 text-brand-purple border border-brand-purple/20">
-                <Sparkles size={9} /> AI
+                <Sparkles size={11} /> AI
               </span>
             )}
           </div>
@@ -125,7 +125,7 @@ export default function TaskDetailPanel({
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 hover:border-brand-purple/40 transition-colors"
                 title="이 태스크가 나온 회의의 완료 뷰(히스토리)로 이동"
               >
-                <History size={13} strokeWidth={2.4} />
+                <History size={15} strokeWidth={2.4} />
                 <span>히스토리</span>
               </button>
             )}
@@ -195,7 +195,7 @@ export default function TaskDetailPanel({
             {/* 태그 배지 */}
             {(task.service_name || task.page_name || task.feature_name || (task.tags || []).length > 0) && (
               <div className="flex items-center gap-1.5 flex-wrap mt-3 pt-3 border-t border-border-subtle">
-                <Tag size={11} className="text-txt-muted shrink-0" />
+                <Tag size={13} className="text-txt-muted shrink-0" />
                 {task.service_name && <TagBadge label={task.service_name} variant="service" />}
                 {task.page_name && <TagBadge label={task.page_name} variant="page" />}
                 {task.feature_name && <TagBadge label={task.feature_name} variant="feature" />}
@@ -329,7 +329,7 @@ function Section({ title, icon: Icon, children }) {
   return (
     <div className="px-5 py-4 border-b border-border-divider last:border-b-0">
       <h3 className="text-[11px] text-txt-muted font-semibold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-        {Icon && <Icon size={11} />}
+        {Icon && <Icon size={13} />}
         {title}
       </h3>
       {children}
@@ -340,7 +340,7 @@ function Section({ title, icon: Icon, children }) {
 function MetaLabel({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-1.5 text-txt-muted pt-1">
-      <Icon size={11} className="shrink-0" />
+      <Icon size={13} className="shrink-0" />
       <span className="text-[11px]">{children}</span>
     </div>
   );
@@ -378,7 +378,7 @@ function EditableTitle({ title, canEdit, onSave }) {
             className="opacity-0 group-hover:opacity-100 p-1 rounded text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary transition-all"
             title="편집"
           >
-            <Edit2 size={12} />
+            <Edit2 size={14} />
           </button>
         )}
       </div>
@@ -400,14 +400,14 @@ function EditableTitle({ title, canEdit, onSave }) {
           className="p-1.5 rounded bg-brand-purple text-white hover:opacity-90"
           title="저장"
         >
-          <Save size={12} />
+          <Save size={14} />
         </button>
         <button
           onClick={() => { setValue(title); setEditing(false); }}
           className="p-1.5 rounded bg-bg-tertiary text-txt-muted hover:text-txt-primary"
           title="취소"
         >
-          <X size={12} />
+          <X size={14} />
         </button>
       </div>
     </div>
@@ -442,7 +442,7 @@ function EditableDescription({ description, canEdit, onSave }) {
             onClick={() => { onSave(value); setEditing(false); }}
             className="px-3 py-1 rounded-md text-xs bg-brand-purple text-white hover:opacity-90 flex items-center gap-1"
           >
-            <Save size={11} /> 저장
+            <Save size={13} /> 저장
           </button>
         </div>
       </div>
@@ -472,7 +472,7 @@ function EditableDescription({ description, canEdit, onSave }) {
           className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 rounded text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary transition-all"
           title="편집"
         >
-          <Edit2 size={12} />
+          <Edit2 size={14} />
         </button>
       )}
     </div>
@@ -515,7 +515,7 @@ function AssigneePicker({ assignee, members, canEdit, onChange }) {
         className="flex items-center gap-1.5 w-full py-1 px-2 -ml-2 rounded hover:bg-bg-tertiary text-left transition-colors"
       >
         {display}
-        <ChevronDown size={11} className="text-txt-muted ml-auto" />
+        <ChevronDown size={13} className="text-txt-muted ml-auto" />
       </button>
       {open && (
         <div className="absolute left-0 top-full mt-1 z-10 w-56 bg-bg-secondary border border-border-default rounded-md shadow-lg max-h-64 overflow-y-auto scrollbar-hide">
@@ -579,7 +579,7 @@ function PriorityPicker({ value, canEdit, onChange }) {
         className="flex items-center gap-1.5 w-full py-1 px-2 -ml-2 rounded hover:bg-bg-tertiary text-left transition-colors"
       >
         {display}
-        <ChevronDown size={11} className="text-txt-muted ml-auto" />
+        <ChevronDown size={13} className="text-txt-muted ml-auto" />
       </button>
       {open && (
         <div className="absolute left-0 top-full mt-1 z-10 w-36 bg-bg-secondary border border-border-default rounded-md shadow-lg">
@@ -644,7 +644,7 @@ function DueDatePicker({ value, canEdit, dueInfo, onChange }) {
       className="flex items-center gap-1.5 w-full py-1 px-2 -ml-2 rounded hover:bg-bg-tertiary text-left transition-colors"
     >
       {display}
-      <ChevronDown size={11} className="text-txt-muted ml-auto" />
+      <ChevronDown size={13} className="text-txt-muted ml-auto" />
     </button>
   );
 }
@@ -702,8 +702,8 @@ function SubtaskList({ subtasks, canEdit, onChange }) {
               className={`shrink-0 ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
             >
               {s.done
-                ? <CheckSquare size={14} className="text-status-success" />
-                : <Square size={14} className="text-txt-muted hover:text-txt-primary" />}
+                ? <CheckSquare size={16} className="text-status-success" />
+                : <Square size={16} className="text-txt-muted hover:text-txt-primary" />}
             </button>
             <span className={`flex-1 text-xs ${s.done ? 'line-through text-txt-muted' : 'text-txt-primary'}`}>
               {s.title}
@@ -714,7 +714,7 @@ function SubtaskList({ subtasks, canEdit, onChange }) {
                 className="opacity-0 group-hover:opacity-100 p-0.5 text-txt-muted hover:text-status-error transition-all"
                 title="삭제"
               >
-                <Trash2 size={11} />
+                <Trash2 size={13} />
               </button>
             )}
           </div>
@@ -723,7 +723,7 @@ function SubtaskList({ subtasks, canEdit, onChange }) {
 
       {canEdit && (
         <div className="flex items-center gap-2 mt-2 bg-bg-tertiary border border-border-subtle rounded-md px-2 py-1.5 focus-within:border-brand-purple/40">
-          <Plus size={12} className="text-txt-muted shrink-0" />
+          <Plus size={14} className="text-txt-muted shrink-0" />
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
@@ -816,7 +816,7 @@ function MeetingContextCard({ meetingId, taskTitle }) {
             className="text-[10px] text-brand-purple hover:underline inline-flex items-center gap-0.5 shrink-0"
             title="완료된 회의 뷰에서 전체 대화 기록을 확인합니다"
           >
-            히스토리 <ExternalLink size={9} />
+            히스토리 <ExternalLink size={11} />
           </a>
         </div>
       </div>
@@ -855,7 +855,7 @@ function MeetingContextCard({ meetingId, taskTitle }) {
       {summary?.milo_insights && (
         <div className="bg-brand-purple/5 border border-brand-purple/20 rounded-md px-3 py-2">
           <p className="text-[10px] text-brand-purple font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
-            <Sparkles size={10} /> 밀로의 회의 인사이트
+            <Sparkles size={12} /> 밀로의 회의 인사이트
           </p>
           <p className="text-xs text-txt-secondary leading-relaxed">{summary.milo_insights}</p>
         </div>
@@ -915,7 +915,7 @@ function TaskAttachments({ taskId, initial, canEdit, onChange }) {
             uploading={uploading}
             title="참고 자료 첨부 (이미지/문서)"
             label={hasAny ? '추가' : '참고 자료 첨부'}
-            size={12}
+            size={14}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] text-txt-secondary border border-dashed border-border-subtle hover:border-brand-purple/40 hover:text-brand-purple hover:bg-bg-tertiary/50 transition-colors disabled:opacity-50"
           />
           <span className="text-[10px] text-txt-muted">이미지·PDF·문서 등 (최대 25MB)</span>

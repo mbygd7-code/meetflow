@@ -46,7 +46,7 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
       <div className="relative w-[min(90vw,1000px)] h-[min(85vh,900px)] bg-bg-secondary border border-border-default rounded-lg shadow-2xl flex flex-col overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-divider shrink-0">
-          <FileText size={14} className="text-txt-muted shrink-0" />
+          <FileText size={16} className="text-txt-muted shrink-0" />
           <p className="text-sm font-medium text-txt-primary truncate flex-1">{file.name}</p>
           <span className="text-[10px] text-txt-muted px-2 py-0.5 rounded border border-border-subtle">
             읽기 전용 · 저장된 드로잉 포함
@@ -59,7 +59,7 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-brand-purple hover:underline"
             >
-              <Download size={12} /> 다운로드
+              <Download size={14} /> 다운로드
             </a>
           )}
           <button
@@ -67,7 +67,7 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
             className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded"
             aria-label="닫기"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
@@ -175,7 +175,7 @@ export default function CompletedMeetingFiles({ meetingId }) {
           className="w-full flex items-center gap-2.5 px-3 md:px-6 py-2.5 hover:bg-bg-tertiary/40 transition-colors"
         >
           <div className="w-7 h-7 rounded-md bg-brand-purple/15 flex items-center justify-center shrink-0">
-            <FolderOpen size={14} className="text-brand-purple" strokeWidth={2.4} />
+            <FolderOpen size={16} className="text-brand-purple" strokeWidth={2.4} />
           </div>
           <div className="flex items-center gap-2.5 flex-1 text-left">
             <span className="text-sm font-semibold text-txt-primary">자료 · 드로잉 히스토리</span>
@@ -190,7 +190,7 @@ export default function CompletedMeetingFiles({ meetingId }) {
             </span>
           </div>
           <span className="text-txt-muted shrink-0">
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </span>
         </button>
 
@@ -208,11 +208,11 @@ export default function CompletedMeetingFiles({ meetingId }) {
                   >
                     <div className="w-8 h-8 rounded bg-bg-tertiary flex items-center justify-center shrink-0">
                       {isImg ? (
-                        <ImageIcon size={14} className="text-brand-purple" />
+                        <ImageIcon size={16} className="text-brand-purple" />
                       ) : isPdf ? (
-                        <FileText size={14} className="text-status-error" />
+                        <FileText size={16} className="text-status-error" />
                       ) : (
-                        <FileText size={14} className="text-txt-muted" />
+                        <FileText size={16} className="text-txt-muted" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

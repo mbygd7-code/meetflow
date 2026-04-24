@@ -85,12 +85,12 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
               <div className="flex items-center gap-1">
                 {p.source === 'slack' ? (
                   <>
-                    <Slack size={10} className="text-txt-muted" />
+                    <Slack size={12} className="text-txt-muted" />
                     <p className="text-[10px] text-txt-muted">Slack</p>
                   </>
                 ) : (
                   <>
-                    <Globe size={10} className="text-txt-muted" />
+                    <Globe size={12} className="text-txt-muted" />
                     <p className="text-[10px] text-txt-muted">Web</p>
                   </>
                 )}

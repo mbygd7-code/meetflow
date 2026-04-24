@@ -25,7 +25,7 @@ export default function AgendaBar({ agendas = [], activeId, onSelect }) {
           >
             {isDone ? (
               <span className="w-4 h-4 rounded-full bg-status-success/20 flex items-center justify-center">
-                <Check size={10} className="text-status-success" strokeWidth={3} />
+                <Check size={12} className="text-status-success" strokeWidth={3} />
               </span>
             ) : (
               <span
@@ -40,7 +40,7 @@ export default function AgendaBar({ agendas = [], activeId, onSelect }) {
             )}
             <span>{a.title}</span>
             <span className="flex items-center gap-0.5 text-txt-muted">
-              <Clock size={10} />
+              <Clock size={12} />
               {a.duration_minutes}분
             </span>
           </button>

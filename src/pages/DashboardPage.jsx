@@ -213,7 +213,7 @@ export default function DashboardPage() {
           subtitle={focusTasks.length > 0 ? '가장 먼저 처리하면 좋을 업무' : '아직 할당된 업무가 없어요'}
           action={
             <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
-              모든 태스크 <ArrowRight size={12} />
+              모든 태스크 <ArrowRight size={14} />
             </Link>
           }
         >
@@ -246,13 +246,13 @@ export default function DashboardPage() {
           )}
         </SectionPanel>
 
-        {/* ═══ 오늘의 일정 ═══ */}
+        {/* ═══ 오늘의 회의 ═══ */}
         <SectionPanel
-          title="오늘의 일정"
+          title="오늘의 회의"
           subtitle={todayMeetings.length > 0 ? `회의 ${todayMeetings.length}개 예정` : undefined}
           action={
             <Link to="/meetings" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
-              모두 보기 <ArrowRight size={12} />
+              모두 보기 <ArrowRight size={14} />
             </Link>
           }
         >
@@ -301,7 +301,7 @@ export default function DashboardPage() {
               to="/summaries"
               className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors"
             >
-              전체 분석 보기 <ArrowRight size={12} />
+              전체 분석 보기 <ArrowRight size={14} />
             </Link>
           </SectionPanel>
 
@@ -310,7 +310,7 @@ export default function DashboardPage() {
             subtitle="놓친 회의 없이 빠르게 파악"
             action={
               <Link to="/summaries" className="text-[11px] text-txt-secondary hover:text-txt-primary flex items-center gap-1">
-                모두 보기 <ArrowRight size={11} />
+                모두 보기 <ArrowRight size={13} />
               </Link>
             }
           >
@@ -325,7 +325,7 @@ export default function DashboardPage() {
                     className="flex items-center gap-2.5 p-2 rounded hover:bg-bg-tertiary transition-colors group"
                   >
                     <div className="w-8 h-8 rounded bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
-                      <FileText size={13} className="text-brand-purple" />
+                      <FileText size={15} className="text-brand-purple" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-txt-primary truncate">{m.title}</p>
@@ -334,7 +334,7 @@ export default function DashboardPage() {
                         {' · '}어젠다 {m.agendas?.length || 0} · 참여 {m.participants?.length || 0}
                       </p>
                     </div>
-                    <ArrowRight size={12} className="text-txt-muted group-hover:text-txt-primary" />
+                    <ArrowRight size={14} className="text-txt-muted group-hover:text-txt-primary" />
                   </Link>
                 ))}
               </div>
@@ -353,7 +353,7 @@ export default function DashboardPage() {
           }
           action={
             <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
-              전체 <ArrowRight size={11} />
+              전체 <ArrowRight size={13} />
             </Link>
           }
         >
@@ -394,7 +394,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
-            전체 <ArrowRight size={11} />
+            전체 <ArrowRight size={13} />
           </Link>
         </div>
 
@@ -474,12 +474,12 @@ function FocusCard({ task, onClick }) {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className={`inline-flex items-center gap-1 text-[10px] font-semibold ${ddayColor}`}>
-          <IconComp size={10} strokeWidth={2.6} />
+          <IconComp size={12} strokeWidth={2.6} />
           <span>{ddayLabel}</span>
         </div>
         {task.ai_suggested && (
           <span className="inline-flex items-center gap-0.5 text-[9px] text-brand-purple font-semibold">
-            <Sparkles size={9} strokeWidth={2.6} /> AI
+            <Sparkles size={11} strokeWidth={2.6} /> AI
           </span>
         )}
       </div>
@@ -503,13 +503,13 @@ function FocusCard({ task, onClick }) {
         )}
         {task.meeting_title && (
           <span className="inline-flex items-center gap-0.5 text-brand-purple">
-            <MessageSquare size={9} />
+            <MessageSquare size={11} />
             {task.meeting_title}
           </span>
         )}
         {task.status === 'in_progress' && (
           <span className="inline-flex items-center gap-0.5 text-brand-purple">
-            <TrendingUp size={9} strokeWidth={2.4} />
+            <TrendingUp size={11} strokeWidth={2.4} />
             진행중
           </span>
         )}

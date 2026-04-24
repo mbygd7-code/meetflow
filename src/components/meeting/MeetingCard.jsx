@@ -88,7 +88,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
           <div className="mx-auto max-w-[90%] bg-status-error/15 border border-status-error/40 backdrop-blur-sm rounded-lg px-3 py-2 text-center shadow-md">
             <div className="inline-flex items-center gap-1.5 text-status-error mb-0.5">
-              <AlertTriangle size={14} strokeWidth={2.4} />
+              <AlertTriangle size={16} strokeWidth={2.4} />
               <span className="text-[11px] font-bold uppercase tracking-wider">예정 시간 경과</span>
             </div>
             <p className="text-[11px] text-txt-primary font-medium">
@@ -127,7 +127,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         {/* 예정/완료 공통: 실제 날짜 (MM/dd 요일) */}
         {(isScheduled || isCompleted) && dateLabel && (
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-txt-primary">
-            <Calendar size={14} strokeWidth={2.2} className={isCompleted ? 'text-txt-muted' : 'text-brand-purple'} />
+            <Calendar size={16} strokeWidth={2.2} className={isCompleted ? 'text-txt-muted' : 'text-brand-purple'} />
             {dateLabel}
           </span>
         )}
@@ -151,7 +151,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
       {/* 요청자 */}
       {creatorName && (
         <div className="flex items-center gap-1.5 text-[11px] text-txt-muted mb-3">
-          <UserCircle size={11} strokeWidth={2} />
+          <UserCircle size={13} strokeWidth={2} />
           <span>요청자</span>
           <span className="text-txt-secondary font-medium">{creatorName}</span>
         </div>
@@ -161,7 +161,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
       {meeting.agendas?.length > 0 ? (
         <div className="mb-3 pl-2 border-l-2 border-brand-purple/25 space-y-1">
           <div className="flex items-center gap-1.5 text-[10px] text-txt-muted font-semibold uppercase tracking-wider mb-1">
-            <ListChecks size={11} strokeWidth={2.2} />
+            <ListChecks size={13} strokeWidth={2.2} />
             어젠다 {meeting.agendas.length}개
           </div>
           {meeting.agendas.slice(0, 3).map((a, i) => (
@@ -183,7 +183,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         </div>
       ) : (
         <div className="flex items-center gap-1.5 text-[11px] text-txt-muted mb-3">
-          <ListChecks size={11} strokeWidth={2} />
+          <ListChecks size={13} strokeWidth={2} />
           어젠다 없음
         </div>
       )}
@@ -230,7 +230,7 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
                 className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-status-warning bg-status-warning/10 hover:bg-status-warning/20 transition-colors"
                 title={`${p.name}님에게 리마인드 전송`}
               >
-                <Bell size={10} />
+                <Bell size={12} />
                 {p.name}
               </button>
             ))}

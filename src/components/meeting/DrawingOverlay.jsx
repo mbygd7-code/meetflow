@@ -14,6 +14,7 @@
 //  </div>
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -35,6 +36,31 @@ const toNorm = (x, y, w, h) => ({
 });
 const toPx = (nx, ny, w, h) => ({ x: nx * w, y: ny * h });
 
+// 점-선분 거리 (지우개 히트 테스트용)
+function distPointSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + t * dx, qy = ay + t * dy;
+  return Math.hypot(px - qx, py - qy);
+}
+
+// 클릭 좌표(px)와 가까운 스트로크 찾기 — 위 레이어(가장 최근 그려진 것) 우선
+function findHitStroke(px, py, strokes, w, h, threshold = 10) {
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const s = strokes[i];
+    if (!s?.points || s.points.length < 2) continue;
+    for (let j = 0; j < s.points.length - 1; j++) {
+      const a = toPx(s.points[j].x, s.points[j].y, w, h);
+      const b = toPx(s.points[j + 1].x, s.points[j + 1].y, w, h);
+      if (distPointSegment(px, py, a.x, a.y, b.x, b.y) <= threshold) return s;
+    }
+  }
+  return null;
+}
+
 // 메시지에서 드로잉 태그 파싱: @이름-숫자 (공백 또는 특수문자 뒤까지)
 // 한국어 이름 + 영숫자 대응
 const DRAWING_TAG_RE = /@([\u3131-\uD79D\w._-]+?)-(\d+)/g;
@@ -51,19 +77,24 @@ function parseDrawingTags(content) {
 
 export default function DrawingOverlay({
   targetKey,
+  fileName,               // 자료 파일명 — 태그 이벤트/AI 컨텍스트에 포함
   meetingId,
   width,
   height,
   onClose,
   messages = [],
   readOnly = false,       // true면 툴바 숨김 + 포인터 차단 (완료 회의 뷰용)
+  toolbarContainer,       // HTMLElement | null — 지정 시 툴바를 이 노드로 포털 (뷰어 헤더 아래 배치용)
 }) {
   const { user } = useAuthStore();
   const addToast = useToastStore((s) => s.addToast);
   const canvasRef = useRef(null);
   const [color, setColor] = useState(COLORS[0].value);
   const [strokes, setStrokes] = useState([]);      // 완성된 스트로크 (정규화 좌표)
+  // 통합 액션 스택 — { type: 'draw'|'erase', stroke } 시퀀스로 undo/redo 지원
+  const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
   const [visible, setVisible] = useState(true);     // 드로잉+주석 시각 토글
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -72,6 +103,11 @@ export default function DrawingOverlay({
   const channelRef = useRef(null);
   const myIdRef = useRef(user?.id || `anon-${Math.random().toString(36).slice(2, 8)}`);
   const skipNextRealtimeLoadRef = useRef(false);    // 자기가 저장한 리얼타임 에코는 스킵
+  // 회의 전체 범위의 사용자별 최대 seq — 자료를 닫았다 다시 열어도 순번이 이어지도록 관리
+  const [globalSeqByUser, setGlobalSeqByUser] = useState({});
+  // 자동 저장 디바운스 타이머
+  const autoSaveTimerRef = useRef(null);
+  const latestStrokesRef = useRef([]);
 
   // 현재 사용자 정보 — 각 stroke에 첨부되어 원격 참여자 화면에 아바타 표시
   const myInfo = useMemo(() => ({
@@ -79,6 +115,42 @@ export default function DrawingOverlay({
     name: user?.name || '사용자',
     color: user?.avatar_color || '#723CEB',
   }), [user?.name, user?.avatar_color]);
+
+  // ── 회의 전체의 사용자별 최대 seq 로드 ──
+  // 모든 자료(target_key)의 strokes를 스캔하여 사용자별 최대 seq를 확보.
+  // 자료를 닫았다 다시 열거나 다른 자료로 이동해도 순번이 이어짐.
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !meetingId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('meeting_drawings')
+          .select('strokes')
+          .eq('meeting_id', meetingId);
+        if (cancelled || error || !data) return;
+        const maxByUser = {};
+        for (const row of data) {
+          const arr = Array.isArray(row.strokes) ? row.strokes : [];
+          // seq 없는 레거시 stroke는 row별 등장 순서로 카운트
+          const legacyCounts = {};
+          for (const s of arr) {
+            const uid = s.user_id || 'anon';
+            let seq = s.seq;
+            if (typeof seq !== 'number') {
+              legacyCounts[uid] = (legacyCounts[uid] || 0) + 1;
+              seq = legacyCounts[uid];
+            }
+            if (!maxByUser[uid] || seq > maxByUser[uid]) maxByUser[uid] = seq;
+          }
+        }
+        if (!cancelled) setGlobalSeqByUser(maxByUser);
+      } catch (err) {
+        console.warn('[DrawingOverlay] global seq load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [meetingId]);
 
   // 마운트 시 DB에서 저장된 drawings 로드 + meeting_drawings 테이블 Realtime 구독
   useEffect(() => {
@@ -99,7 +171,6 @@ export default function DrawingOverlay({
           .maybeSingle();
         if (cancelled) return;
         if (error && error.code !== 'PGRST116') {
-          // PGRST116 = no rows (정상)
           if (error.code === '42P01') {
             console.warn('[DrawingOverlay] meeting_drawings 테이블 없음 — migration 039 실행 필요');
           } else {
@@ -170,15 +241,9 @@ export default function DrawingOverlay({
     }
     if (saving) return;
 
-    // 디버그 로그 (문제 진단용)
-    console.log('[DrawingOverlay] save start:', {
-      meetingId, targetKey, strokes_count: strokes.length, user_id: user?.id,
-    });
-
     setSaving(true);
     skipNextRealtimeLoadRef.current = true;
     try {
-      // .maybeSingle() 로 레코드 없어도 에러 안 나게
       const { data, error } = await supabase
         .from('meeting_drawings')
         .upsert(
@@ -195,10 +260,8 @@ export default function DrawingOverlay({
 
       if (error) throw error;
       if (!data) {
-        // 권한 통과했지만 row가 반환되지 않은 경우 → select 권한 없음
         throw new Error('저장 후 조회 실패 — RLS 정책 확인 필요 (SELECT 권한 누락)');
       }
-      console.log('[DrawingOverlay] save ok:', data);
       setSavedAt(data.updated_at || new Date().toISOString());
       addToast?.(`드로잉 저장 완료 (${strokes.length}건)`, 'success', 2500);
     } catch (err) {
@@ -232,13 +295,26 @@ export default function DrawingOverlay({
     ch.on('broadcast', { event: 'stroke' }, ({ payload }) => {
       if (!payload) return;
       setStrokes((prev) => [...prev, payload]);
+      // 원격 stroke의 seq도 글로벌 최대값에 반영 (태그 충돌 방지)
+      if (typeof payload.seq === 'number' && payload.user_id) {
+        setGlobalSeqByUser((prev) => ({
+          ...prev,
+          [payload.user_id]: Math.max(prev[payload.user_id] || 0, payload.seq),
+        }));
+      }
     });
     ch.on('broadcast', { event: 'undo' }, () => {
+      // 레거시 — 마지막 stroke 제거 (과거 버전 호환)
       setStrokes((prev) => prev.slice(0, -1));
+    });
+    ch.on('broadcast', { event: 'erase' }, ({ payload }) => {
+      if (!payload?.id) return;
+      setStrokes((prev) => prev.filter((s) => s.id !== payload.id));
     });
     ch.on('broadcast', { event: 'clear' }, () => {
       setStrokes([]);
       setRedoStack([]);
+      setUndoStack([]);
     });
     ch.subscribe();
     channelRef.current = ch;
@@ -297,6 +373,50 @@ export default function DrawingOverlay({
 
   useEffect(() => { redraw(); }, [strokes, redraw]);
 
+  // ── 자동 저장 (디바운스 1.2s) ──
+  // stroke 변경 시 조용히 DB upsert. 자료창 닫거나 새로고침해도 seq 번호 보존.
+  useEffect(() => {
+    latestStrokesRef.current = strokes;
+    if (!loaded) return;            // 초기 로드 완료 전엔 스킵 (빈 배열로 덮어쓰기 방지)
+    if (readOnly) return;
+    if (!SUPABASE_ENABLED || !meetingId || !targetKey) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      autoSaveTimerRef.current = null;
+      try {
+        skipNextRealtimeLoadRef.current = true;
+        const { data, error } = await supabase
+          .from('meeting_drawings')
+          .upsert(
+            {
+              meeting_id: meetingId,
+              target_key: targetKey,
+              strokes: latestStrokesRef.current,
+              updated_by: user?.id || null,
+            },
+            { onConflict: 'meeting_id,target_key' }
+          )
+          .select('updated_at')
+          .maybeSingle();
+        if (error) {
+          console.warn('[DrawingOverlay] auto-save failed:', error);
+          skipNextRealtimeLoadRef.current = false;
+        } else if (data?.updated_at) {
+          setSavedAt(data.updated_at);
+        }
+      } catch (err) {
+        console.warn('[DrawingOverlay] auto-save exception:', err);
+        skipNextRealtimeLoadRef.current = false;
+      }
+    }, 1200);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [strokes, loaded, readOnly, meetingId, targetKey, user?.id]);
+
   // 포인터 핸들러
   const getLocalXY = (e) => {
     const cv = canvasRef.current;
@@ -311,10 +431,26 @@ export default function DrawingOverlay({
     e.stopPropagation();
     const cv = canvasRef.current;
     if (!cv) return;
-    cv.setPointerCapture?.(e.pointerId);
+    // 캔버스에 포커스 이동 → 단축키(Ctrl+Z 등)가 여기로 라우팅됨
+    // (채팅 textarea가 활성 상태여도 캔버스 클릭 시점부터 포커스 전환)
+    try { cv.focus({ preventScroll: true }); } catch {}
     const p = getLocalXY(e);
     const w = cv.clientWidth;
     const h = cv.clientHeight;
+
+    // ── 지우개 모드: 클릭한 스트로크 1개만 삭제 ──
+    if (eraserMode) {
+      const hit = findHitStroke(p.x, p.y, strokes, w, h);
+      if (hit) {
+        setStrokes((prev) => prev.filter((s) => s.id !== hit.id));
+        setUndoStack((prev) => [...prev, { type: 'erase', stroke: hit }]);
+        setRedoStack([]);
+        broadcast('erase', { id: hit.id });
+      }
+      return;
+    }
+
+    cv.setPointerCapture?.(e.pointerId);
     const n = toNorm(p.x, p.y, w, h);
     drawingRef.current = {
       id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -333,16 +469,38 @@ export default function DrawingOverlay({
     e.preventDefault();
     const cv = canvasRef.current;
     if (!cv) return;
-    const p = getLocalXY(e);
-    const n = toNorm(p.x, p.y, cv.clientWidth, cv.clientHeight);
-    const last = drawingRef.current.points[drawingRef.current.points.length - 1];
-    // 미세한 움직임은 스킵 (포인트 수 제어)
-    if (last) {
-      const dx = n.x - last.x, dy = n.y - last.y;
-      if (dx * dx + dy * dy < 0.00005) return; // 스레숏
+
+    // ── 고해상도 서브프레임 포인트 수집 ──
+    // 브라우저는 보통 프레임당 pointermove 1개만 디스패치하지만, 마우스/펜은
+    // 1000Hz 이상일 수 있음. getCoalescedEvents()로 프레임 내부의 중간 점들을
+    // 모두 회수하면 선이 커서에 딱 붙어 보임.
+    const rect = cv.getBoundingClientRect();
+    const w = cv.clientWidth;
+    const h = cv.clientHeight;
+    const coalesced = (typeof e.getCoalescedEvents === 'function'
+      ? e.getCoalescedEvents()
+      : null);
+    const rawEvents = (coalesced && coalesced.length > 0) ? coalesced : [e];
+
+    // 픽셀 단위 최소 간격(0.8px) — 같은 프레임 반복 점 걸러내면서 조밀한 궤적 유지
+    const MIN_PX = 0.8;
+    const minSqNorm = (MIN_PX / Math.max(1, Math.min(w, h))) ** 2;
+
+    let changed = false;
+    for (const ev of rawEvents) {
+      const x = ev.clientX - rect.left;
+      const y = ev.clientY - rect.top;
+      const n = toNorm(x, y, w, h);
+      const pts = drawingRef.current.points;
+      const last = pts[pts.length - 1];
+      if (last) {
+        const dx = n.x - last.x, dy = n.y - last.y;
+        if (dx * dx + dy * dy < minSqNorm) continue;
+      }
+      pts.push(n);
+      changed = true;
     }
-    drawingRef.current.points.push(n);
-    redraw();
+    if (changed) redraw();
   };
 
   const onPointerUp = (e) => {
@@ -354,45 +512,113 @@ export default function DrawingOverlay({
     const finished = drawingRef.current;
     drawingRef.current = null;
     if (finished.points.length > 1) {
+      // 회의 전체(globalSeqByUser) + 현재 자료 strokes 중 내 최대 seq + 1
+      const uid = finished.user_id;
+      let currMax = globalSeqByUser[uid] || 0;
+      for (const s of strokes) {
+        if (s.user_id !== uid) continue;
+        const sv = typeof s.seq === 'number' ? s.seq : 0;
+        if (sv > currMax) currMax = sv;
+      }
+      finished.seq = currMax + 1;
+      setGlobalSeqByUser((prev) => ({ ...prev, [uid]: finished.seq }));
       setStrokes((prev) => [...prev, finished]);
+      setUndoStack((prev) => [...prev, { type: 'draw', stroke: finished }]);
       broadcast('stroke', finished);
     }
     redraw();
   };
 
-  // Undo / Redo / Clear
+  // Undo / Redo — 통합 액션 스택 ({ type: 'draw'|'erase', stroke })
+  //   draw 를 undo  → 해당 stroke 제거 (broadcast erase)
+  //   erase 를 undo → 해당 stroke 복원 (broadcast stroke)
+  //   redo 는 action 을 다시 재생
   const handleUndo = () => {
-    if (strokes.length === 0) return;
-    const popped = strokes[strokes.length - 1];
-    setStrokes((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, popped]);
-    broadcast('undo', { id: popped.id });
+    if (undoStack.length === 0) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, last]);
+    if (last.type === 'draw') {
+      setStrokes((prev) => prev.filter((s) => s.id !== last.stroke.id));
+      broadcast('erase', { id: last.stroke.id });
+    } else if (last.type === 'erase') {
+      setStrokes((prev) => [...prev, last.stroke]);
+      broadcast('stroke', last.stroke);
+    }
   };
   const handleRedo = () => {
     if (redoStack.length === 0) return;
-    const restored = redoStack[redoStack.length - 1];
+    const last = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
-    setStrokes((prev) => [...prev, restored]);
-    broadcast('stroke', restored);
+    setUndoStack((prev) => [...prev, last]);
+    if (last.type === 'draw') {
+      setStrokes((prev) => [...prev, last.stroke]);
+      broadcast('stroke', last.stroke);
+    } else if (last.type === 'erase') {
+      setStrokes((prev) => prev.filter((s) => s.id !== last.stroke.id));
+      broadcast('erase', { id: last.stroke.id });
+    }
   };
-  const handleClear = () => {
-    if (strokes.length === 0) return;
-    setStrokes([]);
-    setRedoStack([]);
-    broadcast('clear', {});
-  };
+
+  // ── 키보드 단축키: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo) ──
+  // ref로 최신 handler 참조 유지 → 리스너 재구독 없이 최신 스택 접근
+  const handleUndoRef = useRef(handleUndo);
+  const handleRedoRef = useRef(handleRedo);
+  handleUndoRef.current = handleUndo;
+  handleRedoRef.current = handleRedo;
+  useEffect(() => {
+    if (readOnly) return;
+    const onKeyDown = (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = (e.key || '').toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+
+      const active = document.activeElement;
+      const isEditableFocus = !!(
+        active && (
+          active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.isContentEditable
+        )
+      );
+      // 진단 로그 (해결 후 제거)
+      console.log('[DrawingOverlay] keydown', {
+        key, shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey,
+        active: active?.tagName, activeClass: active?.className?.slice?.(0, 40),
+        isEditableFocus, undoLen: undoStack.length, redoLen: redoStack.length,
+      });
+      if (isEditableFocus) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        console.log('[DrawingOverlay] → redo');
+        handleRedoRef.current?.();
+      } else {
+        console.log('[DrawingOverlay] → undo');
+        handleUndoRef.current?.();
+      }
+    };
+    // capture=true — 내부 컴포넌트가 이벤트를 먹기 전에 우리가 먼저 받음
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [readOnly]);
 
   const toolbarCommonCls = 'inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors';
 
-  // 각 stroke에 사용자별 순번(seq) 부여 — 한 사용자의 1번째/2번째/...
-  // 배열 순서(broadcast 도착 순서) 기반이라 모든 클라이언트에서 동일한 번호 배정
+  // 각 stroke에 사용자별 순번(seq) 부여 — 저장된 s.seq 우선, 없으면 등장 순서 fallback
   const strokeSeqMap = useMemo(() => {
     const counts = {};
     const map = {};
     for (const s of strokes) {
       const uid = s.user_id || 'anon';
-      counts[uid] = (counts[uid] || 0) + 1;
-      map[s.id] = counts[uid];
+      if (typeof s.seq === 'number') {
+        map[s.id] = s.seq;
+      } else {
+        counts[uid] = (counts[uid] || 0) + 1;
+        map[s.id] = counts[uid];
+      }
     }
     return map;
   }, [strokes]);
@@ -403,7 +629,6 @@ export default function DrawingOverlay({
     const result = {};
     if (!messages?.length || strokes.length === 0) return result;
 
-    // stroke 빠른 조회: (name, seq) → strokeId
     const strokeByNameSeq = {};
     for (const s of strokes) {
       const key = `${s.user_name || ''}::${strokeSeqMap[s.id]}`;
@@ -413,7 +638,6 @@ export default function DrawingOverlay({
     for (const m of messages) {
       const tags = parseDrawingTags(m.content || '');
       if (tags.length === 0) continue;
-      // 태그 제거한 본문 (자료의 텍스트 박스에 표시할 내용)
       let stripped = m.content;
       for (const t of tags) stripped = stripped.replace(t.raw, '').trim();
       if (!stripped) continue;
@@ -455,12 +679,20 @@ export default function DrawingOverlay({
   }, [strokes, width, height, strokeSeqMap, annotationsByStrokeId]);
 
   // 아바타 클릭 → 채팅 입력창에 태그 주입 (CustomEvent)
+  //   메시지 metadata 에 담길 구조화된 참조도 포함 → AI가 "이 메시지는 자료 주석"임을 인식
   const handleAvatarClick = (marker) => {
     const tag = `@${marker.name}-${marker.seq} `;
     try {
       window.dispatchEvent(
         new CustomEvent('meetflow:drawing-tag', {
-          detail: { tag, userName: marker.name, seq: marker.seq, strokeId: marker.strokeId },
+          detail: {
+            tag,
+            userName: marker.name,
+            seq: marker.seq,
+            strokeId: marker.strokeId,
+            targetKey,
+            fileName: fileName || null,
+          },
         })
       );
     } catch {}
@@ -468,9 +700,11 @@ export default function DrawingOverlay({
 
   return (
     <>
-      {/* 드로잉 레이어 — visible=false 또는 readOnly 시 포인터 차단 */}
+      {/* 드로잉 레이어 — visible=false 또는 readOnly 시 포인터 차단
+          tabIndex=-1: 포커스 가능(키보드 단축키 라우팅용)하되 Tab 순서엔 제외 */}
       <canvas
         ref={canvasRef}
+        tabIndex={readOnly ? undefined : -1}
         onPointerDown={readOnly ? undefined : onPointerDown}
         onPointerMove={readOnly ? undefined : onPointerMove}
         onPointerUp={readOnly ? undefined : onPointerUp}
@@ -479,11 +713,12 @@ export default function DrawingOverlay({
           position: 'absolute',
           inset: 0,
           touchAction: 'none',
-          cursor: readOnly ? 'default' : 'crosshair',
+          cursor: readOnly ? 'default' : (eraserMode ? 'cell' : 'crosshair'),
           zIndex: 5,
           opacity: visible ? 1 : 0,
           pointerEvents: readOnly ? 'none' : (visible ? 'auto' : 'none'),
           transition: 'opacity 0.15s ease',
+          outline: 'none',
         }}
       />
 
@@ -512,7 +747,6 @@ export default function DrawingOverlay({
             title={`${m.name} · #${m.seq} · 클릭하면 채팅 태그`}
           >
             {(m.name || '?')[0]}
-            {/* 순번 뱃지 — 우상단 */}
             <span
               className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-[#222] bg-white border border-[#555] leading-none"
               style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
@@ -521,12 +755,10 @@ export default function DrawingOverlay({
             </span>
           </button>
 
-          {/* 호버 툴팁 */}
           <span className="opacity-0 group-hover/dmark:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap px-2 py-1 rounded bg-black/85 text-white text-[11px] font-medium pointer-events-none">
             {m.name} #{m.seq}
           </span>
 
-          {/* 태그된 메시지의 텍스트 박스 — 아바타 바로 아래에 쌓여 표시 */}
           {m.annotations.length > 0 && (
             <div
               className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 flex flex-col gap-1 w-[220px] max-w-[220px]"
@@ -562,102 +794,113 @@ export default function DrawingOverlay({
         </div>
       ))}
 
-      {/* 플로팅 툴바 — readOnly면 숨김 */}
-      {!readOnly && (
-      <div
-        className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
-        onMouseDown={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-0.5 pr-1 mr-1 border-r border-[#e0e0e0]">
-          <Pencil size={12} className="text-[#555]" />
-        </div>
-
-        {/* 컬러 3개 */}
-        {COLORS.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setColor(c.value)}
-            className={`${toolbarCommonCls} border-2 ${
-              color === c.value ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'
-            }`}
-            title={c.label}
-            aria-label={c.label}
+      {/* 플로팅 툴바 — readOnly면 숨김. toolbarContainer 지정 시 해당 노드로 포털 */}
+      {!readOnly && (() => {
+        const toolbarEl = (
+          <div
+            className={
+              toolbarContainer
+                ? "inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+                : "absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+            }
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
-            <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }} />
-          </button>
-        ))}
+            <div className="flex items-center gap-0.5 pr-1 mr-1 border-r border-[#e0e0e0]">
+              <Pencil size={14} className="text-[#555]" />
+            </div>
 
-        <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+            {/* 컬러 3개 */}
+            {COLORS.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setColor(c.value)}
+                className={`${toolbarCommonCls} border-2 ${
+                  color === c.value ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'
+                }`}
+                title={c.label}
+                aria-label={c.label}
+              >
+                <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }} />
+              </button>
+            ))}
 
-        <button
-          onClick={handleUndo}
-          disabled={strokes.length === 0}
-          className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed`}
-          title="이전으로 (undo)"
-        >
-          <Undo2 size={14} />
-        </button>
-        <button
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed`}
-          title="이후로 (redo)"
-        >
-          <Redo2 size={14} />
-        </button>
-        <button
-          onClick={handleClear}
-          disabled={strokes.length === 0}
-          className={`${toolbarCommonCls} text-[#555] hover:text-status-error hover:bg-status-error/10 disabled:opacity-40 disabled:cursor-not-allowed`}
-          title="모두 지우기"
-        >
-          <Eraser size={14} />
-        </button>
-
-        <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
-
-        {/* 보이기/숨기기 토글 */}
-        <button
-          onClick={() => setVisible((v) => !v)}
-          className={`${toolbarCommonCls} ${
-            visible ? 'text-[#555] hover:text-[#222] hover:bg-black/5' : 'text-brand-purple bg-brand-purple/10'
-          }`}
-          title={visible ? '드로잉/주석 잠시 숨기기' : '드로잉/주석 다시 보기'}
-        >
-          {visible ? <Eye size={14} /> : <EyeOff size={14} />}
-        </button>
-
-        {/* 저장 */}
-        <button
-          onClick={handleSave}
-          disabled={saving || strokes.length === 0}
-          className={`${toolbarCommonCls} text-[#555] hover:text-brand-purple hover:bg-brand-purple/10 disabled:opacity-40 disabled:cursor-not-allowed`}
-          title={savedAt ? `저장됨 · 변경사항 저장` : '드로잉 저장 (재진입 시 복원)'}
-        >
-          {saving ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : savedAt && strokes.length > 0 ? (
-            <Save size={14} />
-          ) : (
-            <Save size={14} />
-          )}
-        </button>
-
-        {onClose && (
-          <>
             <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+
             <button
-              onClick={onClose}
-              className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5`}
-              title="드로잉 종료"
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed`}
+              title="이전으로 (undo)"
             >
-              <X size={14} />
+              <Undo2 size={16} />
             </button>
-          </>
-        )}
-      </div>
-      )}
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed`}
+              title="이후로 (redo)"
+            >
+              <Redo2 size={16} />
+            </button>
+            {/* 지우개 — 모드 토글. 켜진 상태에서 스트로크 클릭 시 그 라인만 삭제 */}
+            <button
+              onClick={() => setEraserMode((v) => !v)}
+              disabled={strokes.length === 0 && !eraserMode}
+              className={`${toolbarCommonCls} disabled:opacity-40 disabled:cursor-not-allowed ${
+                eraserMode
+                  ? 'text-white bg-status-error hover:bg-status-error/90'
+                  : 'text-[#555] hover:text-status-error hover:bg-status-error/10'
+              }`}
+              title={eraserMode ? '지우개 모드 끄기' : '지우개 모드 — 클릭한 라인만 삭제'}
+              aria-pressed={eraserMode}
+            >
+              <Eraser size={16} />
+            </button>
+
+            <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+
+            {/* 보이기/숨기기 토글 */}
+            <button
+              onClick={() => setVisible((v) => !v)}
+              className={`${toolbarCommonCls} ${
+                visible ? 'text-[#555] hover:text-[#222] hover:bg-black/5' : 'text-brand-purple bg-brand-purple/10'
+              }`}
+              title={visible ? '드로잉/주석 잠시 숨기기' : '드로잉/주석 다시 보기'}
+            >
+              {visible ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+
+            {/* 저장 */}
+            <button
+              onClick={handleSave}
+              disabled={saving || strokes.length === 0}
+              className={`${toolbarCommonCls} text-[#555] hover:text-brand-purple hover:bg-brand-purple/10 disabled:opacity-40 disabled:cursor-not-allowed`}
+              title={savedAt ? `저장됨 · 변경사항 저장` : '드로잉 저장 (재진입 시 복원)'}
+            >
+              {saving ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Save size={16} />
+              )}
+            </button>
+
+            {onClose && (
+              <>
+                <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+                <button
+                  onClick={onClose}
+                  className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5`}
+                  title="드로잉 종료"
+                >
+                  <X size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        );
+        return toolbarContainer ? createPortal(toolbarEl, toolbarContainer) : toolbarEl;
+      })()}
     </>
   );
 }
