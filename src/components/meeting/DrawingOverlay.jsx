@@ -14,9 +14,10 @@
 //  </div>
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { useToastStore } from '@/stores/toastStore';
 
 const COLORS = [
   { key: 'red', label: '빨강', value: '#EF4444' },
@@ -55,15 +56,22 @@ export default function DrawingOverlay({
   height,
   onClose,
   messages = [],
+  readOnly = false,       // true면 툴바 숨김 + 포인터 차단 (완료 회의 뷰용)
 }) {
   const { user } = useAuthStore();
+  const addToast = useToastStore((s) => s.addToast);
   const canvasRef = useRef(null);
   const [color, setColor] = useState(COLORS[0].value);
   const [strokes, setStrokes] = useState([]);      // 완성된 스트로크 (정규화 좌표)
   const [redoStack, setRedoStack] = useState([]);
+  const [visible, setVisible] = useState(true);     // 드로잉+주석 시각 토글
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const drawingRef = useRef(null);                  // 현재 그리는 중인 stroke
   const channelRef = useRef(null);
   const myIdRef = useRef(user?.id || `anon-${Math.random().toString(36).slice(2, 8)}`);
+  const skipNextRealtimeLoadRef = useRef(false);    // 자기가 저장한 리얼타임 에코는 스킵
 
   // 현재 사용자 정보 — 각 stroke에 첨부되어 원격 참여자 화면에 아바타 표시
   const myInfo = useMemo(() => ({
@@ -71,6 +79,115 @@ export default function DrawingOverlay({
     name: user?.name || '사용자',
     color: user?.avatar_color || '#723CEB',
   }), [user?.name, user?.avatar_color]);
+
+  // 마운트 시 DB에서 저장된 drawings 로드 + meeting_drawings 테이블 Realtime 구독
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !meetingId || !targetKey) {
+      setLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    let dbChannel = null;
+
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('meeting_drawings')
+          .select('strokes, updated_at')
+          .eq('meeting_id', meetingId)
+          .eq('target_key', targetKey)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error && error.code !== 'PGRST116') {
+          // PGRST116 = no rows (정상)
+          if (error.code === '42P01') {
+            console.warn('[DrawingOverlay] meeting_drawings 테이블 없음 — migration 039 실행 필요');
+          } else {
+            console.warn('[DrawingOverlay] load failed:', error);
+          }
+        } else if (data?.strokes && Array.isArray(data.strokes)) {
+          setStrokes(data.strokes);
+          setSavedAt(data.updated_at || null);
+        }
+      } catch (err) {
+        console.warn('[DrawingOverlay] load exception:', err);
+      }
+      if (!cancelled) setLoaded(true);
+    };
+    load();
+
+    // DB 변경 구독 — 다른 사용자가 저장 시 자동 동기화
+    dbChannel = supabase
+      .channel(`mdraw-db:${meetingId}:${targetKey}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'meeting_drawings',
+          filter: `meeting_id=eq.${meetingId}`,
+        },
+        (payload) => {
+          if (cancelled) return;
+          if (skipNextRealtimeLoadRef.current) {
+            skipNextRealtimeLoadRef.current = false;
+            return;
+          }
+          const row = payload.new || payload.old;
+          if (!row || row.target_key !== targetKey) return;
+          if (payload.eventType === 'DELETE') {
+            setStrokes([]);
+            setSavedAt(null);
+            return;
+          }
+          if (payload.new?.strokes && Array.isArray(payload.new.strokes)) {
+            setStrokes(payload.new.strokes);
+            setSavedAt(payload.new.updated_at || null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      if (dbChannel) { try { supabase.removeChannel(dbChannel); } catch {} }
+    };
+  }, [meetingId, targetKey]);
+
+  // 저장 — meeting_drawings 테이블에 upsert
+  const handleSave = async () => {
+    if (!SUPABASE_ENABLED || !meetingId || !targetKey || saving) return;
+    setSaving(true);
+    skipNextRealtimeLoadRef.current = true;  // 자기 에코 스킵
+    try {
+      const { data, error } = await supabase
+        .from('meeting_drawings')
+        .upsert(
+          {
+            meeting_id: meetingId,
+            target_key: targetKey,
+            strokes,
+            updated_by: user?.id || null,
+          },
+          { onConflict: 'meeting_id,target_key' }
+        )
+        .select('updated_at')
+        .single();
+      if (error) throw error;
+      setSavedAt(data?.updated_at || new Date().toISOString());
+      addToast?.(`드로잉을 저장했습니다 (${strokes.length}건)`, 'success', 2500);
+    } catch (err) {
+      console.error('[DrawingOverlay] save failed:', err);
+      const code = err?.code || '';
+      const msg = code === '42P01'
+        ? 'DB 테이블 없음 — migration 039 실행 필요'
+        : `저장 실패: ${err.message?.slice(0, 80) || ''}`;
+      addToast?.(msg, 'error', 4000);
+      skipNextRealtimeLoadRef.current = false;
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Realtime 채널 구독 — 같은 meetingId+targetKey 단위로 격리
   useEffect(() => {
@@ -316,24 +433,27 @@ export default function DrawingOverlay({
 
   return (
     <>
-      {/* 드로잉 레이어 — target 위에 absolute 오버랩 */}
+      {/* 드로잉 레이어 — visible=false 또는 readOnly 시 포인터 차단 */}
       <canvas
         ref={canvasRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerDown={readOnly ? undefined : onPointerDown}
+        onPointerMove={readOnly ? undefined : onPointerMove}
+        onPointerUp={readOnly ? undefined : onPointerUp}
+        onPointerCancel={readOnly ? undefined : onPointerUp}
         style={{
           position: 'absolute',
           inset: 0,
           touchAction: 'none',
-          cursor: 'crosshair',
+          cursor: readOnly ? 'default' : 'crosshair',
           zIndex: 5,
+          opacity: visible ? 1 : 0,
+          pointerEvents: readOnly ? 'none' : (visible ? 'auto' : 'none'),
+          transition: 'opacity 0.15s ease',
         }}
       />
 
-      {/* 각 stroke 끝 지점에 사용자 아바타 + 순번 뱃지 */}
-      {avatarMarkers.map((m) => (
+      {/* 각 stroke 끝 지점에 사용자 아바타 + 순번 뱃지 — visible=false면 숨김 */}
+      {visible && avatarMarkers.map((m) => (
         <div
           key={m.strokeId}
           className="group/dmark absolute z-[6] pointer-events-auto"
@@ -407,7 +527,8 @@ export default function DrawingOverlay({
         </div>
       ))}
 
-      {/* 플로팅 툴바 — 우측 상단 */}
+      {/* 플로팅 툴바 — readOnly면 숨김 */}
+      {!readOnly && (
       <div
         className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
         onMouseDown={(e) => e.stopPropagation()}
@@ -459,6 +580,35 @@ export default function DrawingOverlay({
           <Eraser size={14} />
         </button>
 
+        <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+
+        {/* 보이기/숨기기 토글 */}
+        <button
+          onClick={() => setVisible((v) => !v)}
+          className={`${toolbarCommonCls} ${
+            visible ? 'text-[#555] hover:text-[#222] hover:bg-black/5' : 'text-brand-purple bg-brand-purple/10'
+          }`}
+          title={visible ? '드로잉/주석 잠시 숨기기' : '드로잉/주석 다시 보기'}
+        >
+          {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+
+        {/* 저장 */}
+        <button
+          onClick={handleSave}
+          disabled={saving || strokes.length === 0}
+          className={`${toolbarCommonCls} text-[#555] hover:text-brand-purple hover:bg-brand-purple/10 disabled:opacity-40 disabled:cursor-not-allowed`}
+          title={savedAt ? `저장됨 · 변경사항 저장` : '드로잉 저장 (재진입 시 복원)'}
+        >
+          {saving ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : savedAt && strokes.length > 0 ? (
+            <Save size={14} />
+          ) : (
+            <Save size={14} />
+          )}
+        </button>
+
         {onClose && (
           <>
             <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
@@ -472,6 +622,7 @@ export default function DrawingOverlay({
           </>
         )}
       </div>
+      )}
     </>
   );
 }
