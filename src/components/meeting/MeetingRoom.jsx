@@ -1,7 +1,7 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -13,6 +13,7 @@ import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useToastStore } from '@/stores/toastStore';
 import { useFeedbackStore } from '@/stores/feedbackStore';
+import { useAuthStore } from '@/stores/authStore';
 import ChatArea from './ChatArea';
 import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
@@ -973,7 +974,12 @@ export default function MeetingRoom() {
   const setActiveMeetingId = useMeetingStore((s) => s.setActiveMeetingId);
   const setSummaryGeneratingId = useMeetingStore((s) => s.setSummaryGeneratingId);
   const addToast = useToastStore((s) => s.addToast);
+  const { user } = useAuthStore();
   const meeting = getById(id);
+  // 회의 요청자(생성자) 여부 — 버튼/동작 분기에 사용
+  //   요청자 → "회의 종료" (전체 종료 + 회의록 생성)
+  //   참가자 → "나가기" (혼자만 퇴장, 회의는 계속)
+  const isCreator = !!(meeting?.created_by && user?.id && meeting.created_by === user.id);
   const [activeAgendaId, setActiveAgendaId] = useState(null);
   const [aiThinking, setAiThinking] = useState(null);
   const [polls, setPolls] = useState([]);
@@ -1254,6 +1260,61 @@ export default function MeetingRoom() {
     addToast('회의가 종료되었습니다. (요약 없이 종료 — 회의록 목록에 표시되지 않아요)', 'info', 4000);
   };
 
+  // 참가자 재입장 공지 — 이전에 나간 적이 있다면 자동으로 "다시 입장" 시스템 메시지 전송.
+  //   - 요청자는 제외 (요청자는 "나가기" 개념이 없음)
+  //   - 메시지 히스토리에서 leave/rejoin 카운트 비교로 판단
+  //   - rejoinCheckedRef로 한 번의 마운트 동안 최대 1회만 실행
+  const rejoinCheckedRef = useRef(false);
+  useEffect(() => {
+    if (rejoinCheckedRef.current) return;
+    if (!user?.name || !meeting || isCreator) return;
+    if (meeting.status !== 'active') return;
+    if (!Array.isArray(messages) || messages.length === 0) return;
+
+    rejoinCheckedRef.current = true;
+    const myName = user.name;
+    let leaveCount = 0, rejoinCount = 0;
+    for (const m of messages) {
+      if (m.ai_type !== 'system') continue;
+      const c = m.content || '';
+      if (c.includes(`${myName}님이 회의에서 나갔습니다`)) leaveCount++;
+      else if (c.includes(`${myName}님이 회의에 다시 입장했습니다`)) rejoinCount++;
+    }
+    if (leaveCount > rejoinCount) {
+      sendMessage(`↩️ ${myName}님이 회의에 다시 입장했습니다.`, {
+        agendaId: currentAgenda?.id,
+        isAi: true,
+        aiType: 'system',
+        aiEmployee: 'system',
+      }).catch((err) => {
+        console.warn('[rejoin] 시스템 메시지 전송 실패:', err);
+        rejoinCheckedRef.current = false; // 재시도 허용
+      });
+    }
+  }, [messages, user, meeting, isCreator, sendMessage, currentAgenda]);
+
+  // 참가자(비요청자) — 회의 나가기. 확인 창 없이 즉시 퇴장.
+  //   1) 채팅에 "{이름}님이 회의에서 나갔습니다." 시스템 공지 전송
+  //   2) 회의 상태 변경 없음 (요청자가 계속 진행 가능)
+  //   3) 회의록은 요청자가 종료 시 생성 (기존 handleConfirmEnd 흐름)
+  const handleLeaveMeeting = async () => {
+    const leaverName = user?.name || '참가자';
+    try {
+      await sendMessage(`🚪 ${leaverName}님이 회의에서 나갔습니다.`, {
+        agendaId: currentAgenda?.id,
+        isAi: true,
+        aiType: 'system',
+        aiEmployee: 'system',
+      });
+    } catch (err) {
+      console.warn('[handleLeaveMeeting] 시스템 메시지 전송 실패:', err);
+    }
+    setActiveMeetingId(null);
+    setLeavingConfirmed(true);
+    clearSessionState(id);
+    navigate('/');
+  };
+
   const handleSend = async (content, opts = {}) => {
     await sendMessage(content, {
       agendaId: currentAgenda?.id,
@@ -1349,15 +1410,29 @@ export default function MeetingRoom() {
             <span className="hidden md:inline">요약</span>
           </Link>
 
-          {/* 회의 종료 */}
-          <button
-            onClick={handleEndClick}
-            className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
-          >
-            <Square size={16} strokeWidth={2.4} />
-            <span className="hidden md:inline">회의 종료</span>
-            <span className="md:hidden">종료</span>
-          </button>
+          {/* 요청자 → "회의 종료" (전체 종료 + 회의록 작성 안내) /
+              참가자 → "나가기" (즉시 퇴장, 확인창 없음) */}
+          {isCreator ? (
+            <button
+              onClick={handleEndClick}
+              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
+              title="회의를 종료하고 회의록을 생성합니다"
+            >
+              <Square size={16} strokeWidth={2.4} />
+              <span className="hidden md:inline">회의 종료</span>
+              <span className="md:hidden">종료</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleLeaveMeeting}
+              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-bg-tertiary border border-border-default text-txt-secondary text-xs md:text-sm font-medium hover:text-txt-primary hover:border-border-focus transition-colors"
+              title="회의에서 나갑니다 (회의는 계속 진행)"
+            >
+              <LogOut size={16} strokeWidth={2.4} />
+              <span className="hidden md:inline">나가기</span>
+              <span className="md:hidden">나가기</span>
+            </button>
+          )}
         </div>
       </div>
 

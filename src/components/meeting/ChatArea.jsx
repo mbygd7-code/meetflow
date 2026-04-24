@@ -150,7 +150,16 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           </div>
         ) : (
           messages.map((m) => (
-            <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} reactions={reactions} />
+            // 시스템 공지(입장/퇴장 등) — 중앙 정렬된 슬림 배너로 렌더
+            m.ai_type === 'system' ? (
+              <div key={m.id} className="flex justify-center fade-in">
+                <span className="px-3 py-1 rounded-full text-[11px] text-txt-muted bg-bg-tertiary/70 border border-border-subtle">
+                  {m.content}
+                </span>
+              </div>
+            ) : (
+              <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} reactions={reactions} />
+            )
           ))
         )}
 
