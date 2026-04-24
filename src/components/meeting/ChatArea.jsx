@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap, AlertTriangle } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap, AlertTriangle, LogOut, UserPlus } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
@@ -150,14 +150,24 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           </div>
         ) : (
           messages.map((m) => (
-            // 시스템 공지(입장/퇴장 등) — 중앙 정렬된 슬림 배너로 렌더
-            m.ai_type === 'system' ? (
-              <div key={m.id} className="flex justify-center fade-in">
-                <span className="px-3 py-1 rounded-full text-[11px] text-txt-muted bg-bg-tertiary/70 border border-border-subtle">
-                  {m.content}
-                </span>
-              </div>
-            ) : (
+            // 시스템 공지(입장/퇴장 등) — 중앙 정렬 배너 + 문맥 아이콘
+            m.ai_type === 'system' ? (() => {
+              const raw = m.content || '';
+              // 과거 이모지(🚪 ↩️) 제거하여 아이콘으로 일원화
+              const text = raw.replace(/^[🚪↩️]\s*/u, '').trim();
+              const isRejoin = /다시\s*입장/.test(text);
+              // 아이콘과 색상 모두 대비 — 나가기(빨강 LogOut) vs 재입장(초록 UserPlus)
+              const Icon = isRejoin ? UserPlus : LogOut;
+              const iconColor = isRejoin ? 'text-status-success' : 'text-status-error';
+              return (
+                <div key={m.id} className="flex justify-center fade-in">
+                  <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm text-txt-secondary bg-bg-tertiary/70 border border-border-subtle">
+                    <Icon size={14} className={`${iconColor} shrink-0 opacity-80`} />
+                    {text}
+                  </span>
+                </div>
+              );
+            })() : (
               <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} reactions={reactions} />
             )
           ))

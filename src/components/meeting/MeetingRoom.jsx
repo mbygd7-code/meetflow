@@ -1281,7 +1281,7 @@ export default function MeetingRoom() {
       else if (c.includes(`${myName}님이 회의에 다시 입장했습니다`)) rejoinCount++;
     }
     if (leaveCount > rejoinCount) {
-      sendMessage(`↩️ ${myName}님이 회의에 다시 입장했습니다.`, {
+      sendMessage(`${myName}님이 회의에 다시 입장했습니다.`, {
         agendaId: currentAgenda?.id,
         isAi: true,
         aiType: 'system',
@@ -1300,7 +1300,7 @@ export default function MeetingRoom() {
   const handleLeaveMeeting = async () => {
     const leaverName = user?.name || '참가자';
     try {
-      await sendMessage(`🚪 ${leaverName}님이 회의에서 나갔습니다.`, {
+      await sendMessage(`${leaverName}님이 회의에서 나갔습니다.`, {
         agendaId: currentAgenda?.id,
         isAi: true,
         aiType: 'system',
