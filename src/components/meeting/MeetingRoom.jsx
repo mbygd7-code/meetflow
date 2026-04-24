@@ -1,7 +1,7 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -17,6 +17,7 @@ import ChatArea from './ChatArea';
 import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
 import PdfViewer from './PdfViewer';
+import DrawingOverlay from './DrawingOverlay';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
@@ -165,12 +166,15 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
 }
 
 // ── 이미지 패널 내부 확대 오버레이 (다른 자료 덮음) ──
-function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
+function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId }) {
   const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
   const [sliderOpen, setSliderOpen] = useState(false);
+  const [drawingActive, setDrawingActive] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const scrollRef = useRef(null);
   const panRef = useRef(null);
   const sliderContainerRef = useRef(null);
+  const imageRef = useRef(null);
   const isZoomed = zoomScale > 100;
 
   // 슬라이더 외부 클릭 → 닫기 (이미지/채팅창/입력창 어디든 밖을 클릭하면 닫힘)
@@ -223,6 +227,18 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-divider shrink-0">
         <p className="text-xs font-medium text-txt-primary truncate flex-1">{file.name}</p>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setDrawingActive((v) => !v)}
+            className={`p-1.5 rounded transition-colors ${
+              drawingActive
+                ? 'text-white bg-brand-purple'
+                : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
+            }`}
+            title={drawingActive ? '드로잉 종료' : '드로잉 켜기 (실시간 공유)'}
+            aria-label="드로잉 토글"
+          >
+            <Pencil size={14} />
+          </button>
           {url && (
             <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
                className="text-[11px] text-brand-purple hover:underline px-1.5">
@@ -259,29 +275,49 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
           }}
         >
           {url ? (
-            <img
-              src={url}
-              alt={file.name}
-              onLoad={(e) => onImageLoad?.(e.target.naturalWidth, e.target.naturalHeight)}
-              draggable={false}
-              style={
-                zoomScale === 100
-                  ? { overflowAnchor: 'none' }
-                  : {
-                      width: `${zoomScale}%`,
-                      height: 'auto',
-                      maxWidth: 'none',
-                      maxHeight: 'none',
-                      flexShrink: 0,
-                      overflowAnchor: 'none',
-                    }
-              }
-              className={`select-none pointer-events-none ${
-                zoomScale === 100
-                  ? 'max-w-full max-h-full object-contain rounded-md shadow-md'
-                  : 'rounded-md shadow-md'
-              }`}
-            />
+            <div className="relative shrink-0" style={{ overflowAnchor: 'none' }}>
+              <img
+                ref={imageRef}
+                src={url}
+                alt={file.name}
+                onLoad={(e) => {
+                  onImageLoad?.(e.target.naturalWidth, e.target.naturalHeight);
+                  // 드로잉 캔버스 크기 추적
+                  setCanvasSize({
+                    w: e.target.clientWidth,
+                    h: e.target.clientHeight,
+                  });
+                }}
+                draggable={false}
+                style={
+                  zoomScale === 100
+                    ? { overflowAnchor: 'none' }
+                    : {
+                        width: `${zoomScale}%`,
+                        height: 'auto',
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        flexShrink: 0,
+                        overflowAnchor: 'none',
+                      }
+                }
+                className={`select-none ${drawingActive ? '' : 'pointer-events-none'} ${
+                  zoomScale === 100
+                    ? 'max-w-full max-h-full object-contain rounded-md shadow-md block'
+                    : 'rounded-md shadow-md block'
+                }`}
+              />
+              {/* 드로잉 오버레이 — active 상태에서만 렌더 */}
+              {drawingActive && (
+                <DrawingOverlay
+                  targetKey={`img:${file.id || file.name}`}
+                  meetingId={meetingId}
+                  width={imageRef.current?.clientWidth || canvasSize.w}
+                  height={imageRef.current?.clientHeight || canvasSize.h}
+                  onClose={() => setDrawingActive(false)}
+                />
+              )}
+            </div>
           ) : (
             <p className="text-xs text-txt-muted">로딩 중...</p>
           )}
@@ -378,7 +414,19 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
 }
 
 // ── 문서 플로팅 윈도우 (드래그/리사이즈 가능, 배경 오버레이 없음) ──
-function FloatingDocumentWindow({ file, url, onClose }) {
+function FloatingDocumentWindow({ file, url, onClose, meetingId }) {
+  const [drawingActive, setDrawingActive] = useState(false);
+  const bodyRef = useRef(null);
+  const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!bodyRef.current) return;
+    const el = bodyRef.current;
+    const update = () => setBodySize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [pos, setPos] = useState({ x: 120, y: 80 });
   const [size, setSize] = useState({ w: 720, h: 540 });
   const [minimized, setMinimized] = useState(false);
@@ -530,6 +578,20 @@ function FloatingDocumentWindow({ file, url, onClose }) {
           <p className="text-xs font-medium text-txt-primary truncate">{file.name}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          {!minimized && (
+            <button
+              onClick={() => setDrawingActive((v) => !v)}
+              className={`p-1.5 rounded transition-colors ${
+                drawingActive
+                  ? 'text-white bg-brand-purple'
+                  : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
+              }`}
+              title={drawingActive ? '드로잉 종료' : '드로잉 켜기 (실시간 공유)'}
+              aria-label="드로잉 토글"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
           {url && !minimized && (
             <a href={url} download={file.name} target="_blank" rel="noopener noreferrer"
                className="text-[11px] text-brand-purple hover:underline px-1.5">
@@ -553,7 +615,10 @@ function FloatingDocumentWindow({ file, url, onClose }) {
         </div>
       </div>
       {/* 바디 — PDF는 react-pdf로 렌더, 이미지/기타는 기존 방식. min-h-0으로 flex overflow 허용 */}
-      <div className={`flex-1 min-h-0 ${isPdf ? '' : 'overflow-auto bg-bg-primary/50 flex items-center justify-center p-2'}`}>
+      <div
+        ref={bodyRef}
+        className={`flex-1 min-h-0 relative ${isPdf ? '' : 'overflow-auto bg-bg-primary/50 flex items-center justify-center p-2'}`}
+      >
         {isPdf && url ? (
           <PdfViewer url={url} />
         ) : isImage && url ? (
@@ -569,6 +634,17 @@ function FloatingDocumentWindow({ file, url, onClose }) {
           </div>
         ) : (
           <p className="text-xs text-txt-muted">로딩 중...</p>
+        )}
+
+        {/* 드로잉 오버레이 — 바디 전체 영역 덮음 */}
+        {drawingActive && bodySize.w > 0 && bodySize.h > 0 && (
+          <DrawingOverlay
+            targetKey={`doc:${file.id || file.name}`}
+            meetingId={meetingId}
+            width={bodySize.w}
+            height={bodySize.h}
+            onClose={() => setDrawingActive(false)}
+          />
         )}
       </div>
       {/* 리사이즈 핸들 — 우측 엣지(가로) / 하단 엣지(세로) / 우하단 코너(대각선)
@@ -608,7 +684,7 @@ function FloatingDocumentWindow({ file, url, onClose }) {
 // - 문서 썸네일: 고정 140px 중앙 정렬
 // - 이미지 클릭: 패널 내부 오버레이로 확대 (다른 자료 덮음)
 // - 문서 클릭: 드래그/리사이즈 가능한 플로팅 윈도우 (body portal, 오버레이 없음)
-function DocumentPanel({ files = [], getUrl }) {
+function DocumentPanel({ files = [], getUrl, meetingId }) {
   // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
   const [width, setWidth] = useState(() => {
     try {
@@ -773,6 +849,7 @@ function DocumentPanel({ files = [], getUrl }) {
             url={zoomUrl}
             onClose={closeZoom}
             onImageLoad={handleImageLoaded}
+            meetingId={meetingId}
           />
         )}
 
@@ -795,6 +872,7 @@ function DocumentPanel({ files = [], getUrl }) {
           file={docFile}
           url={docUrl}
           onClose={() => { setDocFile(null); setDocUrl(null); }}
+          meetingId={meetingId}
         />
       )}
     </>
@@ -1197,6 +1275,7 @@ export default function MeetingRoom() {
         <DocumentPanel
           files={meetingFiles}
           getUrl={getMeetingFileUrl}
+          meetingId={id}
         />
 
         {/* 채팅 영역 */}
