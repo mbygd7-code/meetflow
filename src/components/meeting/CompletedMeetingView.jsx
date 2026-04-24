@@ -18,6 +18,7 @@ import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useAuthStore } from '@/stores/authStore';
 import { safeFormatDate } from '@/utils/formatters';
 import { supabase } from '@/lib/supabase';
+import CompletedMeetingFiles from './CompletedMeetingFiles';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -2206,6 +2207,9 @@ export default function CompletedMeetingView({ meeting }) {
             </div>
           )}
         </div>
+
+      {/* ═══ 자료 · 드로잉 히스토리 패널 (완료 회의 전용) ═══ */}
+      <CompletedMeetingFiles meetingId={meeting.id} />
 
       {/* ═══ 메인 ═══ */}
       <div className="flex flex-1 overflow-hidden">
