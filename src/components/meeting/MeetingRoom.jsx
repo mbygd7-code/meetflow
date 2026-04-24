@@ -608,9 +608,8 @@ function DocumentPanel({ files = [], getUrl }) {
       : (file.preview || file.url || null);
 
     if (isImageFile(file)) {
-      // 이미지 확대 시: 현재 폭 기억 + 패널을 최대 폭으로 자동 확장
+      // 원래 폭 기억 (onClose에서 복구용). 패널 폭은 이미지 로드 후 실제 크기에 맞춰 조정.
       if (widthBeforeZoom === null) setWidthBeforeZoom(width);
-      setWidth((prev) => Math.max(prev, getMaxPanelWidth()));
       setZoomFile(file);
       setZoomUrl(url);
     } else {
@@ -629,11 +628,15 @@ function DocumentPanel({ files = [], getUrl }) {
     }
   };
 
-  // 이미지 로드 후: 실제 이미지 너비에 맞게 패널 폭을 더 정교하게 조정
+  // 이미지 로드 후: 실제 이미지 너비에 맞춰 패널 폭을 정확히 조정
+  // 이미지가 원래 폭보다 작으면 줄이고, 크면 확장 (최대 제한 내에서)
+  // 여백 없이 이미지가 꽉 차 보이도록 함
   const handleImageLoaded = (naturalWidth) => {
     if (!naturalWidth) return;
-    const ideal = Math.min(naturalWidth + 48, getMaxPanelWidth()); // 48px = 패딩 여유
-    setWidth((prev) => (ideal > prev ? ideal : prev));
+    const MIN = 240;               // 너무 작은 이미지도 읽기 편한 최소 폭
+    const max = getMaxPanelWidth();
+    const target = Math.min(Math.max(naturalWidth + 48, MIN), max);
+    setWidth(target);
   };
 
   // 파일 리스트에서 현재 열린 파일이 사라지면 닫기
