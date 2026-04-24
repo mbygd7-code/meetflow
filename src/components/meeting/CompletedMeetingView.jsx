@@ -2407,15 +2407,6 @@ export default function CompletedMeetingView({ meeting }) {
                               isHighlighted ? 'bg-brand-purple/10 -mx-3 px-3 py-2 rounded-lg ring-2 ring-brand-purple/60' : ''
                             }`}
                           >
-                            {/* V6: 호버 시 태스크 생성 버튼 */}
-                            <button
-                              onClick={() => handleQuickCreateFromMessage(m)}
-                              className="absolute right-0 top-0 z-10 opacity-0 group-hover/msg:opacity-100 transition-opacity inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-white bg-brand-purple hover:opacity-90 shadow-sm"
-                              title="이 메시지로 태스크 생성"
-                            >
-                              <ListTodo size={10} strokeWidth={2.6} />
-                              태스크 만들기
-                            </button>
                             {cited && (
                               <div className="flex items-center gap-1 mb-1 ml-13 pl-13 text-[10px] text-brand-purple font-semibold">
                                 <span
