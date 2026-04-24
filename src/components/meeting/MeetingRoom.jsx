@@ -240,8 +240,15 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad }) {
         <div
           ref={scrollRef}
           onMouseDown={onPanStart}
+          onDoubleClick={(e) => {
+            // 버튼/슬라이더 위 더블클릭은 무시
+            if (e.target.closest('button, input, a, [role="slider"]')) return;
+            if (sliderContainerRef.current && sliderContainerRef.current.contains(e.target)) return;
+            setZoomScale(100);
+          }}
+          title={isZoomed ? '더블클릭으로 원래 크기' : '더블클릭으로 원래 크기'}
           className={`absolute inset-0 overflow-auto flex p-3 ${
-            isZoomed ? 'cursor-grab active:cursor-grabbing' : ''
+            isZoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
           }`}
           style={{
             justifyContent: 'safe center',
