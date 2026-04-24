@@ -166,7 +166,7 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
 }
 
 // ── 이미지 패널 내부 확대 오버레이 (다른 자료 덮음) ──
-function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId }) {
+function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages = [] }) {
   const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
   const [sliderOpen, setSliderOpen] = useState(false);
   const [drawingActive, setDrawingActive] = useState(false);
@@ -314,6 +314,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId }) {
                   meetingId={meetingId}
                   width={imageRef.current?.clientWidth || canvasSize.w}
                   height={imageRef.current?.clientHeight || canvasSize.h}
+                  messages={messages}
                   onClose={() => setDrawingActive(false)}
                 />
               )}
@@ -414,7 +415,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId }) {
 }
 
 // ── 문서 플로팅 윈도우 (드래그/리사이즈 가능, 배경 오버레이 없음) ──
-function FloatingDocumentWindow({ file, url, onClose, meetingId }) {
+function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }) {
   const [drawingActive, setDrawingActive] = useState(false);
   const bodyRef = useRef(null);
   const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
@@ -643,6 +644,7 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId }) {
             meetingId={meetingId}
             width={bodySize.w}
             height={bodySize.h}
+            messages={messages}
             onClose={() => setDrawingActive(false)}
           />
         )}
@@ -684,7 +686,7 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId }) {
 // - 문서 썸네일: 고정 140px 중앙 정렬
 // - 이미지 클릭: 패널 내부 오버레이로 확대 (다른 자료 덮음)
 // - 문서 클릭: 드래그/리사이즈 가능한 플로팅 윈도우 (body portal, 오버레이 없음)
-function DocumentPanel({ files = [], getUrl, meetingId }) {
+function DocumentPanel({ files = [], getUrl, meetingId, messages = [] }) {
   // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
   const [width, setWidth] = useState(() => {
     try {
@@ -850,6 +852,7 @@ function DocumentPanel({ files = [], getUrl, meetingId }) {
             onClose={closeZoom}
             onImageLoad={handleImageLoaded}
             meetingId={meetingId}
+            messages={messages}
           />
         )}
 
@@ -873,6 +876,7 @@ function DocumentPanel({ files = [], getUrl, meetingId }) {
           url={docUrl}
           onClose={() => { setDocFile(null); setDocUrl(null); }}
           meetingId={meetingId}
+          messages={messages}
         />
       )}
     </>
@@ -1276,6 +1280,7 @@ export default function MeetingRoom() {
           files={meetingFiles}
           getUrl={getMeetingFileUrl}
           meetingId={id}
+          messages={messages}
         />
 
         {/* 채팅 영역 */}

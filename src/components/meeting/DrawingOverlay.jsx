@@ -34,12 +34,27 @@ const toNorm = (x, y, w, h) => ({
 });
 const toPx = (nx, ny, w, h) => ({ x: nx * w, y: ny * h });
 
+// 메시지에서 드로잉 태그 파싱: @이름-숫자 (공백 또는 특수문자 뒤까지)
+// 한국어 이름 + 영숫자 대응
+const DRAWING_TAG_RE = /@([\u3131-\uD79D\w._-]+?)-(\d+)/g;
+function parseDrawingTags(content) {
+  if (!content) return [];
+  const out = [];
+  DRAWING_TAG_RE.lastIndex = 0;
+  let m;
+  while ((m = DRAWING_TAG_RE.exec(content)) !== null) {
+    out.push({ name: m[1], seq: parseInt(m[2], 10), raw: m[0], index: m.index });
+  }
+  return out;
+}
+
 export default function DrawingOverlay({
   targetKey,
   meetingId,
   width,
   height,
   onClose,
+  messages = [],
 }) {
   const { user } = useAuthStore();
   const canvasRef = useRef(null);
@@ -217,10 +232,57 @@ export default function DrawingOverlay({
 
   const toolbarCommonCls = 'inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors';
 
-  // 각 stroke의 bounding box 우상단에 아바타 — 겹치는 stroke는 가장 최신만
-  // (한 사용자가 같은 근처에 여러 번 그려도 아바타 도배 방지)
+  // 각 stroke에 사용자별 순번(seq) 부여 — 한 사용자의 1번째/2번째/...
+  // 배열 순서(broadcast 도착 순서) 기반이라 모든 클라이언트에서 동일한 번호 배정
+  const strokeSeqMap = useMemo(() => {
+    const counts = {};
+    const map = {};
+    for (const s of strokes) {
+      const uid = s.user_id || 'anon';
+      counts[uid] = (counts[uid] || 0) + 1;
+      map[s.id] = counts[uid];
+    }
+    return map;
+  }, [strokes]);
+
+  // 메시지 스캔 → strokeId → [{ text, userName }] 매핑
+  // 태그 `@{name}-{seq}` 가 포함된 메시지를 해당 stroke에 연결
+  const annotationsByStrokeId = useMemo(() => {
+    const result = {};
+    if (!messages?.length || strokes.length === 0) return result;
+
+    // stroke 빠른 조회: (name, seq) → strokeId
+    const strokeByNameSeq = {};
+    for (const s of strokes) {
+      const key = `${s.user_name || ''}::${strokeSeqMap[s.id]}`;
+      strokeByNameSeq[key] = s.id;
+    }
+
+    for (const m of messages) {
+      const tags = parseDrawingTags(m.content || '');
+      if (tags.length === 0) continue;
+      // 태그 제거한 본문 (자료의 텍스트 박스에 표시할 내용)
+      let stripped = m.content;
+      for (const t of tags) stripped = stripped.replace(t.raw, '').trim();
+      if (!stripped) continue;
+
+      for (const t of tags) {
+        const sid = strokeByNameSeq[`${t.name}::${t.seq}`];
+        if (!sid) continue;
+        (result[sid] ||= []).push({
+          text: stripped,
+          authorName: m.user?.name || '사용자',
+          authorColor: m.user?.avatar_color || m.user?.color || '#723CEB',
+          createdAt: m.created_at,
+          msgId: m.id,
+        });
+      }
+    }
+    return result;
+  }, [messages, strokes, strokeSeqMap]);
+
+  // 각 stroke의 last point 위치에 아바타 + 순번 뱃지
   const avatarMarkers = useMemo(() => {
-    // stroke별로 last point의 pixel 좌표 + 사용자 정보
     const markers = [];
     for (const s of strokes) {
       if (!s.points || s.points.length === 0) continue;
@@ -230,12 +292,27 @@ export default function DrawingOverlay({
         x: last.x * (width || 0),
         y: last.y * (height || 0),
         name: s.user_name || '사용자',
+        userId: s.user_id,
+        seq: strokeSeqMap[s.id] || 0,
         color: s.user_color || s.color || '#723CEB',
         strokeColor: s.color || '#EF4444',
+        annotations: annotationsByStrokeId[s.id] || [],
       });
     }
     return markers;
-  }, [strokes, width, height]);
+  }, [strokes, width, height, strokeSeqMap, annotationsByStrokeId]);
+
+  // 아바타 클릭 → 채팅 입력창에 태그 주입 (CustomEvent)
+  const handleAvatarClick = (marker) => {
+    const tag = `@${marker.name}-${marker.seq} `;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('meetflow:drawing-tag', {
+          detail: { tag, userName: marker.name, seq: marker.seq, strokeId: marker.strokeId },
+        })
+      );
+    } catch {}
+  };
 
   return (
     <>
@@ -255,7 +332,7 @@ export default function DrawingOverlay({
         }}
       />
 
-      {/* 각 stroke 끝 지점에 사용자 아바타 — 호버 시 풀네임 노출 */}
+      {/* 각 stroke 끝 지점에 사용자 아바타 + 순번 뱃지 */}
       {avatarMarkers.map((m) => (
         <div
           key={m.strokeId}
@@ -263,24 +340,70 @@ export default function DrawingOverlay({
           style={{
             left: `${m.x}px`,
             top: `${m.y}px`,
-            transform: 'translate(-50%, -130%)',  // 포인트 바로 위
+            transform: 'translate(-50%, -130%)',
           }}
         >
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+          {/* 아바타 본체 — 클릭 시 채팅 태그 주입 */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleAvatarClick(m); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white hover:scale-110 transition-transform"
             style={{
               backgroundColor: m.color,
-              // 흰 테두리 + 스트로크 색 링 — 배경 자료에 대비
               boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${m.strokeColor}, 0 3px 6px rgba(0,0,0,0.35)`,
             }}
-            title={m.name}
+            title={`${m.name} · #${m.seq} · 클릭하면 채팅 태그`}
           >
             {(m.name || '?')[0]}
-          </div>
+            {/* 순번 뱃지 — 우상단 */}
+            <span
+              className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-[#222] bg-white border border-[#555] leading-none"
+              style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+            >
+              {m.seq}
+            </span>
+          </button>
+
           {/* 호버 툴팁 */}
           <span className="opacity-0 group-hover/dmark:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap px-2 py-1 rounded bg-black/85 text-white text-[11px] font-medium pointer-events-none">
-            {m.name}
+            {m.name} #{m.seq}
           </span>
+
+          {/* 태그된 메시지의 텍스트 박스 — 아바타 바로 아래에 쌓여 표시 */}
+          {m.annotations.length > 0 && (
+            <div
+              className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 flex flex-col gap-1 w-[220px] max-w-[220px]"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {m.annotations.slice(-3).map((a, i) => (
+                <div
+                  key={a.msgId || i}
+                  className="rounded-md bg-white/95 border text-[11px] text-[#222] px-2 py-1 shadow-md backdrop-blur-sm"
+                  style={{ borderColor: m.strokeColor }}
+                  title={`${a.authorName} · ${a.text}`}
+                >
+                  <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5" style={{ color: m.strokeColor }}>
+                    <span
+                      className="w-3 h-3 rounded-full text-white flex items-center justify-center text-[8px] font-bold"
+                      style={{ backgroundColor: a.authorColor }}
+                    >
+                      {(a.authorName || '?')[0]}
+                    </span>
+                    {a.authorName}
+                  </div>
+                  <p className="leading-snug break-words line-clamp-3">{a.text}</p>
+                </div>
+              ))}
+              {m.annotations.length > 3 && (
+                <span className="text-[9px] text-center text-white bg-black/60 rounded px-1">
+                  외 {m.annotations.length - 3}개
+                </span>
+              )}
+            </div>
+          )}
         </div>
       ))}
 

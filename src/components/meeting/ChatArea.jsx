@@ -37,6 +37,25 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
     return () => clearTimeout(bannerTimerRef.current);
   }, [autoIntervene]);
 
+  // 드로잉 태그 이벤트 리스너 — DrawingOverlay 아바타 클릭 시 input에 태그 주입
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = e?.detail?.tag;
+      if (!tag) return;
+      setInput((prev) => {
+        // 이미 태그가 있으면 중복 추가 방지
+        if (prev.includes(tag.trim())) return prev;
+        // 끝에 공백 확보
+        const sep = prev && !prev.endsWith(' ') ? ' ' : '';
+        return prev + sep + tag;
+      });
+      // 입력창 포커스
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener('meetflow:drawing-tag', handler);
+    return () => window.removeEventListener('meetflow:drawing-tag', handler);
+  }, []);
+
   // STT 설정 읽기 (state로 관리하여 설정 변경 즉시 반영)
   const [sttProvider] = useState(() => {
     try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
