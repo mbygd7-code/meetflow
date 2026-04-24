@@ -267,18 +267,18 @@ export default function DrawingOverlay({
           }}
         >
           <div
-            className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{
               backgroundColor: m.color,
               // 흰 테두리 + 스트로크 색 링 — 배경 자료에 대비
-              boxShadow: `0 0 0 1.5px #fff, 0 0 0 3px ${m.strokeColor}, 0 2px 4px rgba(0,0,0,0.3)`,
+              boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${m.strokeColor}, 0 3px 6px rgba(0,0,0,0.35)`,
             }}
             title={m.name}
           >
             {(m.name || '?')[0]}
           </div>
           {/* 호버 툴팁 */}
-          <span className="opacity-0 group-hover/dmark:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-7 whitespace-nowrap px-2 py-0.5 rounded bg-black/80 text-white text-[10px] font-medium pointer-events-none">
+          <span className="opacity-0 group-hover/dmark:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap px-2 py-1 rounded bg-black/85 text-white text-[11px] font-medium pointer-events-none">
             {m.name}
           </span>
         </div>
