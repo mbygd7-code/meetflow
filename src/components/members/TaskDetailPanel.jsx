@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, Calendar, User, FileText, AlertCircle, Clock, MessageSquare,
-  CheckSquare, Square, Plus, Trash2, Edit2, Save, Link2, ChevronDown,
+  CheckSquare, Square, Plus, Trash2, Edit2, Save, ChevronDown, History,
   Flag, Sparkles, Tag, ExternalLink,
 } from 'lucide-react';
 import { format, parseISO, isValid, differenceInDays } from 'date-fns';
@@ -83,12 +83,13 @@ export default function TaskDetailPanel({
   );
   const canChangeStatus = canEdit || onStatusChange;
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/members?member=all&task=${task.id}`;
-    navigator.clipboard.writeText(url).then(
-      () => addToast('링크가 복사되었습니다', 'success'),
-      () => addToast('복사 실패', 'error')
-    );
+  // 히스토리 열기 — 태스크가 속한 회의의 완료 회의 뷰로 이동
+  const handleOpenHistory = () => {
+    if (!task.meeting_id) {
+      addToast('이 태스크는 연결된 회의가 없어요', 'info', 2500);
+      return;
+    }
+    window.open(`/meetings/${task.meeting_id}?history=1`, '_blank', 'noopener,noreferrer');
   };
 
   return createPortal(
@@ -118,13 +119,16 @@ export default function TaskDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={handleCopyLink}
-              className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary transition-colors"
-              title="링크 복사"
-            >
-              <Link2 size={15} />
-            </button>
+            {task.meeting_id && (
+              <button
+                onClick={handleOpenHistory}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 hover:border-brand-purple/40 transition-colors"
+                title="이 태스크가 나온 회의의 완료 뷰(히스토리)로 이동"
+              >
+                <History size={13} strokeWidth={2.4} />
+                <span>히스토리</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary transition-colors"
