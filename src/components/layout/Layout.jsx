@@ -79,6 +79,8 @@ function MobileTabBar() {
 export default function Layout() {
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 자료 풀사이즈 뷰어 활성 시 LNB 최소화 신호 — 회의방 등에서 set
+  const [sidebarForceMinimized, setSidebarForceMinimized] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // 글로벌 단축키 — Cmd/Ctrl+K 로 팔레트 토글, "/" 로도 열기 (input/textarea 외 영역에서만)
@@ -112,14 +114,14 @@ export default function Layout() {
     '';
 
   return (
-    <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
+    <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen, sidebarForceMinimized, setSidebarForceMinimized }}>
       <CommandPaletteContext.Provider value={{ paletteOpen, setPaletteOpen, openPalette: () => setPaletteOpen(true) }}>
       <div className="flex flex-col h-screen bg-bg-primary text-txt-primary">
         {!hideTopBar && <TopBar />}
         <div className="flex flex-1 overflow-hidden">
           {/* 데스크톱 사이드바 */}
           <div className="hidden md:block">
-            <Sidebar />
+            <Sidebar forceMinimized={sidebarForceMinimized} />
           </div>
 
           {/* 모바일 사이드바 오버레이 */}

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -24,6 +25,10 @@ export default function PdfViewer({
   fileName,
   messages = [],
   toolbarContainer,
+  // 라이브 동기화 — 다른 참가자가 페이지 넘기면 따라가기
+  presenterPage,         // 외부가 강제로 지정하는 페이지 (null/undefined = 미사용)
+  onPageChange,          // 내 페이지 변경 시 부모에게 알림 → broadcast
+  controlsContainer,     // HTMLElement | null — 지정 시 컨트롤(페이지/줌)을 이 노드에 포털 렌더
 }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -40,18 +45,30 @@ export default function PdfViewer({
   useEffect(() => {
     const el = pageWrapRef.current;
     if (!el) return;
+    // 진동 방지:
+    //  - offsetWidth/Height (정수, subpixel 없음)
+    //  - 2px 미만 변화는 무시 (canvas 리사이즈 → RO 재발화 루프 차단)
+    //  - rAF 디바운스로 같은 프레임 내 다중 RO 발화를 1회로 합침
+    let rafId = null;
     const update = () => {
-      const r = el.getBoundingClientRect();
-      setPageBox((prev) =>
-        prev.w === Math.round(r.width) && prev.h === Math.round(r.height)
-          ? prev
-          : { w: Math.round(r.width), h: Math.round(r.height) }
-      );
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        setPageBox((prev) => {
+          if (Math.abs(prev.w - w) < 2 && Math.abs(prev.h - h) < 2) return prev;
+          return { w, h };
+        });
+      });
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [pageNumber, fitWidth, zoom]);
 
   const onDocumentLoadSuccess = useCallback(async (pdf) => {
@@ -75,6 +92,97 @@ export default function PdfViewer({
     setLoadError(err?.message || 'PDF를 불러올 수 없습니다');
   }, []);
 
+  // ── 라이브 동기화 ──
+  // 1) presenterPage 변경 시 내 pageNumber도 동기화 (loop 방지: 같은 값이면 무시)
+  useEffect(() => {
+    if (presenterPage == null) return;
+    if (numPages != null && (presenterPage < 1 || presenterPage > numPages)) return;
+    setPageNumber((cur) => (cur === presenterPage ? cur : presenterPage));
+  }, [presenterPage, numPages]);
+  // 2) 내 pageNumber 변경 시 부모에 알림 (broadcast 트리거)
+  //    presenterPage 와 같은 값일 때는 알리지 않음 (수신 → 적용 → 재 broadcast 루프 방지)
+  //    초기 마운트 시 pageNumber=1 자동 broadcast 도 억제 (실제 사용자 액션만 broadcast)
+  const lastBroadcastedPageRef = useRef(null);
+  const initialBroadcastSkippedRef = useRef(false);
+  useEffect(() => {
+    if (typeof onPageChange !== 'function') return;
+    // 첫 마운트 시 초기값(1) broadcast 스킵 — 의도하지 않은 follower 페이지 변경 방지
+    if (!initialBroadcastSkippedRef.current) {
+      initialBroadcastSkippedRef.current = true;
+      lastBroadcastedPageRef.current = pageNumber;
+      return;
+    }
+    if (pageNumber === presenterPage) return;
+    if (lastBroadcastedPageRef.current === pageNumber) return;
+    lastBroadcastedPageRef.current = pageNumber;
+    onPageChange(pageNumber);
+  }, [pageNumber, presenterPage, onPageChange]);
+
+  // ── 모바일 핀치줌 (두 손가락) ──
+  // touchstart 시 두 손가락 간 거리 기록 → touchmove 에서 비율로 zoom 조정
+  //   zoom 클로저 stale 방지: ref로 최신 zoom 유지
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    let pinchStartDist = null;
+    let pinchStartZoom = 1;
+    const dist = (t) => {
+      const dx = t[0].clientX - t[1].clientX;
+      const dy = t[0].clientY - t[1].clientY;
+      return Math.hypot(dx, dy);
+    };
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = dist(e.touches);
+        pinchStartZoom = zoomRef.current;
+      }
+    };
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || pinchStartDist == null) return;
+      e.preventDefault();
+      const scale = dist(e.touches) / pinchStartDist;
+      const next = Math.max(0.5, Math.min(3, +(pinchStartZoom * scale).toFixed(2)));
+      setZoom(next);
+    };
+    const onTouchEnd = (e) => {
+      if (e.touches.length < 2) pinchStartDist = null;
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
+
+  // ── Ctrl/Cmd + 마우스 휠 → 줌 인/아웃 ──
+  // React onWheel은 일부 환경에서 passive로 처리되어 preventDefault 무시될 수 있음
+  // → DOM 직접 listener (passive:false) 로 안전하게 막고 zoom 조정
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // deltaY: 음수=위로 굴림(확대), 양수=아래로 굴림(축소)
+      const step = 0.1;
+      setZoom((z) => {
+        const next = e.deltaY < 0 ? z + step : z - step;
+        const clamped = Math.max(0.5, Math.min(3, +next.toFixed(2)));
+        return clamped;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   // ResizeObserver로 컨테이너 크기 변화 감지 → fit width 계산
   // 최적화: rAF 디바운스 + 10px 단위 스냅으로 PDF canvas 재렌더 최소화
   useEffect(() => {
@@ -91,8 +199,8 @@ export default function PdfViewer({
         const byHeight = ch * pageAspect;
         const byWidth = cw;
         const fit = Math.max(80, Math.min(byWidth, byHeight));
-        // 10px 단위 스냅 — 같은 값이면 리렌더 스킵 (React 얕은 비교)
-        const snapped = Math.round(fit / 10) * 10;
+        // 20px 단위 스냅 — 스크롤바 폭(~15px) 변화는 흡수, 의미 있는 폭 변화만 반영
+        const snapped = Math.round(fit / 20) * 20;
         setFitWidth((prev) => (prev === snapped ? prev : snapped));
       });
     };
@@ -158,70 +266,99 @@ export default function PdfViewer({
   // 최종 페이지 width: fit × zoom
   const pageWidth = Math.max(80, fitWidth * zoom);
 
+  // 컨트롤(페이지 네비/줌) — controlsContainer 가 있으면 포털, 없으면 인라인
+  // 모바일에서는 패딩/아이콘 사이즈/min-width 압축으로 한 줄에 들어가게
+  const controlsJsx = (
+    <>
+      <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+        <button
+          onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+          disabled={!numPages || pageNumber <= 1}
+          className="p-0.5 md:p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="이전 페이지"
+        >
+          <ChevronLeft size={16} className="md:hidden" />
+          <ChevronLeft size={18} className="hidden md:block" />
+        </button>
+        <span className="text-[10px] md:text-[11px] text-txt-primary tabular-nums min-w-[40px] md:min-w-[56px] text-center">
+          {numPages ? `${pageNumber} / ${numPages}` : '—'}
+        </span>
+        <button
+          onClick={() => setPageNumber((p) => (numPages ? Math.min(numPages, p + 1) : p))}
+          disabled={!numPages || pageNumber >= numPages}
+          className="p-0.5 md:p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="다음 페이지"
+        >
+          <ChevronRight size={16} className="md:hidden" />
+          <ChevronRight size={18} className="hidden md:block" />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+        <button
+          onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+          className="p-0.5 md:p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+          aria-label="축소" title="축소"
+        >
+          <ZoomOut size={14} className="md:hidden" />
+          <ZoomOut size={16} className="hidden md:block" />
+        </button>
+        <button
+          onClick={() => setZoom(1)}
+          className="text-[10px] md:text-[11px] text-txt-primary tabular-nums min-w-[36px] md:min-w-[44px] text-center hover:text-brand-purple font-medium"
+          title="리셋"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
+          className="p-0.5 md:p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+          aria-label="확대" title="확대"
+        >
+          <ZoomIn size={14} className="md:hidden" />
+          <ZoomIn size={16} className="hidden md:block" />
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* 컨트롤 바: 페이지 네비 + 줌 */}
-      <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-border-subtle bg-bg-primary shrink-0">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
-            disabled={!numPages || pageNumber <= 1}
-            className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            aria-label="이전 페이지"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-[11px] text-txt-primary tabular-nums min-w-[56px] text-center">
-            {numPages ? `${pageNumber} / ${numPages}` : '—'}
-          </span>
-          <button
-            onClick={() => setPageNumber((p) => (numPages ? Math.min(numPages, p + 1) : p))}
-            disabled={!numPages || pageNumber >= numPages}
-            className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            aria-label="다음 페이지"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)))}
-            className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
-            aria-label="축소" title="축소"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <button
-            onClick={() => setZoom(1)}
-            className="text-[11px] text-txt-primary tabular-nums min-w-[44px] text-center hover:text-brand-purple font-medium"
-            title="리셋"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}
-            className="p-1 rounded text-txt-secondary hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
-            aria-label="확대" title="확대"
-          >
-            <ZoomIn size={16} />
-          </button>
-        </div>
-      </div>
+      {/* 컨트롤 바: 외부 컨테이너 있으면 포털, 없으면 자체 바 표시 */}
+      {controlsContainer
+        ? createPortal(controlsJsx, controlsContainer)
+        : (
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-border-subtle bg-bg-primary shrink-0">
+            {controlsJsx}
+          </div>
+        )}
 
       {/* PDF 렌더링 영역 — ResizeObserver로 컨테이너 크기 따라감, 오버플로우 시 드래그 스크롤 */}
       <div
         ref={scrollContainerRef}
         onMouseDown={onPanStart}
+        onDoubleClick={(e) => {
+          // 드로잉 활성 시 무시 — 드로잉 캔버스가 위에 있어 의도치 않은 줌 리셋 방지
+          if (drawingActive) return;
+          // 버튼/링크/입력은 무시
+          if (e.target.closest('button, input, a, select, textarea')) return;
+          // 드로잉 캔버스(별도 표시)만 거르고, PDF 본문 캔버스(react-pdf)는 허용
+          const t = e.target;
+          if (t.tagName === 'CANVAS' && !t.classList.contains('react-pdf__Page__canvas')) return;
+          setZoom(1);
+        }}
         className={`flex-1 min-h-0 overflow-auto bg-bg-tertiary/30 flex p-2 ${
-          zoom > 1 ? 'cursor-grab active:cursor-grabbing' : ''
+          zoom !== 1 ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
         style={{
           justifyContent: 'safe center',
           alignItems: 'safe start',
           overflowAnchor: 'none',
+          // 스크롤바 등장/사라짐으로 clientWidth가 펄싱되어 fitWidth/pageWidth 가
+          // 진동하는 루프 차단. modern 브라우저에서 스크롤바 공간 항상 예약.
+          scrollbarGutter: 'stable',
         }}
-        title={zoom > 1 ? '드래그로 이동' : ''}
+        title={zoom !== 1 ? '더블클릭으로 100%, 드래그로 이동' : '더블클릭으로 100%'}
       >
         <Document
           file={url}

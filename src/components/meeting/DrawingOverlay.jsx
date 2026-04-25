@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -107,7 +107,7 @@ export default function DrawingOverlay({
   const [redoStack, setRedoStack] = useState([]);
   const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
   const [eraserHoverId, setEraserHoverId] = useState(null);  // 지우개 모드 hover — 해당 stroke 하이라이트
-  const [tool, setTool] = useState('pen');  // 'pen' | 'rect' — 그리기 도구
+  const [tool, setTool] = useState('pen');  // 'pen' | 'rect' | null — 그리기 도구 (null이면 비활성, pan 가능)
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
     if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
@@ -512,6 +512,9 @@ export default function DrawingOverlay({
       return;
     }
 
+    // 도구 비활성 상태 — 안전망 (정상적으론 pointerEvents:none으로 이벤트 미수신)
+    if (tool === null) return;
+
     cv.setPointerCapture?.(e.pointerId);
     const n = toNorm(p.x, p.y, w, h);
     if (tool === 'rect') {
@@ -781,19 +784,23 @@ export default function DrawingOverlay({
   const avatarMarkers = useMemo(() => {
     const markers = [];
     for (const s of strokes) {
-      let mx, my;
+      let mx, my, kind;
       if (s.kind === 'rect') {
-        mx = (s.x + s.w) * (width || 0);
-        my = s.y * (height || 0);
+        // 사각형: 좌하단 모서리 아래에 아바타 배치
+        mx = s.x * (width || 0);
+        my = (s.y + s.h) * (height || 0);
+        kind = 'rect';
       } else if (s.points && s.points.length > 0) {
         const last = s.points[s.points.length - 1];
         mx = last.x * (width || 0);
         my = last.y * (height || 0);
+        kind = 'pen';
       } else {
         continue;
       }
       markers.push({
         strokeId: s.id,
+        kind,
         x: mx,
         y: my,
         name: s.user_name || '사용자',
@@ -843,10 +850,14 @@ export default function DrawingOverlay({
           position: 'absolute',
           inset: 0,
           touchAction: 'none',
-          cursor: readOnly ? 'default' : (eraserMode ? 'cell' : (tool === 'rect' ? 'crosshair' : 'crosshair')),
+          cursor: readOnly ? 'default' : (eraserMode ? 'cell' : (tool ? 'crosshair' : 'default')),
           zIndex: 5,
           opacity: visible ? 1 : 0,
-          pointerEvents: readOnly ? 'none' : (visible ? 'auto' : 'none'),
+          // tool 비활성 + 지우개 OFF면 캔버스 클릭이 통과 → 하단 PDF/이미지 컨테이너의 pan 동작
+          pointerEvents:
+            readOnly || !visible || (tool === null && !eraserMode)
+              ? 'none'
+              : 'auto',
           transition: 'opacity 0.15s ease',
           outline: 'none',
         }}
@@ -952,6 +963,12 @@ export default function DrawingOverlay({
       {/* 각 stroke 끝 지점에 사용자 아바타 + 순번 뱃지 — visible=false면 숨김 */}
       {visible && avatarMarkers.map((m) => {
         const isEraseHover = eraserMode && m.strokeId === eraserHoverId;
+        const isRect = m.kind === 'rect';
+        // 펜: 끝점 위쪽에 매달림 (translate(-50%, -130%))
+        // 사각형: 좌하단 모서리 아래에 살짝 떨어뜨려 배치 (아바타 좌상단 기준)
+        const containerTransform = isRect
+          ? 'translate(-4px, 8px)'
+          : 'translate(-50%, -130%)';
         return (
         <div
           key={m.strokeId}
@@ -959,7 +976,7 @@ export default function DrawingOverlay({
           style={{
             left: `${m.x}px`,
             top: `${m.y}px`,
-            transform: 'translate(-50%, -130%)',
+            transform: containerTransform,
           }}
           onMouseEnter={eraserMode && !readOnly ? () => setEraserHoverId(m.strokeId) : undefined}
           onMouseLeave={eraserMode && !readOnly ? () => setEraserHoverId((id) => (id === m.strokeId ? null : id)) : undefined}
@@ -1008,7 +1025,11 @@ export default function DrawingOverlay({
 
           {m.annotations.length > 0 && (
             <div
-              className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 flex flex-col gap-1 w-[220px] max-w-[220px]"
+              className={`absolute top-[calc(100%+4px)] flex flex-col gap-1 w-[220px] max-w-[220px] ${
+                // 사각형: 아바타 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
+                // 펜: 기존대로 아바타 중심 정렬
+                isRect ? 'left-0' : 'left-1/2 -translate-x-1/2'
+              }`}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
@@ -1055,29 +1076,35 @@ export default function DrawingOverlay({
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-0.5 pr-1 mr-1 border-r border-[#e0e0e0]">
-              {/* 사각형 도구 */}
+              {/* 사각형 도구 — 한번 더 클릭 시 비활성(드로잉 OFF, pan 가능) */}
               <button
-                onClick={() => { setTool('rect'); if (eraserMode) setEraserMode(false); }}
+                onClick={() => {
+                  if (tool === 'rect' && !eraserMode) setTool(null);
+                  else { setTool('rect'); if (eraserMode) setEraserMode(false); }
+                }}
                 className={`${toolbarCommonCls} ${
                   tool === 'rect' && !eraserMode
                     ? 'text-white bg-brand-purple hover:bg-brand-purple/90'
                     : 'text-[#555] hover:text-brand-purple hover:bg-brand-purple/10'
                 }`}
-                title="사각형 그리기 — 드래그하여 박스 생성"
+                title={tool === 'rect' && !eraserMode ? '사각형 도구 끄기' : '사각형 그리기 — 드래그하여 박스 생성'}
                 aria-pressed={tool === 'rect' && !eraserMode}
                 aria-label="사각형 도구"
               >
                 <Square size={14} />
               </button>
-              {/* 자유 곡선(연필) 도구 */}
+              {/* 자유 곡선(연필) 도구 — 한번 더 클릭 시 비활성 */}
               <button
-                onClick={() => { setTool('pen'); if (eraserMode) setEraserMode(false); }}
+                onClick={() => {
+                  if (tool === 'pen' && !eraserMode) setTool(null);
+                  else { setTool('pen'); if (eraserMode) setEraserMode(false); }
+                }}
                 className={`${toolbarCommonCls} ${
                   tool === 'pen' && !eraserMode
                     ? 'text-white bg-brand-purple hover:bg-brand-purple/90'
                     : 'text-[#555] hover:text-brand-purple hover:bg-brand-purple/10'
                 }`}
-                title="자유 곡선 그리기 (연필)"
+                title={tool === 'pen' && !eraserMode ? '연필 도구 끄기' : '자유 곡선 그리기 (연필)'}
                 aria-pressed={tool === 'pen' && !eraserMode}
                 aria-label="연필 도구"
               >
@@ -1085,20 +1112,38 @@ export default function DrawingOverlay({
               </button>
             </div>
 
-            {/* 컬러 3개 */}
-            {COLORS.map((c) => (
+            {/* 도구 비활성(pan 모드) → 손 아이콘 1개. 도구 활성 → 컬러 3개 */}
+            {tool === null && !eraserMode ? (
               <button
-                key={c.key}
-                onClick={() => setColor(c.value)}
-                className={`${toolbarCommonCls} border-2 ${
-                  color === c.value ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'
-                }`}
-                title={c.label}
-                aria-label={c.label}
+                onClick={() => setTool('pen')}
+                className={`${toolbarCommonCls} text-white bg-brand-purple hover:bg-brand-purple/90`}
+                title="이동 모드 (드래그로 자료 이동) — 클릭하면 연필 도구로 복귀"
+                aria-label="이동 모드"
+                aria-pressed="true"
               >
-                <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }} />
+                <Hand size={14} />
               </button>
-            ))}
+            ) : (
+              COLORS.map((c) => (
+                <button
+                  key={c.key}
+                  onClick={() => {
+                    setColor(c.value);
+                    if (eraserMode) setEraserMode(false);
+                    // 도구가 비활성(pan)일 때 컬러 클릭 → 연필 활성화 (Hand로 안 빠지게)
+                    if (tool === null) setTool('pen');
+                  }}
+                  className={`${toolbarCommonCls} border-2 ${
+                    color === c.value && !eraserMode ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'
+                  }`}
+                  title={c.label}
+                  aria-label={c.label}
+                  aria-pressed={color === c.value && !eraserMode}
+                >
+                  <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }} />
+                </button>
+              ))
+            )}
 
             <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
 

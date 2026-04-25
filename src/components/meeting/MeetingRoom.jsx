@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -9,11 +9,13 @@ import { useMeeting } from '@/hooks/useMeeting';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useMeetingFiles } from '@/hooks/useMeetingFiles';
 import { useMilo } from '@/hooks/useMilo';
+import { useViewerSync } from '@/hooks/useViewerSync';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useToastStore } from '@/stores/toastStore';
 import { useFeedbackStore } from '@/stores/feedbackStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useSidebar } from '@/components/layout/Layout';
 import ChatArea from './ChatArea';
 import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
@@ -167,7 +169,10 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
 }
 
 // ── 이미지 패널 내부 확대 오버레이 (다른 자료 덮음) ──
-function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages = [] }) {
+function ImageZoomOverlay({
+  file, url, onClose, onImageLoad, meetingId, messages = [],
+  following, setFollowing, vbroadcast, remoteCursors = {},
+}) {
   const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
   const [sliderOpen, setSliderOpen] = useState(false);
   const [drawingActive, setDrawingActive] = useState(false);
@@ -178,6 +183,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
   const panRef = useRef(null);
   const sliderContainerRef = useRef(null);
   const imageRef = useRef(null);
+  const cursorThrottleRef = useRef(0);
   const isZoomed = zoomScale > 100;
 
   // 이미지 리사이즈 감지 — 줌/뷰포트/폭 변화 모두 캔버스에 즉시 반영
@@ -207,6 +213,64 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [sliderOpen]);
+
+  // Ctrl/Cmd + 마우스 휠 → 이미지 줌 인/아웃 (50%~300%)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = 10;
+      setZoomScale((s) => {
+        const next = e.deltaY < 0 ? s + step : s - step;
+        return Math.max(50, Math.min(300, next));
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // 모바일 핀치줌 — 두 손가락으로 이미지 zoom 조정 (50~300%)
+  const zoomScaleRef = useRef(zoomScale);
+  zoomScaleRef.current = zoomScale;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let pinchStartDist = null;
+    let pinchStartZoom = 100;
+    const dist = (t) => Math.hypot(
+      t[0].clientX - t[1].clientX,
+      t[0].clientY - t[1].clientY
+    );
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = dist(e.touches);
+        pinchStartZoom = zoomScaleRef.current;
+      }
+    };
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || pinchStartDist == null) return;
+      e.preventDefault();
+      const scale = dist(e.touches) / pinchStartDist;
+      const next = Math.max(50, Math.min(300, Math.round(pinchStartZoom * scale)));
+      setZoomScale(next);
+    };
+    const onTouchEnd = (e) => {
+      if (e.touches.length < 2) pinchStartDist = null;
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
 
   // 드래그 이동 (pan) — 확대 상태에서만 활성화
   const onPanStart = (e) => {
@@ -243,12 +307,27 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
   };
   return (
     <div className="absolute inset-0 z-20 bg-bg-primary flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-divider shrink-0">
-        <p className="text-xs font-medium text-txt-primary truncate flex-1">{file.name}</p>
-        <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center justify-between gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-2 border-b border-border-divider shrink-0 min-w-0">
+        <p className="text-[11px] md:text-xs font-medium text-txt-primary truncate flex-1 min-w-0">{file.name}</p>
+        <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+          {typeof setFollowing === 'function' && (
+            <button
+              onClick={() => setFollowing((v) => !v)}
+              className={`px-1.5 md:px-2 py-1 rounded transition-colors text-[11px] font-medium inline-flex items-center gap-1 ${
+                following
+                  ? 'text-white bg-status-success'
+                  : 'text-txt-primary hover:text-status-success hover:bg-bg-tertiary border border-border-default'
+              }`}
+              title={following ? '라이브 따라가기 ON' : '라이브 따라가기 OFF — 클릭해서 켜기'}
+              aria-pressed={following}
+            >
+              <span className={following ? 'text-brand-yellow animate-pulse' : ''}>●</span>
+              <span className="ml-1 hidden md:inline">라이브</span>
+            </button>
+          )}
           <button
             onClick={() => setDrawingActive((v) => !v)}
-            className={`p-1.5 rounded transition-colors ${
+            className={`p-1 md:p-1.5 rounded transition-colors ${
               drawingActive
                 ? 'text-white bg-brand-purple'
                 : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
@@ -264,7 +343,7 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
               download={file.name}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 rounded text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+              className="p-1 md:p-1.5 rounded text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
               aria-label="다운로드"
               title="다운로드"
             >
@@ -289,6 +368,19 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
         <div
           ref={scrollRef}
           onMouseDown={onPanStart}
+          onMouseMove={(e) => {
+            if (typeof vbroadcast !== 'function') return;
+            const now = Date.now();
+            if (cursorThrottleRef.current && now - cursorThrottleRef.current < 50) return;
+            cursorThrottleRef.current = now;
+            const el = scrollRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+            if (x < 0 || x > 1 || y < 0 || y > 1) return;
+            vbroadcast('viewer:cursor', { fileId: file.id || file.name, x, y });
+          }}
           onDoubleClick={(e) => {
             // 버튼/슬라이더 위 더블클릭은 무시
             if (e.target.closest('button, input, a, [role="slider"]')) return;
@@ -357,13 +449,20 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
           ) : (
             <p className="text-xs text-txt-muted">로딩 중...</p>
           )}
+
         </div>
+
+        {/* 라이브 커서 — scrollRef 외부에 배치하여 스크롤/줌과 무관하게 viewport 기준 표시 */}
+        <RemoteCursorsLayer cursors={remoteCursors} fileId={file.id || file.name} />
 
         {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
         <div
           ref={sliderContainerRef}
           onMouseDown={(e) => e.stopPropagation()}
+          onMouseMove={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2"
         >
@@ -449,7 +548,206 @@ function ImageZoomOverlay({ file, url, onClose, onImageLoad, meetingId, messages
   );
 }
 
-// ── 문서 플로팅 윈도우 (드래그/리사이즈 가능, 배경 오버레이 없음) ──
+// ── 문서 인라인 오버레이 (DocumentPanel 내부, 이미지와 동일 패턴) ──
+//   포털 모달이 아니라 패널을 그대로 덮는 풀사이즈 뷰어. 뒤로가기/다른 파일 클릭으로 종료.
+function DocumentZoomOverlay({
+  file, url, onClose, meetingId, messages = [],
+  following, setFollowing, vbroadcast, remoteCursors = {}, setViewerHandler,
+}) {
+  const [drawingActive, setDrawingActive] = useState(false);
+  const [toolbarHost, setToolbarHost] = useState(null);
+  // PDF 페이지 네비/줌 컨트롤 포털 타겟 — 통합 툴바에 함께 배치
+  const [pdfControlsHost, setPdfControlsHost] = useState(null);
+  // 외부(다른 참가자)가 보낸 페이지 변경 — PdfViewer로 전달해서 그쪽 pageNumber 강제 동기화
+  const [presenterPage, setPresenterPage] = useState(null);
+  const bodyRef = useRef(null);
+  const isPdf = file?.type === 'application/pdf';
+  const isImageType = file?.type?.startsWith?.('image/');
+  const fileId = file?.id || file?.name;
+
+  // 페이지 변경 broadcast (PdfViewer로부터 콜백 받음)
+  const handlePageChange = useCallback((page) => {
+    if (typeof vbroadcast === 'function') {
+      vbroadcast('viewer:page', { fileId, page });
+    }
+  }, [vbroadcast, fileId]);
+
+  // viewer:page 수신 → following=true 일 때만 페이지 변경 적용
+  // 언마운트 시 핸들러 청소 (stale 클로저로 setPresenterPage 호출 방지)
+  useEffect(() => {
+    if (typeof setViewerHandler !== 'function') return;
+    setViewerHandler('onPage', (payload, isFollowing) => {
+      if (!isFollowing) return;
+      if (payload.fileId !== fileId) return;
+      setPresenterPage(payload.page);
+    });
+    return () => setViewerHandler('onPage', null);
+  }, [setViewerHandler, fileId]);
+
+  // 마우스 이동 broadcast (50ms 스로틀)
+  const lastSentRef = useRef(0);
+  const handleMouseMove = (e) => {
+    if (typeof vbroadcast !== 'function') return;
+    const now = Date.now();
+    if (now - lastSentRef.current < 50) return;
+    lastSentRef.current = now;
+    const el = bodyRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    vbroadcast('viewer:cursor', { fileId, x, y });
+  };
+
+  return (
+    <div className="absolute inset-0 z-20 bg-bg-primary flex flex-col">
+      {/* 헤더 — 파일명 + 라이브 토글 + 드로잉 + 다운로드 + 닫기 */}
+      <div className="flex items-center justify-between gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-2 border-b border-border-divider shrink-0 min-w-0">
+        <p className="text-[11px] md:text-xs font-medium text-txt-primary truncate flex-1 min-w-0">{file.name}</p>
+        <div className="flex items-center gap-0.5 md:gap-1 shrink-0">
+          {/* 라이브 따라가기 토글 */}
+          {typeof setFollowing === 'function' && (
+            <button
+              onClick={() => setFollowing((v) => !v)}
+              className={`px-1.5 md:px-2 py-1 rounded transition-colors text-[11px] font-medium inline-flex items-center gap-1 ${
+                following
+                  ? 'text-white bg-status-success'
+                  : 'text-txt-primary hover:text-status-success hover:bg-bg-tertiary border border-border-default'
+              }`}
+              title={following ? '라이브 따라가기 ON — 다른 참가자가 자료 열거나 페이지 넘기면 따라감' : '라이브 따라가기 OFF — 클릭해서 켜기'}
+              aria-pressed={following}
+            >
+              <span className={following ? 'text-brand-yellow animate-pulse' : ''}>●</span>
+              <span className="ml-1 hidden md:inline">라이브</span>
+            </button>
+          )}
+          <button
+            onClick={() => setDrawingActive((v) => !v)}
+            className={`p-1 md:p-1.5 rounded transition-colors ${
+              drawingActive
+                ? 'text-white bg-brand-purple'
+                : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
+            }`}
+            title={drawingActive ? '드로잉 종료' : '드로잉 켜기 (실시간 공유)'}
+            aria-label="드로잉 토글"
+          >
+            <Pencil size={16} />
+          </button>
+          {url && (
+            <a
+              href={url}
+              download={file.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 md:p-1.5 rounded text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary transition-colors"
+              aria-label="다운로드"
+              title="다운로드"
+            >
+              <Download size={16} />
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded"
+            aria-label="닫기"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* 통합 툴바 — PDF 컨트롤(좌) + 드로잉 툴바(우) 한 줄
+          높이 고정. w-full + min-w-0 으로 부모 폭 강제 + 모바일 가로 스크롤 */}
+      {(isPdf || drawingActive) && (
+        <div className="flex items-center justify-between gap-2 px-2 md:px-3 py-1 md:py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60 h-12 md:h-[55px] w-full min-w-0 max-w-full overflow-x-auto scrollbar-hide">
+          {/* 좌: PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
+          <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0" />
+          {/* 우: 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
+          <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0" />
+        </div>
+      )}
+
+      {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드 */}
+      <div
+        ref={bodyRef}
+        onMouseMove={handleMouseMove}
+        className="flex-1 relative bg-bg-tertiary/30 overflow-hidden"
+      >
+        {isPdf && url ? (
+          <PdfViewer
+            url={url}
+            drawingActive={drawingActive}
+            onCloseDrawing={() => setDrawingActive(false)}
+            meetingId={meetingId}
+            fileId={file.id || file.name}
+            fileName={file.name}
+            messages={messages}
+            toolbarContainer={toolbarHost}
+            controlsContainer={pdfControlsHost}
+            presenterPage={presenterPage}
+            onPageChange={handlePageChange}
+          />
+        ) : isImageType && url ? (
+          <img src={url} alt={file.name} className="w-full h-full object-contain" />
+        ) : url ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-txt-muted py-8 px-4 text-center">
+            <FileText size={48} strokeWidth={1.3} />
+            <p className="text-xs font-medium text-txt-primary break-all">{file.name}</p>
+            <p className="text-[11px]">이 형식은 미리보기를 지원하지 않습니다.</p>
+            <a
+              href={url}
+              download={file.name}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-brand-purple hover:underline"
+            >
+              파일 다운로드하여 보기
+            </a>
+          </div>
+        ) : (
+          <p className="text-xs text-txt-muted p-4">로딩 중...</p>
+        )}
+
+        {/* 다른 참가자 라이브 커서 — 같은 파일 보는 사람만 */}
+        <RemoteCursorsLayer cursors={remoteCursors} fileId={fileId} />
+      </div>
+    </div>
+  );
+}
+
+// ── 다른 참가자 라이브 커서 표시 ──
+function RemoteCursorsLayer({ cursors = {}, fileId }) {
+  const list = Object.entries(cursors).filter(([, c]) => c.fileId === fileId);
+  if (list.length === 0) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[8]">
+      {list.map(([uid, c]) => (
+        <div
+          key={uid}
+          className="absolute transition-[left,top] duration-100 ease-linear"
+          style={{
+            left: `${c.x * 100}%`,
+            top: `${c.y * 100}%`,
+            transform: 'translate(-2px, -2px)',
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
+            <path d="M2 2 L18 10 L10 11 L8 18 Z" fill={c.color} stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+          <span
+            className="absolute left-4 top-3 text-[10px] font-semibold text-white px-1.5 py-0.5 rounded whitespace-nowrap"
+            style={{ backgroundColor: c.color, boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}
+          >
+            {c.name}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 문서 플로팅 윈도우 (사용 중단 — DocumentZoomOverlay로 대체. 코드는 유지하되 참조 없음) ──
 function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }) {
   const [drawingActive, setDrawingActive] = useState(false);
   // 드로잉 툴바를 헤더 아래 슬롯에 포털 배치
@@ -749,7 +1047,11 @@ function FloatingDocumentWindow({ file, url, onClose, meetingId, messages = [] }
 // - 문서 썸네일: 고정 140px 중앙 정렬
 // - 이미지 클릭: 패널 내부 오버레이로 확대 (다른 자료 덮음)
 // - 문서 클릭: 드래그/리사이즈 가능한 플로팅 윈도우 (body portal, 오버레이 없음)
-function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerChange }) {
+function DocumentPanel({
+  files = [], getUrl, meetingId, messages = [], onViewerChange,
+  mobileOpen = false,    // 모바일에서 풀스크린 드로어로 표시
+  onMobileClose,
+}) {
   // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
   const [width, setWidth] = useState(() => {
     try {
@@ -763,6 +1065,13 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerC
   const [docUrl, setDocUrl] = useState(null);
   const [widthBeforeZoom, setWidthBeforeZoom] = useState(null); // 확대 전 원래 폭 기억
   const resizerRef = useRef(null);
+
+  // ── 라이브 동기화: 다른 참가자와 같은 자료/페이지/커서 보기 ──
+  //   following=true 일 때만 다른 사람이 연 자료를 자동으로 따라감 (의도하지 않은 화면 변경 방지).
+  //   브로드캐스트(보내기)는 항상 자동 — 따라가기 모드와 무관.
+  const { broadcast: vbroadcast, setHandler: setViewerHandler, following, setFollowing } = useViewerSync(meetingId);
+  // 다른 참가자 커서 — { userId: { x, y, name, color, fileId, page, ts } }
+  const [remoteCursors, setRemoteCursors] = useState({});
 
   // 폭 변경 시 localStorage 저장 — 단, 이미지 확대 중에는 저장하지 않음 (원래 폭 유지)
   useEffect(() => {
@@ -784,35 +1093,126 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerC
   // 이미지 확대 시 패널을 최대 폭까지 확장할 목표값 (이미지 실제 크기 기반 가능)
   const getMaxPanelWidth = () => Math.min(window.innerWidth - 340, 1400);
 
-  // 파일 클릭 핸들러
-  const handleFileClick = async (file) => {
+  // 내부 헬퍼 — 로컬 state만 변경 (broadcast 안 함). 원격 이벤트 수신 시 사용.
+  // 다른 타입의 파일이 이미 열려 있으면 먼저 닫음 (이미지↔문서 전환 충돌 방지).
+  const openFileLocal = async (file) => {
     const url = file.storage_path && getUrl
       ? await getUrl(file.storage_path)
       : (file.preview || file.url || null);
 
     if (isImageFile(file)) {
-      // 원래 폭 기억 (onClose에서 복구용). 패널 폭은 이미지 로드 후 실제 크기에 맞춰 조정.
+      // 문서가 열려있다면 먼저 닫음
+      if (docFile) { setDocFile(null); setDocUrl(null); }
       if (widthBeforeZoom === null) setWidthBeforeZoom(width);
       setZoomFile(file);
       setZoomUrl(url);
-      // 이미지 로드 전 최소 폭(툴바+여유) 즉시 확보 → 뷰어 깜빡임 방지
       const max = getMaxPanelWidth();
       if (width < 480) setWidth(Math.min(480, max));
     } else {
+      // 이미지가 열려있다면 먼저 닫음
+      if (zoomFile) { setZoomFile(null); setZoomUrl(null); }
+      if (widthBeforeZoom === null) setWidthBeforeZoom(width);
       setDocFile(file);
       setDocUrl(url);
+      const max = getMaxPanelWidth();
+      const A4_PANEL_WIDTH = 820;
+      setWidth(Math.min(A4_PANEL_WIDTH, max));
     }
   };
 
-  // 이미지 확대 닫기 → 원래 폭으로 복귀
+  // 파일 클릭 핸들러 — 로컬 오픈 + 라이브 동기화 broadcast
+  const handleFileClick = async (file) => {
+    await openFileLocal(file);
+    vbroadcast('viewer:open', {
+      fileId: file.id || file.name,
+      fileName: file.name,
+      fileType: file.type,
+    });
+  };
+
+  // 이미지 확대 닫기 → 원래 폭으로 복귀 + broadcast
   const closeZoom = () => {
+    const closingId = zoomFile?.id || zoomFile?.name;
     setZoomFile(null);
     setZoomUrl(null);
     if (widthBeforeZoom !== null) {
       setWidth(widthBeforeZoom);
       setWidthBeforeZoom(null);
     }
+    if (closingId) vbroadcast('viewer:close', { fileId: closingId });
   };
+
+  // 문서 확대 닫기 → 원래 폭으로 복귀 + broadcast
+  const closeDoc = () => {
+    const closingId = docFile?.id || docFile?.name;
+    setDocFile(null);
+    setDocUrl(null);
+    if (widthBeforeZoom !== null) {
+      setWidth(widthBeforeZoom);
+      setWidthBeforeZoom(null);
+    }
+    if (closingId) vbroadcast('viewer:close', { fileId: closingId });
+  };
+
+  // ── 라이브 동기화 수신 핸들러 ──
+  // viewer:open  → 같은 파일을 로컬 오픈 (following=true 일 때만)
+  // viewer:close → 현재 보고 있는 파일이면 닫기 (following=true 일 때만)
+  // viewer:cursor → 다른 사용자 커서 위치 갱신 (항상 수신, 5초 후 자동 만료)
+  useEffect(() => {
+    setViewerHandler('onOpen', async (payload, isFollowing) => {
+      if (!isFollowing) return;
+      const target = files.find((f) => (f.id || f.name) === payload.fileId);
+      if (!target) return;
+      await openFileLocal(target);
+    });
+    setViewerHandler('onClose', (payload, isFollowing) => {
+      if (!isFollowing) return;
+      const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
+      if (currentId && currentId === payload.fileId) {
+        if (zoomFile) {
+          setZoomFile(null); setZoomUrl(null);
+        }
+        if (docFile) {
+          setDocFile(null); setDocUrl(null);
+        }
+        if (widthBeforeZoom !== null) {
+          setWidth(widthBeforeZoom); setWidthBeforeZoom(null);
+        }
+      }
+    });
+    setViewerHandler('onCursor', (payload) => {
+      const u = payload?._user;
+      if (!u?.id) return;
+      setRemoteCursors((prev) => ({
+        ...prev,
+        [u.id]: {
+          x: payload.x, y: payload.y,
+          fileId: payload.fileId,
+          page: payload.page,
+          name: u.name, color: u.color,
+          ts: Date.now(),
+        },
+      }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, zoomFile, docFile, widthBeforeZoom]);
+
+  // 5초 이상 안 들어온 원격 커서는 표시에서 제거 (1초마다 정리)
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemoteCursors((prev) => {
+        const now = Date.now();
+        const next = {};
+        let changed = false;
+        for (const [uid, c] of Object.entries(prev)) {
+          if (now - c.ts < 5000) next[uid] = c;
+          else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
 
   // 이미지 로드 후: 실제 이미지 너비에 맞춰 패널 폭을 정확히 조정
   // 이미지가 원래 폭보다 작으면 줄이고, 크면 확장 (최대 제한 내에서)
@@ -877,20 +1277,37 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerC
   return (
     <>
       <aside
-        className="hidden md:flex flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative transition-[width] duration-200 ease-out"
+        className={`flex-col shrink-0 border-r border-border-subtle bg-bg-primary relative transition-[width] duration-200 ease-out ${
+          mobileOpen
+            ? 'fixed inset-0 z-40 flex w-full md:relative md:z-auto md:inset-auto md:w-[var(--panel-w)]'
+            : 'hidden md:flex md:w-[var(--panel-w)]'
+        } ${
+          // 풀사이즈 뷰어 최소 폭은 데스크톱(md+) 에서만 (모바일은 viewport 에 맞춤)
+          viewerActive ? 'md:min-w-[480px]' : ''
+        }`}
         style={{
-          width: effectiveWidth,
-          // 풀사이즈 뷰어 활성 중엔 CSS로 최소 폭 강제 (드로잉 툴바 ~365px + 여유 100px)
-          minWidth: viewerActive ? 480 : undefined,
+          // 데스크톱 폭은 CSS 변수로 전달 — 모바일 mobileOpen 시 w-full 이 우선 적용
+          '--panel-w': `${effectiveWidth}px`,
         }}
       >
-        {/* 헤더 — 컴팩트 모드에서는 심플하게 */}
+        {/* 헤더 — 컴팩트 모드에서는 심플하게. 모바일에서는 닫기 버튼 통합 */}
         <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
           <FolderOpen size={isCompact ? 14 : 14} className="text-brand-purple shrink-0" />
           {!isCompact && (
             <>
               <span className="text-sm font-semibold text-txt-primary">자료</span>
               <span className="text-[10px] text-txt-muted">{files.length}개</span>
+              {/* 모바일 드로어 닫기 — 헤더 우측 */}
+              {mobileOpen && (
+                <button
+                  onClick={onMobileClose}
+                  className="md:hidden ml-auto p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                  aria-label="자료 패널 닫기"
+                  title="닫기"
+                >
+                  <X size={18} />
+                </button>
+              )}
             </>
           )}
           {isCompact && files.length > 0 && (
@@ -937,32 +1354,50 @@ function DocumentPanel({ files = [], getUrl, meetingId, messages = [], onViewerC
             onImageLoad={handleImageLoaded}
             meetingId={meetingId}
             messages={messages}
+            following={following}
+            setFollowing={setFollowing}
+            vbroadcast={vbroadcast}
+            remoteCursors={remoteCursors}
           />
         )}
 
-        {/* 리사이저 — 우측 세로 라인 드래그 (자료 있을 때만 활성화) */}
+        {/* 문서 확대 오버레이 — 이미지와 동일한 패턴으로 패널 내부를 덮음 (포털/모달 X) */}
+        {docFile && (
+          <DocumentZoomOverlay
+            file={docFile}
+            url={docUrl}
+            onClose={closeDoc}
+            meetingId={meetingId}
+            messages={messages}
+            following={following}
+            setFollowing={setFollowing}
+            vbroadcast={vbroadcast}
+            remoteCursors={remoteCursors}
+            setViewerHandler={setViewerHandler}
+          />
+        )}
+
+        {/* 리사이저 — 우측 세로 라인 드래그 (자료 있을 때만 활성화)
+            z-30 으로 풀사이즈 뷰어(z-20) 위에 노출되어 풀뷰 중에도 폭 조절 가능 */}
         {!isEmpty && (
           <div
             ref={resizerRef}
             onMouseDown={onResizerDown}
-            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize group/resize"
-            title="드래그하여 크기 조절"
+            className="absolute top-0 right-0 w-2 h-full cursor-col-resize group/resize z-30"
+            title="드래그하여 가로 크기 조절"
           >
-            <div className="absolute top-0 right-0 w-px h-full bg-border-subtle group-hover/resize:bg-brand-purple/40 transition-colors" />
+            {/* 세로 라인 — 호버 시 두꺼워지고 보라색으로 강조 */}
+            <div className="absolute top-0 right-0 h-full bg-border-subtle group-hover/resize:bg-brand-purple group-hover/resize:w-1 w-px transition-all duration-150" />
+            {/* 중앙 핸들 — 호버 시 좌우 화살표 아이콘 노출 */}
+            <div className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-1/2 opacity-0 group-hover/resize:opacity-100 transition-opacity duration-150 pointer-events-none">
+              <div className="w-6 h-10 rounded-full bg-brand-purple text-white flex items-center justify-center shadow-md">
+                <ChevronsLeftRight size={14} strokeWidth={2.6} />
+              </div>
+            </div>
           </div>
         )}
       </aside>
 
-      {/* 문서 플로팅 윈도우 — 배경 오버레이 없음, 드래그/리사이즈 가능 */}
-      {docFile && (
-        <FloatingDocumentWindow
-          file={docFile}
-          url={docUrl}
-          onClose={() => { setDocFile(null); setDocUrl(null); }}
-          meetingId={meetingId}
-          messages={messages}
-        />
-      )}
     </>
   );
 }
@@ -1001,8 +1436,23 @@ export default function MeetingRoom() {
     try { localStorage.setItem('meetflow_auto_intervene', String(aiAutoIntervene)); } catch {}
   }, [aiAutoIntervene]);
   // 풀스크린 자료 뷰어(이미지 확대/문서 윈도우) 활성 여부
-  // — 활성 중엔 AI 자동 개입 중단. 유저가 @-호출 시에만 응답.
+  // — 활성 중엔 AI 자동 개입 중단. 유저가 @-호출 시에만 응답. + LNB 강제 최소화.
   const [materialViewerActive, setMaterialViewerActive] = useState(false);
+  const { setSidebarForceMinimized, setSidebarOpen } = useSidebar() || {};
+  // 모바일 자료 드로어 열림 상태 — 데스크톱(md+) 으로 리사이즈 시 자동 해제
+  const [mobileDocOpen, setMobileDocOpen] = useState(false);
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) setMobileDocOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  useEffect(() => {
+    if (typeof setSidebarForceMinimized !== 'function') return;
+    setSidebarForceMinimized(materialViewerActive);
+    return () => setSidebarForceMinimized(false);
+  }, [materialViewerActive, setSidebarForceMinimized]);
   // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
   // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
   const { files: meetingFiles, uploadFile: uploadMeetingFile, getDownloadUrl: getMeetingFileUrl } = useMeetingFiles(id);
@@ -1364,6 +1814,15 @@ export default function MeetingRoom() {
       {/* ═══ 헤더 ═══ */}
       <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          {/* 모바일 햄버거 — 사이드바 드로어 토글 (다른 페이지로 이동) */}
+          <button
+            onClick={() => setSidebarOpen?.(true)}
+            className="md:hidden p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
+            aria-label="메뉴 열기"
+            title="메뉴"
+          >
+            <Menu size={20} />
+          </button>
           <button onClick={() => safeNavigate('/meetings')} className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0">
             <X size={18} />
           </button>
@@ -1398,6 +1857,21 @@ export default function MeetingRoom() {
               <span className={`absolute top-1/2 -translate-y-1/2 ${aiAutoIntervene ? 'left-[18px]' : 'left-[3px]'} w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm`} />
             </button>
           </div>
+
+          {/* 모바일 자료 버튼 — 자료 패널 드로어 열기 */}
+          <button
+            onClick={() => setMobileDocOpen(true)}
+            className="md:hidden relative p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="자료 보기"
+            title="자료"
+          >
+            <FolderOpen size={18} />
+            {meetingFiles.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-brand-purple leading-none">
+                {meetingFiles.length}
+              </span>
+            )}
+          </button>
 
           {/* 모바일 자동개입 — 회의 요청자/관리자만 제어 가능 */}
           <button
@@ -1451,6 +1925,8 @@ export default function MeetingRoom() {
           meetingId={id}
           messages={messages}
           onViewerChange={setMaterialViewerActive}
+          mobileOpen={mobileDocOpen}
+          onMobileClose={() => setMobileDocOpen(false)}
         />
 
         {/* 채팅 영역 */}
