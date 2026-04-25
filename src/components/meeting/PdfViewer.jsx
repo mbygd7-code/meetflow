@@ -33,6 +33,9 @@ export default function PdfViewer({
   // 라이브 커서 동기화 — PDF 페이지 박스 기준으로 정규화하여 모든 사용자가 같은 위치에 표시
   vbroadcast,            // (event, payload) => void
   remoteCursors = {},    // { [uid]: { fileId, page, x, y, name, color, ts } }
+  // 라이브 따라가기 ON 시 — 드로잉 오버레이를 readOnly 로 자동 마운트하여 다른 참가자 스트로크 표시
+  // (연필 버튼은 별도로 drawingActive 를 켜야 툴바 + 편집 가능)
+  following = false,
 }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -412,7 +415,10 @@ export default function PdfViewer({
               renderTextLayer={false}
               className="shadow-lg"
             />
-            {drawingActive && fileId && (
+            {/* 드로잉 오버레이 — drawingActive(연필 ON) 또는 following(라이브 ON) 시 마운트
+                  - drawingActive=true  : 편집 모드 (툴바 + 그리기)
+                  - drawingActive=false + following=true : 읽기 전용 (다른 참가자 스트로크만 표시) */}
+            {(drawingActive || following) && fileId && (
               <DrawingOverlay
                 // 페이지 변경 시 강제 재마운트 — 이전 페이지 stroke state 누수 방지
                 key={`${fileId}-p${pageNumber}`}
@@ -427,6 +433,7 @@ export default function PdfViewer({
                 messages={messages}
                 onClose={onCloseDrawing}
                 toolbarContainer={toolbarContainer}
+                readOnly={!drawingActive}
               />
             )}
             {/* 라이브 커서 — pageWrapRef 위에 직접 마운트, 페이지 일치 시만 표시 */}

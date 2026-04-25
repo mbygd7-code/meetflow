@@ -439,8 +439,10 @@ function ImageZoomOverlay({
                     : 'rounded-md shadow-md block'
                 }`}
               />
-              {/* 드로잉 오버레이 — active 상태에서만 렌더 */}
-              {drawingActive && (
+              {/* 드로잉 오버레이
+                  - drawingActive(연필 ON)        : 편집 모드 (툴바 + 그리기)
+                  - !drawingActive + following ON : 읽기 전용 (다른 참가자 스트로크만 표시) */}
+              {(drawingActive || following) && (
                 <DrawingOverlay
                   targetKey={`img:${file.id || file.name}`}
                   fileName={file?.name}
@@ -450,6 +452,7 @@ function ImageZoomOverlay({
                   messages={messages}
                   onClose={() => setDrawingActive(false)}
                   toolbarContainer={toolbarHost}
+                  readOnly={!drawingActive}
                 />
               )}
               {/* 라이브 커서 — 이미지 콘텐츠 박스 위에 직접 마운트
@@ -702,6 +705,7 @@ function DocumentZoomOverlay({
             onPageChange={handlePageChange}
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
+            following={following}
           />
         ) : isImageType && url ? (
           <div className="relative w-full h-full">
