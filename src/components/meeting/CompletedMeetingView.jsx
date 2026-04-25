@@ -1,15 +1,19 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   X, FileText, Check, Clock, Users, MessageSquare, Sparkles,
   Search, ChevronDown, ChevronUp, Circle, CircleDot, BarChart3,
   Quote, Download, Keyboard, Filter, ListTodo, Plus, Loader2,
   Pencil, CirclePlay, Trash2, CalendarDays, UserPlus, CornerUpLeft,
-  ListChecks, AlignLeft, Send, Share2, ExternalLink,
+  ListChecks, AlignLeft, Send, Share2, ExternalLink, Zap, PartyPopper,
 } from 'lucide-react';
 import { useToastStore } from '@/stores/toastStore';
 import { useTaskStore } from '@/stores/taskStore';
-import { getPriorityInfo } from '@/lib/taskConstants';
+import { getPriorityInfo, getStatusInfo, PRIORITY_MAP, STATUS_MAP } from '@/lib/taskConstants';
+
+// 인라인 편집 노출 상태 (취소 제외 — 마이태스크와 일관성)
+const QUICK_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 import { Badge, Avatar } from '@/components/ui';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
@@ -119,6 +123,10 @@ export default function CompletedMeetingView({ meeting }) {
   // V7: 담당자/기한 드롭다운
   const [assigneeOpenId, setAssigneeOpenId] = useState(null);
   const [dueOpenId, setDueOpenId] = useState(null);
+  // V11: 상태/우선순위 드롭다운 + 완료 확인 모달 (마이태스크와 일관성)
+  const [statusOpenId, setStatusOpenId] = useState(null);
+  const [priorityOpenId, setPriorityOpenId] = useState(null);
+  const [confirmDoneTask, setConfirmDoneTask] = useState(null);
   // V7: 삭제 확인
   const [deletingTaskId, setDeletingTaskId] = useState(null);
   // V8: 태스크 펼침(서브태스크/설명), 필터, 편집
@@ -861,6 +869,37 @@ export default function CompletedMeetingView({ meeting }) {
     await updateTaskField(task, patch, rollback);
   };
 
+  // V11: 상태 변경 — 완료 선택 시 확인 모달 (마이태스크와 동일 UX)
+  const handleStatusChange = async (task, newStatus) => {
+    setStatusOpenId(null);
+    if (newStatus === task.status) return;
+    if (newStatus === 'done') {
+      setConfirmDoneTask(task);
+      return;
+    }
+    const patch = { status: newStatus };
+    const rollback = { status: task.status };
+    await updateTaskField(task, patch, rollback);
+  };
+
+  const handleConfirmDone = async () => {
+    const task = confirmDoneTask;
+    if (!task) return;
+    setConfirmDoneTask(null);
+    const patch = { status: 'done' };
+    const rollback = { status: task.status };
+    await updateTaskField(task, patch, rollback);
+  };
+
+  // V11: 우선순위 변경
+  const handlePriorityChange = async (task, newPriority) => {
+    setPriorityOpenId(null);
+    if (newPriority === task.priority) return;
+    const patch = { priority: newPriority };
+    const rollback = { priority: task.priority };
+    await updateTaskField(task, patch, rollback);
+  };
+
   // V7: 태스크 삭제
   const handleDeleteTask = async (task) => {
     setDeletingTaskId(null);
@@ -1593,7 +1632,7 @@ export default function CompletedMeetingView({ meeting }) {
                 <div className="flex items-center gap-1 flex-wrap pb-1">
                   {[
                     { id: 'all', label: '전체' },
-                    { id: 'todo', label: '할 일' },
+                    { id: 'todo', label: '대기' },
                     { id: 'in_progress', label: '진행 중' },
                     { id: 'done', label: '완료' },
                     { id: 'ai', label: 'AI 제안' },
@@ -1673,7 +1712,7 @@ export default function CompletedMeetingView({ meeting }) {
                           title={
                             isDone ? '완료됨 — 클릭하여 초기화'
                             : isInProgress ? '진행 중 — 클릭하여 완료'
-                            : '할 일 — 클릭하여 진행 중으로'
+                            : '대기 — 클릭하여 진행 중으로'
                           }
                         >
                           {isPending ? (
@@ -1726,24 +1765,115 @@ export default function CompletedMeetingView({ meeting }) {
                             </div>
                           )}
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            {/* V6: 상태 뱃지 */}
-                            {isInProgress && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-purple/15 text-brand-purple border border-brand-purple/25">
-                                <CirclePlay size={11} strokeWidth={2.6} />
-                                진행 중
-                              </span>
-                            )}
-                            {isDone && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success/15 text-status-success border border-status-success/25">
-                                <Check size={11} strokeWidth={3} />
-                                완료
-                              </span>
-                            )}
+                            {/* V11: 상태 뱃지 — 클릭으로 드롭다운 (마이태스크와 일관성) */}
+                            {(() => {
+                              const stInfo = getStatusInfo(t.status);
+                              const StIcon = stInfo.icon;
+                              return (
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setStatusOpenId(statusOpenId === t.id ? null : t.id);
+                                      setPriorityOpenId(null);
+                                      setAssigneeOpenId(null);
+                                      setDueOpenId(null);
+                                    }}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${stInfo.bg} ${stInfo.color} border border-current/20 hover:brightness-110 transition-all`}
+                                    title={`상태 변경 (현재: ${stInfo.label})`}
+                                    aria-haspopup="menu"
+                                    aria-expanded={statusOpenId === t.id}
+                                  >
+                                    <StIcon size={11} strokeWidth={2.6} />
+                                    {stInfo.label}
+                                  </button>
+                                  {statusOpenId === t.id && (
+                                    <>
+                                      <div className="fixed inset-0 z-20" onClick={() => setStatusOpenId(null)} />
+                                      <div
+                                        role="menu"
+                                        className="absolute left-0 top-full mt-1 min-w-[140px] bg-bg-secondary rounded-md shadow-xl border border-border-default z-30 py-1"
+                                      >
+                                        {QUICK_STATUSES.map((key) => {
+                                          const info = STATUS_MAP[key];
+                                          if (!info) return null;
+                                          const Icon = info.icon;
+                                          const isCurrent = key === t.status;
+                                          return (
+                                            <button
+                                              key={key}
+                                              role="menuitem"
+                                              type="button"
+                                              onClick={() => handleStatusChange(t, key)}
+                                              className={`w-full flex items-center gap-2 px-2 py-1.5 text-[11px] hover:bg-bg-tertiary transition-colors ${
+                                                isCurrent ? 'bg-bg-tertiary/60' : ''
+                                              }`}
+                                            >
+                                              <Icon size={13} className={`${info.color} shrink-0`} />
+                                              <span className="text-txt-primary">{info.label}</span>
+                                              {isCurrent && <Check size={11} className="ml-auto text-brand-purple" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            {/* V11: 우선순위 뱃지 — 클릭으로 드롭다운 */}
                             {pri && (
-                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${pri.bg} ${pri.tone} ${pri.border} border`}>
-                                <span className={`w-1 h-1 rounded-full ${pri.dot}`} />
-                                {pri.label}
-                              </span>
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPriorityOpenId(priorityOpenId === t.id ? null : t.id);
+                                    setStatusOpenId(null);
+                                    setAssigneeOpenId(null);
+                                    setDueOpenId(null);
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${pri.bg} ${pri.tone} ${pri.border} border hover:brightness-110 transition-all`}
+                                  title={`우선순위 변경 (현재: ${pri.label})`}
+                                  aria-haspopup="menu"
+                                  aria-expanded={priorityOpenId === t.id}
+                                >
+                                  {t.priority === 'urgent'
+                                    ? <Zap size={9} strokeWidth={2.6} />
+                                    : <span className={`w-1 h-1 rounded-full ${pri.dot}`} />
+                                  }
+                                  {pri.label}
+                                </button>
+                                {priorityOpenId === t.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-20" onClick={() => setPriorityOpenId(null)} />
+                                    <div
+                                      role="menu"
+                                      className="absolute left-0 top-full mt-1 min-w-[130px] bg-bg-secondary rounded-md shadow-xl border border-border-default z-30 py-1"
+                                    >
+                                      {Object.entries(PRIORITY_MAP).map(([key, info]) => {
+                                        const isCurrent = key === t.priority;
+                                        return (
+                                          <button
+                                            key={key}
+                                            role="menuitem"
+                                            type="button"
+                                            onClick={() => handlePriorityChange(t, key)}
+                                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-[11px] hover:bg-bg-tertiary transition-colors ${
+                                              isCurrent ? 'bg-bg-tertiary/60' : ''
+                                            }`}
+                                          >
+                                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded ${info.bg} ${info.tone} border ${info.border} text-[10px] font-medium`}>
+                                              {key === 'urgent' && <Zap size={8} strokeWidth={2.6} />}
+                                              {info.label}
+                                            </span>
+                                            {isCurrent && <Check size={11} className="ml-auto text-brand-purple" />}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             )}
                             {/* V7: 담당자 (클릭으로 변경) */}
                             <div className="relative">
@@ -2471,6 +2601,62 @@ export default function CompletedMeetingView({ meeting }) {
           )}
         </div>
       </div>
+
+      {/* V11: 완료 확인 모달 — 마이태스크와 동일한 UX */}
+      {confirmDoneTask && createPortal(
+        <div
+          className="fixed inset-0 z-[1000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setConfirmDoneTask(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="completed-task-done-title"
+            className="bg-bg-secondary rounded-[12px] shadow-2xl border border-border-default p-6 max-w-sm w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-status-success/15 flex items-center justify-center shrink-0">
+                <PartyPopper size={20} className="text-status-success" />
+              </div>
+              <div className="flex-1">
+                <h3 id="completed-task-done-title" className="text-base font-semibold text-txt-primary leading-tight">
+                  수고하셨어요! 이 태스크를 완료할까요?
+                </h3>
+                <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
+                  완료 처리하면 팀원들에게 공유되고
+                  대시보드에서도 즉시 반영됩니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-bg-tertiary/60 rounded-md px-3 py-2 mb-4 border border-border-subtle">
+              <p className="text-[11px] text-txt-muted mb-0.5">완료할 태스크</p>
+              <p className="text-[13px] font-medium text-txt-primary line-clamp-2">{confirmDoneTask.title}</p>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmDoneTask(null)}
+                className="px-4 py-2 text-xs font-medium rounded-md text-txt-secondary border border-border-default hover:bg-bg-tertiary hover:text-txt-primary transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDone}
+                autoFocus
+                className="px-4 py-2 text-xs font-semibold rounded-md text-white bg-status-success hover:brightness-110 transition-all inline-flex items-center gap-1.5"
+              >
+                <Check size={14} strokeWidth={2.6} />
+                완료 처리
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

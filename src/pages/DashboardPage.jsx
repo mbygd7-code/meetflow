@@ -12,7 +12,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
-import MyTaskCard from '@/components/task/MyTaskCard';
+import MemberTaskCard from '@/components/task/MemberTaskCard';
 import TaskDetailPanel from '@/components/members/TaskDetailPanel';
 import EmptyState from '@/components/ui/EmptyState';
 import { useToastStore } from '@/stores/toastStore';
@@ -35,9 +35,9 @@ export default function DashboardPage() {
     [selectedTaskId, tasks]
   );
 
-  // 멤버 목록 로드 (담당자 드롭다운용) — 모달 열릴 때만 1회
+  // 멤버 목록 로드 (담당자 드롭다운용 + 카드 인라인 편집용) — 마운트 시 1회
   useEffect(() => {
-    if (!selectedTaskId || members.length > 0) return;
+    if (members.length > 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -51,7 +51,7 @@ export default function DashboardPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedTaskId, members.length]);
+  }, [members.length]);
 
   const today = format(new Date(), 'yyyy년 MM월 dd일 EEEE', { locale: ko });
 
@@ -91,19 +91,19 @@ export default function DashboardPage() {
   const myActiveTasks = myTaskStats.active;
   const taskCounts = myTaskStats.counts;
 
-  // ─── 오늘의 업무 (우선순위·마감·진행중 가중치 기반 상위 N건) ───
+  // ─── 긴급 업무 (priority='urgent' 만, 완료 제외, 마감일 임박순 상위 2건) ───
+  //   - 완료된 태스크 제외 (myActiveTasks가 이미 완료 제외 상태)
+  //   - priority === 'urgent' 태깅된 것만
+  //   - 마감일 오름차순(임박한 순). 마감일 없으면 맨 뒤
   const focusTasks = useMemo(() => {
-    const PRIORITY_WEIGHT = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const now = new Date();
     return myActiveTasks
-      .map((t) => {
-        const days = t.due_date ? differenceInDays(parseISO(t.due_date), now) : 999;
-        const pw = PRIORITY_WEIGHT[t.priority] ?? 2;
-        const sw = t.status === 'in_progress' ? -0.5 : 0;
-        return { task: t, score: days + pw + sw };
-      })
-      .sort((a, b) => a.score - b.score)
-      .slice(0, DASHBOARD_LIMITS.FOCUS_TASKS)
+      .filter((t) => t.priority === 'urgent')
+      .map((t) => ({
+        task: t,
+        dueTime: t.due_date ? parseISO(t.due_date).getTime() : Number.POSITIVE_INFINITY,
+      }))
+      .sort((a, b) => a.dueTime - b.dueTime)
+      .slice(0, 2)
       .map(({ task }) => task);
   }, [myActiveTasks]);
 
@@ -207,12 +207,12 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* ═══ 오늘의 업무 ═══ */}
+        {/* ═══ 긴급 업무 ═══ */}
         <SectionPanel
-          title="오늘의 업무"
+          title="긴급 업무"
           subtitle={focusTasks.length > 0 ? '가장 먼저 처리하면 좋을 업무' : '아직 할당된 업무가 없어요'}
           action={
-            <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+            <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
               모든 태스크 <ArrowRight size={14} />
             </Link>
           }
@@ -230,9 +230,11 @@ export default function DashboardPage() {
           ) : (
             <EmptyState
               icon={Sparkles}
-              title="아직 할당된 업무가 없어요"
+              title={myActiveTasks.length > 0 ? '긴급 업무가 없어요' : '아직 할당된 업무가 없어요'}
               description={
-                todayMeetings.length > 0
+                myActiveTasks.length > 0
+                  ? '긴급으로 태깅된 미완료 업무가 없습니다. 일반 업무는 "모든 태스크"에서 확인하세요.'
+                  : todayMeetings.length > 0
                   ? '오늘 예정된 회의가 있어요. 회의가 끝나면 AI가 태스크를 자동으로 추출해 드릴게요.'
                   : recentSummaries.length > 0
                     ? '최근 회의록을 확인하거나 새 회의를 시작해 업무를 정리해보세요.'
@@ -240,7 +242,7 @@ export default function DashboardPage() {
               }
               actions={[
                 { label: '새 회의 시작', to: '/meetings', icon: MessageSquare, variant: 'gradient' },
-                { label: '태스크 직접 만들기', to: '/tasks', icon: CircleDot, variant: 'secondary' },
+                { label: '태스크 직접 만들기', to: '/members', icon: CircleDot, variant: 'secondary' },
               ]}
             />
           )}
@@ -352,7 +354,7 @@ export default function DashboardPage() {
               : undefined
           }
           action={
-            <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+            <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
               전체 <ArrowRight size={13} />
             </Link>
           }
@@ -366,16 +368,19 @@ export default function DashboardPage() {
                   ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
                   : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
               }
-              actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+              actions={[{ label: '새 태스크', to: '/members', icon: CircleDot, variant: 'secondary' }]}
               compact
             />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {myActiveTasks.map((t) => (
-                <MyTaskCard
+                <MemberTaskCard
                   key={t.id}
                   task={t}
-                  onSelect={handleSelectTask}
+                  members={members}
+                  onClick={handleSelectTask}
+                  onQuickStatus={handleStatusChange}
+                  onQuickUpdate={handleUpdateTask}
                 />
               ))}
             </div>
@@ -393,7 +398,7 @@ export default function DashboardPage() {
               {taskCounts.done > 0 && <> · 완료 {taskCounts.done}</>}
             </p>
           </div>
-          <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+          <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
             전체 <ArrowRight size={13} />
           </Link>
         </div>
@@ -407,16 +412,19 @@ export default function DashboardPage() {
                 ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
                 : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
             }
-            actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+            actions={[{ label: '새 태스크', to: '/members', icon: CircleDot, variant: 'secondary' }]}
             compact
           />
         ) : (
-          <div className="space-y-2 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
+          <div className="space-y-1.5 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
             {myActiveTasks.map((t) => (
-              <MyTaskCard
+              <MemberTaskCard
                 key={t.id}
                 task={t}
-                onSelect={handleSelectTask}
+                members={members}
+                onClick={handleSelectTask}
+                onQuickStatus={handleStatusChange}
+                onQuickUpdate={handleUpdateTask}
               />
             ))}
           </div>
@@ -439,7 +447,7 @@ export default function DashboardPage() {
 }
 
 // ═══════════════════════════════════════════════════
-// 오늘의 업무 카드 — 가장 급한 태스크 1~2건 하이라이트
+// 긴급 업무 카드 — 가장 급한 태스크 1~2건 하이라이트
 // ═══════════════════════════════════════════════════
 function FocusCard({ task, onClick }) {
   const dday = getDueDateStatus(task.due_date);

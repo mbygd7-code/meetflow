@@ -1,4 +1,4 @@
-import { useState, createContext, useContext } from 'react';
+import { useState, createContext, useContext, useEffect } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
 import { LayoutDashboard, MessageSquare, CheckSquare, FileText, Settings, Shield, Loader2, Users } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
@@ -7,11 +7,12 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
 import SlackNotifyBanner from '@/components/onboarding/SlackNotifyBanner';
+import CommandPalette from '@/components/search/CommandPalette';
 
 const PAGE_TITLES = {
   '/': '마이보드',
   '/meetings': '회의',
-  '/tasks': '태스크',
+  // /tasks 는 /members 로 redirect (App.jsx) — 매핑 제거
   '/members': '멤버·태스크',
   '/summaries': '회의록',
   '/settings': '설정',
@@ -21,6 +22,10 @@ const PAGE_TITLES = {
 // 모바일 사이드바 토글 컨텍스트
 export const SidebarContext = createContext();
 export const useSidebar = () => useContext(SidebarContext);
+
+// 명령 팔레트 (Cmd+K) 컨텍스트 — 어디서든 열 수 있게
+export const CommandPaletteContext = createContext();
+export const useCommandPalette = () => useContext(CommandPaletteContext);
 
 // 회의록은 회의 페이지 상단 버튼으로 진입 — 모바일 탭바에서도 제거
 // /tasks → /members 통합
@@ -74,6 +79,32 @@ function MobileTabBar() {
 export default function Layout() {
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 자료 풀사이즈 뷰어 활성 시 LNB 최소화 신호 — 회의방 등에서 set
+  const [sidebarForceMinimized, setSidebarForceMinimized] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // 글로벌 단축키 — Cmd/Ctrl+K 로 팔레트 토글, "/" 로도 열기 (input/textarea 외 영역에서만)
+  useEffect(() => {
+    const onKey = (e) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      // "/" — 입력 필드 밖에서만
+      if (e.key === '/' && !paletteOpen) {
+        const t = e.target;
+        const isEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        if (!isEditable) {
+          e.preventDefault();
+          setPaletteOpen(true);
+        }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [paletteOpen]);
 
   const hideTopBar = /^\/meetings\/[^/]+$/.test(pathname);
 
@@ -83,13 +114,14 @@ export default function Layout() {
     '';
 
   return (
-    <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
+    <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen, sidebarForceMinimized, setSidebarForceMinimized }}>
+      <CommandPaletteContext.Provider value={{ paletteOpen, setPaletteOpen, openPalette: () => setPaletteOpen(true) }}>
       <div className="flex flex-col h-screen bg-bg-primary text-txt-primary">
         {!hideTopBar && <TopBar />}
         <div className="flex flex-1 overflow-hidden">
           {/* 데스크톱 사이드바 */}
           <div className="hidden md:block">
-            <Sidebar />
+            <Sidebar forceMinimized={sidebarForceMinimized} />
           </div>
 
           {/* 모바일 사이드바 오버레이 */}
@@ -118,6 +150,10 @@ export default function Layout() {
         {!hideTopBar && <MobileTabBar />}
         <Toast />
       </div>
+
+      {/* 명령 팔레트 — 어디서든 Cmd+K 또는 "/" 로 열림 */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      </CommandPaletteContext.Provider>
     </SidebarContext.Provider>
   );
 }

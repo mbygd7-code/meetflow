@@ -12,7 +12,7 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import MeetingsPage from '@/pages/MeetingsPage';
 import MeetingRoomPage from '@/pages/MeetingRoomPage';
-import TasksPage from '@/pages/TasksPage';
+// /tasks 페이지는 멤버·태스크 페이지(/members)로 통합됨 — 라우트는 redirect로 보존
 import SummariesPage from '@/pages/SummariesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
@@ -83,7 +83,8 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/:id" element={<MeetingRoomPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
+        {/* /tasks 는 /members 로 통합 — 기존 북마크 보존을 위해 redirect 유지 */}
+        <Route path="/tasks" element={<Navigate to="/members" replace />} />
         <Route path="/members" element={<MembersPage />} />
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />

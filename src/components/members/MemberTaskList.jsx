@@ -1,34 +1,21 @@
-import { useMemo, useState } from 'react';
-import { Users, Calendar, AlertCircle, CheckCircle2, FileText, MessageSquare, ChevronRight, Plus, ArrowLeft } from 'lucide-react';
-import { format, parseISO, isValid, differenceInDays } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { Users, AlertCircle, CheckCircle2, Plus, ArrowLeft } from 'lucide-react';
+import MemberTaskCard from '@/components/task/MemberTaskCard';
 
-const PRIORITY_MAP = {
-  urgent: { label: '긴급', colorClass: 'bg-status-error', textClass: 'text-status-error' },
-  high: { label: 'High', colorClass: 'bg-brand-orange', textClass: 'text-brand-orange' },
-  medium: { label: 'Medium', colorClass: 'bg-brand-purple', textClass: 'text-brand-purple' },
-  low: { label: 'Low', colorClass: 'bg-txt-muted', textClass: 'text-txt-muted' },
-};
-
-const STATUS_DOT = {
-  todo: 'bg-txt-muted',
-  in_progress: 'bg-brand-purple',
-  review: 'bg-brand-orange',
-  done: 'bg-status-success',
-};
-
-const STATUS_LABEL = {
-  todo: '할 일',
-  in_progress: '진행 중',
-  review: '검토',
-  done: '완료',
-};
+// 필터 cascade 우선순위 — 진행중 > 대기 > 지연 > 완료 > 전체
+// 첫 진입/멤버 전환 시 비어있지 않은 첫 탭으로 자동 활성화
+const FILTER_CASCADE = ['in_progress', 'todo', 'overdue', 'done', 'all'];
 
 /**
  * 우측: 선택된 멤버 요약 + 태스크 리스트
  */
-export default function MemberTaskList({ tasks = [], members = [], selectedMember, selectedId, commentCounts = {}, onSelectTask, onCreateTask, onBack, mobileShowTasks = false }) {
-  const [filter, setFilter] = useState('all'); // all / todo / in_progress / done / overdue
+export default function MemberTaskList({
+  tasks = [], members = [], selectedMember, selectedId,
+  commentCounts = {}, onSelectTask, onCreateTask, onBack,
+  mobileShowTasks = false,
+  onQuickStatus, onQuickUpdate, // 인라인 편집용 (선택)
+}) {
+  const [filter, setFilter] = useState('in_progress'); // 진행중 기본 (cascade로 빈 탭 자동 회피)
   const [sort, setSort] = useState('due_date'); // due_date / priority / recent
 
   // 필터 + 정렬
@@ -79,83 +66,141 @@ export default function MemberTaskList({ tasks = [], members = [], selectedMembe
 
   const rate = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
+  // ── Cascade 자동 선택 (멤버 전환 시 1회만) ──
+  // 진행중 → 대기 → 지연 → 완료 → 전체 순서로 첫 비어있지 않은 탭 활성화.
+  // 사용자가 직접 클릭한 탭은 동일 멤버 동안 보존.
+  const cascadeRef = useRef({ memberId: undefined, done: false });
+  useEffect(() => {
+    // 멤버(또는 "전체") 전환 시 cascade 재실행 표시
+    if (cascadeRef.current.memberId !== selectedId) {
+      cascadeRef.current = { memberId: selectedId, done: false };
+    }
+    if (cascadeRef.current.done) return;
+    // 태스크 미로드 상태면 대기
+    if (tasks.length === 0) {
+      cascadeRef.current.done = true;
+      setFilter('all');
+      return;
+    }
+    cascadeRef.current.done = true;
+    const counts = {
+      in_progress: stats.inProgress,
+      todo: stats.todo,
+      overdue: stats.overdue,
+      done: stats.done,
+      all: stats.total,
+    };
+    for (const key of FILTER_CASCADE) {
+      if ((counts[key] || 0) > 0) {
+        setFilter(key);
+        return;
+      }
+    }
+    setFilter('all');
+  }, [selectedId, tasks.length, stats]);
+
   // 모바일: mobileShowTasks가 true일 때만 표시
   return (
     <div className={`flex-1 flex-col overflow-hidden ${mobileShowTasks ? 'flex' : 'hidden md:flex'}`}>
-      {/* 요약 헤더 */}
-      <div className="px-4 md:px-6 py-4 border-b border-border-divider bg-bg-primary/30 shrink-0">
+      {/* 요약 헤더 — 모바일: 2행 스택 (정체성 + 통계), 데스크톱: 1행 */}
+      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-border-divider bg-bg-primary/30 shrink-0">
         {selectedMember ? (
-          <div className="flex items-start gap-3 md:gap-4">
-            {/* 모바일 뒤로가기 */}
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="md:hidden w-9 h-9 rounded-md flex items-center justify-center hover:bg-bg-tertiary text-txt-secondary shrink-0 -ml-1"
-                aria-label="목록으로"
+          <div className="space-y-2.5 md:space-y-0 md:flex md:items-start md:gap-4">
+            {/* 정체성 행: 뒤로가기 + 아바타 + 이름/이메일 + (모바일) "+" 버튼 */}
+            <div className="flex items-start gap-2.5 md:gap-4 md:flex-1 md:min-w-0">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="md:hidden w-9 h-9 rounded-md flex items-center justify-center hover:bg-bg-tertiary text-txt-secondary shrink-0 -ml-1.5"
+                  aria-label="목록으로"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+              )}
+              <div
+                className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-sm md:text-base font-bold text-white shrink-0"
+                style={{ backgroundColor: selectedMember.avatar_color || '#723CEB' }}
               >
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
-              style={{ backgroundColor: selectedMember.avatar_color || '#723CEB' }}
-            >
-              {selectedMember.name?.[0] || '?'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg font-bold text-txt-primary">{selectedMember.name}</h2>
-                {selectedMember.role === 'admin' && (
-                  <span className="text-[10px] bg-brand-purple/20 text-brand-purple px-2 py-0.5 rounded font-semibold uppercase">
-                    Admin
-                  </span>
-                )}
+                {selectedMember.name?.[0] || '?'}
               </div>
-              <p className="text-xs text-txt-muted">{selectedMember.email}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base md:text-lg font-bold text-txt-primary truncate">{selectedMember.name}</h2>
+                  {selectedMember.role === 'admin' && (
+                    <span className="text-[10px] bg-bg-tertiary text-txt-primary border border-border-default px-2 py-0.5 rounded font-semibold uppercase shrink-0">
+                      Admin
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] md:text-xs text-txt-muted truncate">{selectedMember.email}</p>
+              </div>
+              {/* 모바일 전용 "+" 버튼 — 정체성 행 우측 끝 */}
+              {onCreateTask && (
+                <div className="md:hidden">
+                  <NewTaskButton onClick={() => onCreateTask(selectedMember)} />
+                </div>
+              )}
             </div>
-            <StatsBlock stats={stats} rate={rate} />
-            {onCreateTask && (
-              <NewTaskButton onClick={() => onCreateTask(selectedMember)} />
-            )}
+            {/* 통계 행: 모바일은 별도 행 / 데스크톱은 동일 행 우측 */}
+            <div className="flex items-center justify-between gap-3 md:justify-start md:shrink-0">
+              <StatsBlock stats={stats} rate={rate} />
+              {/* 데스크톱 전용 "+" 버튼 */}
+              {onCreateTask && (
+                <div className="hidden md:block">
+                  <NewTaskButton onClick={() => onCreateTask(selectedMember)} />
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-orange/20 to-brand-purple/20 flex items-center justify-center shrink-0">
-              <Users size={20} className="text-brand-purple" />
+          <div className="space-y-2.5 md:space-y-0 md:flex md:items-start md:gap-4">
+            <div className="flex items-start gap-2.5 md:gap-4 md:flex-1 md:min-w-0">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gradient-to-br from-brand-orange/20 to-brand-purple/20 flex items-center justify-center shrink-0">
+                <Users size={18} className="text-brand-purple" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base md:text-lg font-bold text-txt-primary">전체 팀원 태스크</h2>
+                <p className="text-[11px] md:text-xs text-txt-muted">모든 팀원의 태스크를 한눈에 확인하고 협업하세요</p>
+              </div>
+              {onCreateTask && (
+                <div className="md:hidden">
+                  <NewTaskButton onClick={() => onCreateTask(null)} />
+                </div>
+              )}
             </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-txt-primary">전체 팀원 태스크</h2>
-              <p className="text-xs text-txt-muted">모든 팀원의 태스크를 한눈에 확인하고 협업하세요</p>
+            <div className="flex items-center justify-between gap-3 md:justify-start md:shrink-0">
+              <StatsBlock stats={stats} rate={rate} />
+              {onCreateTask && (
+                <div className="hidden md:block">
+                  <NewTaskButton onClick={() => onCreateTask(null)} />
+                </div>
+              )}
             </div>
-            <StatsBlock stats={stats} rate={rate} />
-            {onCreateTask && (
-              <NewTaskButton onClick={() => onCreateTask(null)} />
-            )}
           </div>
         )}
       </div>
 
-      {/* 필터 + 정렬 바 */}
-      <div className="px-6 py-2.5 border-b border-border-divider flex items-center justify-between gap-3 flex-wrap shrink-0">
-        <div className="flex items-center gap-1 flex-wrap">
+      {/* 필터 + 정렬 바 — 모바일: 탭 가로 스크롤, 정렬은 우측 고정 */}
+      <div className="px-4 md:px-6 py-2.5 border-b border-border-divider flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-1 min-w-0">
           {[
-            { key: 'all', label: '전체', count: stats.total },
-            { key: 'todo', label: '할 일', count: stats.todo },
             { key: 'in_progress', label: '진행 중', count: stats.inProgress },
-            { key: 'done', label: '완료', count: stats.done },
+            { key: 'todo', label: '대기', count: stats.todo },
             { key: 'overdue', label: '지연', count: stats.overdue, warn: true },
+            { key: 'done', label: '완료', count: stats.done },
+            { key: 'all', label: '전체', count: stats.total },
           ].map((tab) => (
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+              className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
                 filter === tab.key
-                  ? 'bg-brand-purple/15 text-brand-purple border border-brand-purple/30'
+                  ? 'bg-bg-tertiary text-txt-primary border border-border-default'
                   : 'text-txt-secondary hover:bg-bg-tertiary border border-transparent'
               } ${tab.warn && tab.count > 0 ? 'text-status-error' : ''}`}
             >
               {tab.label}
-              <span className={`text-[10px] tabular-nums ${tab.warn && tab.count > 0 ? 'text-status-error' : ''}`}>
+              <span className={`text-[13px] font-bold tabular-nums ${tab.warn && tab.count > 0 ? 'text-status-error' : ''}`}>
                 {tab.count}
               </span>
             </button>
@@ -165,7 +210,7 @@ export default function MemberTaskList({ tasks = [], members = [], selectedMembe
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value)}
-          className="bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1 text-xs text-txt-primary focus:outline-none focus:border-brand-purple/50 cursor-pointer"
+          className="hidden md:block shrink-0 bg-bg-tertiary border border-border-subtle rounded-md px-2.5 py-1 text-xs text-txt-primary focus:outline-none focus:border-brand-purple/50 cursor-pointer"
         >
           <option value="due_date">마감일 순</option>
           <option value="priority">우선순위 순</option>
@@ -174,7 +219,7 @@ export default function MemberTaskList({ tasks = [], members = [], selectedMembe
       </div>
 
       {/* 태스크 리스트 */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-1.5">
         {filteredTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-14 h-14 rounded-full bg-bg-tertiary flex items-center justify-center mb-3">
@@ -189,13 +234,16 @@ export default function MemberTaskList({ tasks = [], members = [], selectedMembe
           </div>
         ) : (
           filteredTasks.map((task) => (
-            <TaskCard
+            <MemberTaskCard
               key={task.id}
               task={task}
               assignee={members.find((m) => m.id === task.assignee_id)}
               creator={members.find((m) => m.id === task.created_by)}
               commentCount={commentCounts[task.id] || 0}
+              members={members}
               onClick={() => onSelectTask(task)}
+              onQuickStatus={onQuickStatus}
+              onQuickUpdate={onQuickUpdate}
             />
           ))
         )}
@@ -227,16 +275,16 @@ function StatsBlock({ stats, rate }) {
         </p>
       </div>
       <div className="h-8 w-px bg-border-divider" />
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className="text-txt-muted">
-          진행 <span className="text-brand-purple font-semibold tabular-nums">{stats.inProgress}</span>
+      <div className="flex items-center gap-2.5 text-xs">
+        <span className="text-txt-secondary font-medium">
+          진행 <span className="text-txt-primary font-bold tabular-nums text-sm ml-0.5">{stats.inProgress}</span>
         </span>
-        <span className="text-txt-muted">
-          완료 <span className="text-status-success font-semibold tabular-nums">{stats.done}</span>
+        <span className="text-txt-secondary font-medium">
+          완료 <span className="text-txt-primary font-bold tabular-nums text-sm ml-0.5">{stats.done}</span>
         </span>
         {stats.overdue > 0 && (
-          <span className="text-txt-muted">
-            지연 <span className="text-status-error font-semibold tabular-nums">{stats.overdue}</span>
+          <span className="text-txt-secondary font-medium">
+            지연 <span className="text-status-error font-bold tabular-nums text-sm ml-0.5">{stats.overdue}</span>
           </span>
         )}
       </div>
@@ -244,130 +292,3 @@ function StatsBlock({ stats, rate }) {
   );
 }
 
-function TaskCard({ task, assignee, creator, commentCount, onClick }) {
-  const priority = PRIORITY_MAP[task.priority] || PRIORITY_MAP.medium;
-
-  const dueInfo = useMemo(() => {
-    if (!task.due_date) return null;
-    const date = parseISO(task.due_date);
-    if (!isValid(date)) return null;
-    const diff = differenceInDays(date, new Date());
-    const overdue = diff < 0 && task.status !== 'done';
-    let label = format(date, 'M/d', { locale: ko });
-    let colorClass = 'text-txt-secondary';
-    if (overdue) {
-      label = `${Math.abs(diff)}일 지연`;
-      colorClass = 'text-status-error font-semibold';
-    } else if (diff === 0) {
-      label = '오늘';
-      colorClass = 'text-brand-orange font-semibold';
-    } else if (diff <= 3 && task.status !== 'done') {
-      label = `D-${diff}`;
-      colorClass = 'text-brand-orange';
-    }
-    return { label, colorClass };
-  }, [task]);
-
-  return (
-    <div
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick?.();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      className="w-full bg-bg-secondary border border-border-subtle rounded-lg p-3.5 text-left hover:border-brand-purple/30 hover:bg-bg-tertiary/30 transition-all group cursor-pointer focus:outline-none focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20"
-    >
-      <div className="flex items-start gap-3">
-        {/* 우선순위 인디케이터 */}
-        <div className={`w-1 self-stretch rounded-full ${priority.colorClass}`} />
-
-        <div className="flex-1 min-w-0">
-          {/* 상단: 배지들 */}
-          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${priority.textClass}`}>
-              {priority.label}
-            </span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-txt-secondary">
-              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[task.status] || STATUS_DOT.todo}`} />
-              {STATUS_LABEL[task.status] || '할 일'}
-            </span>
-            {task.ai_suggested && (
-              <span className="text-[9px] bg-brand-purple/10 text-brand-purple px-1.5 py-0.5 rounded-full border border-brand-purple/20">
-                AI 추출
-              </span>
-            )}
-          </div>
-
-          {/* 제목 */}
-          <h3 className="text-sm font-semibold text-txt-primary leading-snug mb-1.5 group-hover:text-brand-purple transition-colors">
-            {task.title}
-          </h3>
-
-          {/* 설명 미리보기 */}
-          {task.description && (
-            <p className="text-[11px] text-txt-muted line-clamp-2 mb-2 leading-relaxed">
-              {task.description}
-            </p>
-          )}
-
-          {/* 메타 정보 */}
-          <div className="flex items-center gap-3 text-[11px] text-txt-muted flex-wrap">
-            {assignee ? (
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-                  style={{ backgroundColor: assignee.avatar_color || '#723CEB' }}
-                >
-                  {assignee.name?.[0]}
-                </div>
-                <span className="text-txt-secondary">{assignee.name}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <div className="w-4 h-4 rounded-full border border-dashed border-txt-muted/50 flex items-center justify-center">
-                  <span className="text-[8px] text-txt-muted">?</span>
-                </div>
-                <span className="text-txt-muted italic">미배정</span>
-              </div>
-            )}
-            {dueInfo && (
-              <span className={`inline-flex items-center gap-1 ${dueInfo.colorClass}`}>
-                <Calendar size={12} />
-                {dueInfo.label}
-              </span>
-            )}
-            {commentCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-txt-muted">
-                <MessageSquare size={12} />
-                {commentCount}
-              </span>
-            )}
-            {task.meeting_id && (
-              <span className="inline-flex items-center gap-1 text-brand-purple/80">
-                <FileText size={12} />
-                회의
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* 상세보기 버튼 — 우측 */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick?.();
-          }}
-          className="self-center shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-txt-secondary border border-border-subtle hover:border-brand-purple/40 hover:text-brand-purple hover:bg-brand-purple/5 transition-all opacity-60 group-hover:opacity-100"
-          title="태스크 상세 보기"
-        >
-          <span>상세보기</span>
-          <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
