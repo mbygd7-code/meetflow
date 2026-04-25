@@ -1,6 +1,8 @@
 // 회의록 어젠다 리스트 — 읽기 전용 + 진행 통계
 // 목표 시간 vs 실제 진행 시간, 관련 메시지 %, 미진행 표시
-import { Check, Clock, CircleDot, CircleSlash, MessageSquare } from 'lucide-react';
+// 기본 접힘 — 헤더 클릭으로 펼침 (시각적 복잡도 감소)
+import { useState } from 'react';
+import { Check, Clock, CircleDot, CircleSlash, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
 
 /**
  * @param {{
@@ -18,19 +20,38 @@ import { Check, Clock, CircleDot, CircleSlash, MessageSquare } from 'lucide-reac
  * }} props
  */
 export default function SummaryAgendaList({ agendas = [] }) {
+  const [open, setOpen] = useState(false);
   if (!agendas.length) return null;
 
   const sorted = [...agendas].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
   );
 
+  // 진행 요약 — 접힌 상태에서 한 줄 미리보기
+  const completedCount = sorted.filter((a) => a.status === 'completed').length;
+  const executedCount = sorted.filter(
+    (a) => a.status === 'completed' || (a.messageCount || 0) > 0,
+  ).length;
+
   return (
-    <div className="bg-bg-secondary border border-border-subtle rounded-[10px] p-4 mb-5">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="bg-bg-secondary border border-border-subtle rounded-[10px] mb-5 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 hover:bg-bg-tertiary/30 transition-colors"
+      >
         <h3 className="text-sm font-semibold text-txt-primary">어젠다</h3>
         <span className="text-xs text-txt-muted">{sorted.length}개</span>
-      </div>
+        <span className="text-xs text-txt-muted">
+          · 완료 {completedCount} / 진행 {executedCount}
+        </span>
+        <span className="ml-auto text-txt-muted">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      </button>
 
+      {open && (
+      <div className="px-4 pb-4">
       <ol className="space-y-1.5">
         {sorted.map((a, i) => {
           const isDone = a.status === 'completed';
@@ -158,6 +179,8 @@ export default function SummaryAgendaList({ agendas = [] }) {
           );
         })}
       </ol>
+      </div>
+      )}
     </div>
   );
 }

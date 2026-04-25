@@ -1,4 +1,7 @@
 // 회의 참여자 섹션 — 사람 + AI 전문가
+// 기본 접힘 — 헤더에 아바타 스택 미리보기, 클릭 시 상세 펼침
+import { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
@@ -17,12 +20,59 @@ export default function MeetingParticipants({
   aiEmployees = [],
   aiCounts = {},
 }) {
+  const [open, setOpen] = useState(false);
   const hasHuman = humanNames.length > 0;
   const hasAi = aiEmployees.length > 0;
   if (!hasHuman && !hasAi) return null;
 
+  // 헤더 미리보기용 아바타 스택 (최대 5개 + "+N")
+  const previewHumans = humanNames.slice(0, 5);
+  const previewAi = aiEmployees.slice(0, 3);
+  const hiddenCount =
+    Math.max(0, humanNames.length - previewHumans.length) +
+    Math.max(0, aiEmployees.length - previewAi.length);
+
   return (
-    <div className="bg-bg-secondary border border-border-subtle rounded-[10px] p-4 mb-5">
+    <div className="bg-bg-secondary border border-border-subtle rounded-[10px] mb-5 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-tertiary/30 transition-colors"
+      >
+        <span className="text-sm font-semibold text-txt-primary">참여자</span>
+        <span className="text-xs text-txt-muted">
+          {hasHuman && `${humanNames.length}명`}
+          {hasHuman && hasAi && ' · '}
+          {hasAi && `AI ${aiEmployees.length}`}
+        </span>
+        {/* 아바타 스택 미리보기 */}
+        <div className="flex items-center -space-x-1.5 ml-1">
+          {previewHumans.map((name) => (
+            <Avatar
+              key={`h-${name}`}
+              name={name}
+              size="sm"
+              className="!w-6 !h-6 !text-[10px] ring-2 ring-bg-secondary"
+            />
+          ))}
+          {previewAi.map((id) => (
+            <div key={`a-${id}`} className="ring-2 ring-bg-secondary rounded-full">
+              <MiloAvatar employeeId={id} size="sm" />
+            </div>
+          ))}
+          {hiddenCount > 0 && (
+            <span className="w-6 h-6 rounded-full bg-bg-tertiary text-[10px] font-semibold text-txt-secondary inline-flex items-center justify-center ring-2 ring-bg-secondary">
+              +{hiddenCount}
+            </span>
+          )}
+        </div>
+        <span className="ml-auto text-txt-muted">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      </button>
+
+      {open && (
+      <div className="px-4 pb-4">
       <div className="flex flex-col md:flex-row md:items-start gap-4">
         {/* 사람 참가자 */}
         {hasHuman && (
@@ -91,6 +141,8 @@ export default function MeetingParticipants({
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }

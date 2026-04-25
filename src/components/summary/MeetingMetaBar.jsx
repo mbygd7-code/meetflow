@@ -1,6 +1,6 @@
 // 회의록 메타 바 — 요청자 + 시간 타임라인 + 기본 수치
 // 제목 바로 아래 라인으로 렌더. 데이터가 없으면 그 항목만 자동 스킵
-import { Calendar, Play, Square, Clock, ListChecks, Users, UserCircle } from 'lucide-react';
+import { Calendar, Play, Square, Clock, ListChecks, Users, UserCircle, MessageSquare } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { safeFormatDate } from '@/utils/formatters';
 
@@ -18,7 +18,7 @@ import { safeFormatDate } from '@/utils/formatters';
  *   durationMin?: number,
  * }} props
  */
-export default function MeetingMetaBar({ meeting, participantCount, durationMin }) {
+export default function MeetingMetaBar({ meeting, participantCount, durationMin, messageCount, humanMsgs, aiMsgs }) {
   if (!meeting) return null;
 
   const chips = [];
@@ -117,6 +117,20 @@ export default function MeetingMetaBar({ meeting, participantCount, durationMin 
       <span key="participants" className="inline-flex items-center gap-1.5 text-txt-muted">
         <Users size={14} strokeWidth={2} />
         참가자 <span className="text-txt-primary font-medium">{participantCount}</span>명
+      </span>
+    );
+  }
+
+  // 8. 총 메시지 수 (사람/AI 분리 표시)
+  if (messageCount != null && messageCount > 0) {
+    const breakdown =
+      humanMsgs != null && aiMsgs != null
+        ? ` (사람 ${humanMsgs} · AI ${aiMsgs})`
+        : '';
+    chips.push(
+      <span key="messages" className="inline-flex items-center gap-1.5 text-txt-muted">
+        <MessageSquare size={14} strokeWidth={2} />
+        <span className="text-txt-primary font-medium">{messageCount}</span>건{breakdown}
       </span>
     );
   }
