@@ -317,8 +317,18 @@ export default function DrawingOverlay({
     const chName = `drawing:${meetingId}:${targetKey}`;
     const ch = supabase.channel(chName, { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'stroke' }, ({ payload }) => {
-      if (!payload) return;
-      setStrokes((prev) => [...prev, payload]);
+      if (!payload?.id) return;
+      // id 기준 upsert — 같은 stroke가 다시 broadcast 되면(예: 사각형 이동/리사이즈)
+      // 중복 추가하지 않고 in-place 갱신.
+      setStrokes((prev) => {
+        const idx = prev.findIndex((s) => s.id === payload.id);
+        if (idx >= 0) {
+          const next = prev.slice();
+          next[idx] = payload;
+          return next;
+        }
+        return [...prev, payload];
+      });
       // 원격 stroke의 seq도 글로벌 최대값에 반영 (태그 충돌 방지)
       if (typeof payload.seq === 'number' && payload.user_id) {
         setGlobalSeqByUser((prev) => ({
@@ -1032,7 +1042,7 @@ export default function DrawingOverlay({
 
           {m.annotations.length > 0 && (
             <div
-              className={`absolute top-[calc(100%+4px)] flex flex-col gap-1 w-[220px] max-w-[220px] ${
+              className={`absolute top-[calc(100%+4px)] flex flex-col gap-1 max-w-[220px] ${
                 // 사각형: 아바타 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
                 // 펜: 기존대로 아바타 중심 정렬
                 isRect ? 'left-0' : 'left-1/2 -translate-x-1/2'
@@ -1043,11 +1053,11 @@ export default function DrawingOverlay({
               {m.annotations.slice(-3).map((a, i) => (
                 <div
                   key={a.msgId || i}
-                  className="rounded-md bg-white/95 border text-[11px] text-[#222] px-2 py-1 shadow-md backdrop-blur-sm"
+                  className="rounded-md bg-white/95 border text-[11px] text-[#222] px-2 py-1 shadow-md backdrop-blur-sm w-fit max-w-full"
                   style={{ borderColor: m.strokeColor }}
                   title={`${a.authorName} · ${a.text}`}
                 >
-                  <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5" style={{ color: m.strokeColor }}>
+                  <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5 whitespace-nowrap" style={{ color: m.strokeColor }}>
                     <span
                       className="w-3 h-3 rounded-full text-white flex items-center justify-center text-[8px] font-bold"
                       style={{ backgroundColor: a.authorColor }}
