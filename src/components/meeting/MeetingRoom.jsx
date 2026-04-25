@@ -176,6 +176,7 @@ function ImageZoomOverlay({
   setMyViewerState,
 }) {
   // 내 뷰어 상태 hook 에 동기화 (이미지는 페이지 개념 없음 → page=1)
+  //   cleanup 은 언마운트(파일 닫힘) 시만 실행하여 race window 제거
   useEffect(() => {
     if (typeof setMyViewerState !== 'function') return;
     setMyViewerState({
@@ -183,10 +184,13 @@ function ImageZoomOverlay({
       fileName: file?.name,
       page: 1,
     });
-    return () => {
-      setMyViewerState(null);
-    };
   }, [file?.id, file?.name, setMyViewerState]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof setMyViewerState === 'function') setMyViewerState(null);
+    };
+  }, [setMyViewerState]);
   const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
   const [sliderOpen, setSliderOpen] = useState(false);
   const [drawingActive, setDrawingActive] = useState(false);
@@ -594,17 +598,20 @@ function DocumentZoomOverlay({
   const fileId = file?.id || file?.name;
 
   // 내 현재 페이지 — request-sync 응답에 사용 + UI 상태 추적
+  // PdfViewer 의 onCurrentPageChange 콜백이 출처 무관하게 모든 페이지 변경을 통지하므로
+  // 외부 동기화로 인한 변경도 정확히 추적된다. (skipBroadcast 의 영향을 받지 않음)
   const [myCurrentPage, setMyCurrentPage] = useState(1);
 
-  // 페이지 변경 broadcast (PdfViewer로부터 콜백 받음)
+  // 페이지 변경 broadcast (PdfViewer 의 onPageChange 콜백) — 자기가 직접 넘긴 경우만
   const handlePageChange = useCallback((page) => {
-    setMyCurrentPage(page);
     if (typeof vbroadcast === 'function') {
       vbroadcast('viewer:page', { fileId, page });
     }
   }, [vbroadcast, fileId]);
 
   // 내 뷰어 상태 hook 에 동기화 (request-sync 응답에 사용)
+  //   ※ cleanup 은 마운트 해제(파일 닫힘) 시에만 실행하도록 분리.
+  //     이전엔 dep 변경마다 null→state 가 일어나 응답 race window 가 있었음.
   useEffect(() => {
     if (typeof setMyViewerState !== 'function') return;
     setMyViewerState({
@@ -612,12 +619,16 @@ function DocumentZoomOverlay({
       fileName: file?.name,
       page: myCurrentPage,
     });
-    return () => {
-      setMyViewerState(null);
-    };
   }, [fileId, file?.name, myCurrentPage, setMyViewerState]);
 
-  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답) — 한 번만 적용
+  // 언마운트 시에만 상태 클리어
+  useEffect(() => {
+    return () => {
+      if (typeof setMyViewerState === 'function') setMyViewerState(null);
+    };
+  }, [setMyViewerState]);
+
+  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답) — 값이 들어올 때마다 적용
   useEffect(() => {
     if (initialPage == null || initialPage <= 0) return;
     setPresenterPage(initialPage);
@@ -746,6 +757,7 @@ function DocumentZoomOverlay({
             controlsContainer={pdfControlsHost}
             presenterPage={presenterPage}
             onPageChange={handlePageChange}
+            onCurrentPageChange={setMyCurrentPage}
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
             following={following}
