@@ -473,43 +473,18 @@ export default function MeetingSummary() {
         </div>
       </div>
 
-      {/* 메타 바: 요청자 + 시간 타임라인 + 수치 */}
+      {/* 메타 바: 요청자 + 시간 타임라인 + 수치 (소요시간/메시지/참가자 모두 흡수)
+          → 별도 StatCard 행은 정보 중복이라 제거. 한 줄에서 핵심 메타 모두 파악. */}
       <div className="mb-5">
         <MeetingMetaBar
           meeting={meeting}
           participantCount={stats?.participants.length || meeting.participants?.length || 0}
           durationMin={stats?.durationMin}
+          messageCount={stats?.total}
+          humanMsgs={stats?.humanMsgs}
+          aiMsgs={stats?.aiMsgs}
         />
       </div>
-
-      {/* 회의 통계 바 */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
-          <StatCard
-            icon={Clock}
-            label="소요시간"
-            value={formatDurationLabel(stats.durationMin)}
-            color="text-brand-orange"
-          />
-          <StatCard
-            icon={MessageSquare}
-            label="총 메시지"
-            value={stats.total}
-            sub={`사람 ${stats.humanMsgs} · AI ${stats.aiMsgs}`}
-          />
-          <StatCard
-            icon={Users}
-            label="참가자"
-            value={stats.participants.length}
-          />
-          <StatCard
-            icon={Sparkles}
-            label="AI 전문가"
-            value={stats.aiEmployees.length}
-            color="text-brand-purple"
-          />
-        </div>
-      )}
 
       {/* Milo 인사이트 */}
       {summary.milo_insights && (

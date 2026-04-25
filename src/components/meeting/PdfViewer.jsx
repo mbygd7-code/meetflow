@@ -5,6 +5,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import DrawingOverlay from './DrawingOverlay';
+import RemoteCursorsLayer from './RemoteCursorsLayer';
 
 // PDF.js worker 설정 — Vite + unpkg CDN
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -29,6 +30,9 @@ export default function PdfViewer({
   presenterPage,         // 외부가 강제로 지정하는 페이지 (null/undefined = 미사용)
   onPageChange,          // 내 페이지 변경 시 부모에게 알림 → broadcast
   controlsContainer,     // HTMLElement | null — 지정 시 컨트롤(페이지/줌)을 이 노드에 포털 렌더
+  // 라이브 커서 동기화 — PDF 페이지 박스 기준으로 정규화하여 모든 사용자가 같은 위치에 표시
+  vbroadcast,            // (event, payload) => void
+  remoteCursors = {},    // { [uid]: { fileId, page, x, y, name, color, ts } }
 }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -41,6 +45,7 @@ export default function PdfViewer({
   //   zoom/fitWidth 변화에 따라 ResizeObserver로 자동 갱신 → 드로잉이 페이지와 같이 스케일
   const pageWrapRef = useRef(null);
   const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
+  const cursorThrottleRef = useRef(0);
 
   useEffect(() => {
     const el = pageWrapRef.current;
@@ -380,7 +385,26 @@ export default function PdfViewer({
           className="shrink-0"
         >
           {/* 페이지 + 드로잉 오버레이 컨테이너 — relative로 묶어 오버레이가 페이지와 함께 이동/스케일 */}
-          <div ref={pageWrapRef} className="relative shrink-0 inline-block">
+          <div
+            ref={pageWrapRef}
+            className="relative shrink-0 inline-block"
+            onMouseMove={(e) => {
+              if (typeof vbroadcast !== 'function') return;
+              const now = Date.now();
+              if (cursorThrottleRef.current && now - cursorThrottleRef.current < 50) return;
+              cursorThrottleRef.current = now;
+              // 좌표 정규화 기준 = 실제 PDF 페이지 박스
+              //   (스크롤 컨테이너 기준이면 fitWidth/auto 여백 차이로 사용자 간 위치가 어긋남)
+              const el = pageWrapRef.current;
+              if (!el) return;
+              const rect = el.getBoundingClientRect();
+              if (rect.width <= 0 || rect.height <= 0) return;
+              const x = (e.clientX - rect.left) / rect.width;
+              const y = (e.clientY - rect.top) / rect.height;
+              if (x < 0 || x > 1 || y < 0 || y > 1) return;
+              vbroadcast('viewer:cursor', { fileId, page: pageNumber, x, y });
+            }}
+          >
             <Page
               pageNumber={pageNumber}
               width={pageWidth}
@@ -403,6 +427,14 @@ export default function PdfViewer({
                 messages={messages}
                 onClose={onCloseDrawing}
                 toolbarContainer={toolbarContainer}
+              />
+            )}
+            {/* 라이브 커서 — pageWrapRef 위에 직접 마운트, 페이지 일치 시만 표시 */}
+            {fileId && (
+              <RemoteCursorsLayer
+                cursors={remoteCursors}
+                fileId={fileId}
+                page={pageNumber}
               />
             )}
           </div>

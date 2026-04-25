@@ -21,6 +21,7 @@ import AgendaBar from './AgendaBar';
 import PollPanel from './PollPanel';
 import PdfViewer from './PdfViewer';
 import DrawingOverlay from './DrawingOverlay';
+import RemoteCursorsLayer from './RemoteCursorsLayer';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
@@ -375,9 +376,13 @@ function ImageZoomOverlay({
             const now = Date.now();
             if (cursorThrottleRef.current && now - cursorThrottleRef.current < 50) return;
             cursorThrottleRef.current = now;
-            const el = scrollRef.current;
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
+            // 좌표 정규화 기준 = 실제 이미지 콘텐츠 박스
+            //   (스크롤 컨테이너 기준이면 브라우저 폭에 따라 이미지 주변 여백이 달라
+            //    같은 픽셀에 마우스를 올려도 사용자 간 normalized x/y 가 어긋남)
+            const img = imageRef.current;
+            if (!img) return;
+            const rect = img.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
             const x = (e.clientX - rect.left) / rect.width;
             const y = (e.clientY - rect.top) / rect.height;
             if (x < 0 || x > 1 || y < 0 || y > 1) return;
@@ -447,15 +452,15 @@ function ImageZoomOverlay({
                   toolbarContainer={toolbarHost}
                 />
               )}
+              {/* 라이브 커서 — 이미지 콘텐츠 박스 위에 직접 마운트
+                  (sender가 imageRef 기준으로 정규화하므로 receiver도 같은 박스 위에 표시) */}
+              <RemoteCursorsLayer cursors={remoteCursors} fileId={file.id || file.name} />
             </div>
           ) : (
             <p className="text-xs text-txt-muted">로딩 중...</p>
           )}
 
         </div>
-
-        {/* 라이브 커서 — scrollRef 외부에 배치하여 스크롤/줌과 무관하게 viewport 기준 표시 */}
-        <RemoteCursorsLayer cursors={remoteCursors} fileId={file.id || file.name} />
 
         {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
         <div
@@ -586,16 +591,20 @@ function DocumentZoomOverlay({
     return () => setViewerHandler('onPage', null);
   }, [setViewerHandler, fileId]);
 
-  // 마우스 이동 broadcast (50ms 스로틀)
+  // PDF 케이스의 커서/원격커서는 PdfViewer 가 페이지 박스 기준으로 자체 처리.
+  // 비-PDF(이미지/기타) 폴백 케이스용 마우스 이동 broadcast — 이미지 ref 기준 정규화.
   const lastSentRef = useRef(0);
-  const handleMouseMove = (e) => {
+  const fallbackImageRef = useRef(null);
+  const handleFallbackMouseMove = (e) => {
     if (typeof vbroadcast !== 'function') return;
+    if (isPdf) return; // PDF는 PdfViewer 내부에서 처리
     const now = Date.now();
     if (now - lastSentRef.current < 50) return;
     lastSentRef.current = now;
-    const el = bodyRef.current;
+    const el = isImageType ? fallbackImageRef.current : bodyRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
@@ -675,7 +684,7 @@ function DocumentZoomOverlay({
       {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드 */}
       <div
         ref={bodyRef}
-        onMouseMove={handleMouseMove}
+        onMouseMove={handleFallbackMouseMove}
         className="flex-1 relative bg-bg-tertiary/30 overflow-hidden"
       >
         {isPdf && url ? (
@@ -691,9 +700,20 @@ function DocumentZoomOverlay({
             controlsContainer={pdfControlsHost}
             presenterPage={presenterPage}
             onPageChange={handlePageChange}
+            vbroadcast={vbroadcast}
+            remoteCursors={remoteCursors}
           />
         ) : isImageType && url ? (
-          <img src={url} alt={file.name} className="w-full h-full object-contain" />
+          <div className="relative w-full h-full">
+            <img
+              ref={fallbackImageRef}
+              src={url}
+              alt={file.name}
+              className="w-full h-full object-contain"
+            />
+            {/* 비-PDF 이미지 폴백 — 이미지 박스 기준 커서 동기화 */}
+            <RemoteCursorsLayer cursors={remoteCursors} fileId={fileId} />
+          </div>
         ) : url ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-txt-muted py-8 px-4 text-center">
             <FileText size={48} strokeWidth={1.3} />
@@ -712,41 +732,11 @@ function DocumentZoomOverlay({
         ) : (
           <p className="text-xs text-txt-muted p-4">로딩 중...</p>
         )}
-
-        {/* 다른 참가자 라이브 커서 — 같은 파일 보는 사람만 */}
-        <RemoteCursorsLayer cursors={remoteCursors} fileId={fileId} />
+        {/* 라이브 커서:
+            - PDF      : PdfViewer 내부 pageWrapRef 위에 마운트 (페이지 박스 기준 정규화)
+            - 이미지   : 위 fallback 이미지 wrapper 안에서 렌더 (이미지 박스 기준)
+            - 그 외   : 콘텐츠가 없으므로 표시 안 함 */}
       </div>
-    </div>
-  );
-}
-
-// ── 다른 참가자 라이브 커서 표시 ──
-function RemoteCursorsLayer({ cursors = {}, fileId }) {
-  const list = Object.entries(cursors).filter(([, c]) => c.fileId === fileId);
-  if (list.length === 0) return null;
-  return (
-    <div className="absolute inset-0 pointer-events-none z-[8]">
-      {list.map(([uid, c]) => (
-        <div
-          key={uid}
-          className="absolute transition-[left,top] duration-100 ease-linear"
-          style={{
-            left: `${c.x * 100}%`,
-            top: `${c.y * 100}%`,
-            transform: 'translate(-2px, -2px)',
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
-            <path d="M2 2 L18 10 L10 11 L8 18 Z" fill={c.color} stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
-          </svg>
-          <span
-            className="absolute left-4 top-3 text-[10px] font-semibold text-white px-1.5 py-0.5 rounded whitespace-nowrap"
-            style={{ backgroundColor: c.color, boxShadow: '0 2px 4px rgba(0,0,0,0.25)' }}
-          >
-            {c.name}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
