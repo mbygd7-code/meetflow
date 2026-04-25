@@ -93,30 +93,37 @@ export default function PdfViewer({
   }, []);
 
   // ── 라이브 동기화 ──
-  // 1) presenterPage 변경 시 내 pageNumber도 동기화 (loop 방지: 같은 값이면 무시)
+  //   1) presenterPage(외부 발표자 신호) 들어오면 내 pageNumber 강제 적용
+  //      이 변경은 "외부에서 온 것"이므로 다시 broadcast 하지 않도록 ref 표식
+  //   2) 내가 직접 클릭/네비로 pageNumber 바꾸면 broadcast (외부 표식 없을 때만)
+  //   3) 초기 마운트(pageNumber=1) 자동 broadcast 억제
+  const skipBroadcastRef = useRef(false);
+  const initialBroadcastSkippedRef = useRef(false);
+
+  // 1) 외부 → 내부
   useEffect(() => {
     if (presenterPage == null) return;
     if (numPages != null && (presenterPage < 1 || presenterPage > numPages)) return;
-    setPageNumber((cur) => (cur === presenterPage ? cur : presenterPage));
+    setPageNumber((cur) => {
+      if (cur === presenterPage) return cur;
+      skipBroadcastRef.current = true; // 다음 pageNumber effect 의 broadcast 1회 스킵
+      return presenterPage;
+    });
   }, [presenterPage, numPages]);
-  // 2) 내 pageNumber 변경 시 부모에 알림 (broadcast 트리거)
-  //    presenterPage 와 같은 값일 때는 알리지 않음 (수신 → 적용 → 재 broadcast 루프 방지)
-  //    초기 마운트 시 pageNumber=1 자동 broadcast 도 억제 (실제 사용자 액션만 broadcast)
-  const lastBroadcastedPageRef = useRef(null);
-  const initialBroadcastSkippedRef = useRef(false);
+
+  // 2) 내부 → 외부 (broadcast)
   useEffect(() => {
     if (typeof onPageChange !== 'function') return;
-    // 첫 마운트 시 초기값(1) broadcast 스킵 — 의도하지 않은 follower 페이지 변경 방지
     if (!initialBroadcastSkippedRef.current) {
       initialBroadcastSkippedRef.current = true;
-      lastBroadcastedPageRef.current = pageNumber;
       return;
     }
-    if (pageNumber === presenterPage) return;
-    if (lastBroadcastedPageRef.current === pageNumber) return;
-    lastBroadcastedPageRef.current = pageNumber;
+    if (skipBroadcastRef.current) {
+      skipBroadcastRef.current = false; // 외부에서 온 변경이므로 broadcast 안 함
+      return;
+    }
     onPageChange(pageNumber);
-  }, [pageNumber, presenterPage, onPageChange]);
+  }, [pageNumber, onPageChange]);
 
   // ── 모바일 핀치줌 (두 손가락) ──
   // touchstart 시 두 손가락 간 거리 기록 → touchmove 에서 비율로 zoom 조정
@@ -381,14 +388,18 @@ export default function PdfViewer({
               renderTextLayer={false}
               className="shadow-lg"
             />
-            {drawingActive && pageBox.w > 0 && pageBox.h > 0 && fileId && (
+            {drawingActive && fileId && (
               <DrawingOverlay
+                // 페이지 변경 시 강제 재마운트 — 이전 페이지 stroke state 누수 방지
+                key={`${fileId}-p${pageNumber}`}
                 // 페이지별 target_key — 각 페이지는 독립된 드로잉 레이어
                 targetKey={`doc:${fileId}:p${pageNumber}`}
                 fileName={fileName ? `${fileName} p.${pageNumber}` : null}
                 meetingId={meetingId}
-                width={pageBox.w}
-                height={pageBox.h}
+                // pageBox 초기엔 0 — pageWidth(렌더된 PDF 폭)을 fallback 으로 사용
+                //   → DrawingOverlay 가 즉시 마운트되어 toolbar 포털이 곧바로 동작
+                width={pageBox.w || pageWidth}
+                height={pageBox.h || Math.round(pageWidth / pageAspect)}
                 messages={messages}
                 onClose={onCloseDrawing}
                 toolbarContainer={toolbarContainer}

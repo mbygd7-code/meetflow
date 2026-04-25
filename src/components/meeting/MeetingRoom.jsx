@@ -321,7 +321,9 @@ function ImageZoomOverlay({
               title={following ? '라이브 따라가기 ON' : '라이브 따라가기 OFF — 클릭해서 켜기'}
               aria-pressed={following}
             >
-              <span className={following ? 'text-brand-yellow animate-pulse' : ''}>●</span>
+              <span
+                style={following ? { color: '#FFEF63', textShadow: '0 0 4px rgba(255,239,99,0.8)' } : undefined}
+              >●</span>
               <span className="ml-1 hidden md:inline">라이브</span>
             </button>
           )}
@@ -618,7 +620,9 @@ function DocumentZoomOverlay({
               title={following ? '라이브 따라가기 ON — 다른 참가자가 자료 열거나 페이지 넘기면 따라감' : '라이브 따라가기 OFF — 클릭해서 켜기'}
               aria-pressed={following}
             >
-              <span className={following ? 'text-brand-yellow animate-pulse' : ''}>●</span>
+              <span
+                style={following ? { color: '#FFEF63', textShadow: '0 0 4px rgba(255,239,99,0.8)' } : undefined}
+              >●</span>
               <span className="ml-1 hidden md:inline">라이브</span>
             </button>
           )}
@@ -657,14 +661,14 @@ function DocumentZoomOverlay({
         </div>
       </div>
 
-      {/* 통합 툴바 — PDF 컨트롤(좌) + 드로잉 툴바(우) 한 줄
-          높이 고정. w-full + min-w-0 으로 부모 폭 강제 + 모바일 가로 스크롤 */}
+      {/* 통합 툴바 — PDF 컨트롤 + 드로잉 툴바
+          데스크톱: 한 줄 (높이 55px) / 모바일: 두 줄 wrap (PDF 위, 드로잉 아래) */}
       {(isPdf || drawingActive) && (
-        <div className="flex items-center justify-between gap-2 px-2 md:px-3 py-1 md:py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60 h-12 md:h-[55px] w-full min-w-0 max-w-full overflow-x-auto scrollbar-hide">
-          {/* 좌: PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
-          <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0" />
-          {/* 우: 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
-          <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0" />
+        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 py-1 md:py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60 h-auto md:h-[55px] w-full min-w-0 max-w-full">
+          {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
+          <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto" />
+          {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
+          <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-x-auto scrollbar-hide" />
         </div>
       )}
 
@@ -1447,6 +1451,17 @@ export default function MeetingRoom() {
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // 드로잉 아바타 태그 클릭 시 — 모바일에서는 자료 드로어 닫고 채팅창으로 전환.
+  // 자료 패널 state(zoomFile/docFile/페이지/줌 등)는 DocumentPanel이 마운트 유지되어 보존됨.
+  // → 다시 자료 버튼 누르면 같은 자료, 같은 페이지로 복귀.
+  useEffect(() => {
+    const handler = () => {
+      if (window.innerWidth < 768) setMobileDocOpen(false);
+    };
+    window.addEventListener('meetflow:drawing-tag', handler);
+    return () => window.removeEventListener('meetflow:drawing-tag', handler);
   }, []);
   useEffect(() => {
     if (typeof setSidebarForceMinimized !== 'function') return;

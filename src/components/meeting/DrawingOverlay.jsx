@@ -171,6 +171,13 @@ export default function DrawingOverlay({
 
   // 마운트 시 DB에서 저장된 drawings 로드 + meeting_drawings 테이블 Realtime 구독
   useEffect(() => {
+    // targetKey 변경 시 (예: PDF 페이지 전환) — 이전 stroke state 즉시 클리어
+    //   load 가 끝나기 전에 이전 페이지 그림이 새 페이지에 잠시 보이는 것 방지
+    setStrokes([]);
+    setUndoStack([]);
+    setRedoStack([]);
+    setSavedAt(null);
+    setLoaded(false);
     if (!SUPABASE_ENABLED || !meetingId || !targetKey) {
       setLoaded(true);
       return;
@@ -728,7 +735,7 @@ export default function DrawingOverlay({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [readOnly]);
 
-  const toolbarCommonCls = 'inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors';
+  const toolbarCommonCls = 'inline-flex items-center justify-center w-6 h-6 md:w-7 md:h-7 rounded-md transition-colors';
 
   // 각 stroke에 사용자별 순번(seq) 부여 — 저장된 s.seq 우선, 없으면 등장 순서 fallback
   const strokeSeqMap = useMemo(() => {
@@ -1069,7 +1076,7 @@ export default function DrawingOverlay({
           <div
             className={
               toolbarContainer
-                ? "inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+                ? "inline-flex items-center gap-0.5 md:gap-1 px-1 md:px-2 py-1 md:py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
                 : "absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
             }
             onMouseDown={(e) => e.stopPropagation()}
@@ -1145,7 +1152,7 @@ export default function DrawingOverlay({
               ))
             )}
 
-            <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+            <div className="w-px h-5 bg-[#e0e0e0] mx-0.5 md:mx-1" />
 
             <button
               onClick={handleUndo}
@@ -1178,7 +1185,7 @@ export default function DrawingOverlay({
               <Eraser size={16} />
             </button>
 
-            <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+            <div className="w-px h-5 bg-[#e0e0e0] mx-0.5 md:mx-1" />
 
             {/* 보이기/숨기기 토글 */}
             <button
@@ -1207,7 +1214,7 @@ export default function DrawingOverlay({
 
             {onClose && (
               <>
-                <div className="w-px h-5 bg-[#e0e0e0] mx-1" />
+                <div className="w-px h-5 bg-[#e0e0e0] mx-0.5 md:mx-1" />
                 <button
                   onClick={onClose}
                   className={`${toolbarCommonCls} text-[#555] hover:text-[#222] hover:bg-black/5`}
