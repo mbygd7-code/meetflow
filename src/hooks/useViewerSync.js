@@ -39,6 +39,10 @@ export function useViewerSync(meetingId) {
   const [following, setFollowing] = useState(false);
   const followingRef = useRef(false);
   followingRef.current = following;
+  // user 는 채널 effect 의 deps 로 두면 user 객체 아이덴티티 변경 시 채널이 재구독되어
+  // 이벤트 누락 가능. ref 로 최신 값을 유지하여 채널은 meetingId 만으로 1회 구독.
+  const userRef = useRef(user);
+  userRef.current = user;
   // 내 현재 뷰어 상태 — request-sync 응답에 사용
   //   { fileId, fileName, page } | null
   const myStateRef = useRef(null);
@@ -70,6 +74,7 @@ export function useViewerSync(meetingId) {
       if (!followingRef.current) return;
       const s = myStateRef.current;
       if (!s?.fileId) return;
+      const u = userRef.current;
       // 응답 — broadcast() 가 따로 following 게이트 체크하지만 이미 위에서 통과했으니 OK
       try {
         ch.send({
@@ -80,9 +85,9 @@ export function useViewerSync(meetingId) {
             fileName: s.fileName,
             page: s.page,
             _user: {
-              id: user?.id,
-              name: user?.name || '참가자',
-              color: user?.avatar_color || '#723CEB',
+              id: u?.id,
+              name: u?.name || '참가자',
+              color: u?.avatar_color || '#723CEB',
             },
           },
         });
@@ -99,7 +104,7 @@ export function useViewerSync(meetingId) {
       try { supabase.removeChannel(ch); } catch {}
       channelRef.current = null;
     };
-  }, [meetingId, user]);
+  }, [meetingId]);
 
   const broadcast = useCallback((event, payload) => {
     const ch = channelRef.current;
@@ -107,6 +112,7 @@ export function useViewerSync(meetingId) {
     // 라이브 = 양방향 공유 스위치. OFF면 일체 송신 차단 (open/close/page/cursor 모두)
     //   → 라이브 끄고 혼자 자료 검토할 때 다른 참가자에게 의도치 않은 영향 X
     if (!followingRef.current) return;
+    const u = userRef.current;
     try {
       ch.send({
         type: 'broadcast',
@@ -114,14 +120,14 @@ export function useViewerSync(meetingId) {
         payload: {
           ...payload,
           _user: {
-            id: user?.id,
-            name: user?.name || '참가자',
-            color: user?.avatar_color || '#723CEB',
+            id: u?.id,
+            name: u?.name || '참가자',
+            color: u?.avatar_color || '#723CEB',
           },
         },
       });
     } catch {}
-  }, [user]);
+  }, []);
 
   // 라이브 OFF → ON 전환 시: "현재 라이브 상태 알려줘" 요청
   //   다른 라이브 사용자가 viewer:state 로 응답 → onState 핸들러가 자료 자동 오픈 + 페이지 점프

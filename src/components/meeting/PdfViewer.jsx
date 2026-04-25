@@ -28,7 +28,8 @@ export default function PdfViewer({
   toolbarContainer,
   // 라이브 동기화 — 다른 참가자가 페이지 넘기면 따라가기
   presenterPage,         // 외부가 강제로 지정하는 페이지 (null/undefined = 미사용)
-  onPageChange,          // 내 페이지 변경 시 부모에게 알림 → broadcast
+  onPageChange,          // 내 페이지 변경 시 부모에게 알림 → broadcast (외부 동기화로 인한 변경은 제외)
+  onCurrentPageChange,   // pageNumber 가 바뀔 때마다 항상 호출 (출처 무관, 상태 추적용)
   controlsContainer,     // HTMLElement | null — 지정 시 컨트롤(페이지/줌)을 이 노드에 포털 렌더
   // 라이브 커서 동기화 — PDF 페이지 박스 기준으로 정규화하여 모든 사용자가 같은 위치에 표시
   vbroadcast,            // (event, payload) => void
@@ -132,6 +133,16 @@ export default function PdfViewer({
     }
     onPageChange(pageNumber);
   }, [pageNumber, onPageChange]);
+
+  // 3) 페이지 추적 (출처 무관, 상태 동기화용)
+  //    onPageChange 와 달리 외부 발신자 broadcast 로 인한 페이지 변경도 모두 통지.
+  //    → 부모(DocumentZoomOverlay)가 자기 myCurrentPage 를 정확히 유지해야
+  //      라이브 OFF→ON 전환자가 request-sync 응답으로 올바른 페이지를 받아간다.
+  useEffect(() => {
+    if (typeof onCurrentPageChange === 'function') {
+      onCurrentPageChange(pageNumber);
+    }
+  }, [pageNumber, onCurrentPageChange]);
 
   // ── 모바일 핀치줌 (두 손가락) ──
   // touchstart 시 두 손가락 간 거리 기록 → touchmove 에서 비율로 zoom 조정
