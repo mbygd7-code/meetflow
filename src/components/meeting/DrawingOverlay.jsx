@@ -96,6 +96,10 @@ export default function DrawingOverlay({
   messages = [],
   readOnly = false,       // true면 툴바 숨김 + 포인터 차단 (완료 회의 뷰용)
   toolbarContainer,       // HTMLElement | null — 지정 시 툴바를 이 노드로 포털 (뷰어 헤더 아래 배치용)
+  // 라이브 = 양방향 공유 스위치. false면 stroke 송신/수신 모두 차단 (완전 로컬 모드)
+  //   - 전송: 내 스트로크가 다른 참가자에게 broadcast 안 됨
+  //   - 수신: 다른 참가자의 신규 stroke 가 내 화면에 추가 안 됨 (이미 로드된 strokes 는 그대로)
+  following = true,
 }) {
   const { user } = useAuthStore();
   const addToast = useToastStore((s) => s.addToast);
@@ -118,6 +122,9 @@ export default function DrawingOverlay({
   const [loaded, setLoaded] = useState(false);
   const drawingRef = useRef(null);                  // 현재 그리는 중인 stroke
   const channelRef = useRef(null);
+  // following ref — 채널 핸들러는 마운트 시 한 번 등록되므로 클로저 stale 방지용
+  const followingRef = useRef(following);
+  followingRef.current = following;
   const myIdRef = useRef(user?.id || `anon-${Math.random().toString(36).slice(2, 8)}`);
   const skipNextRealtimeLoadRef = useRef(false);    // 자기가 저장한 리얼타임 에코는 스킵
   // 회의 전체 범위의 사용자별 최대 seq — 자료를 닫았다 다시 열어도 순번이 이어지도록 관리
@@ -318,6 +325,8 @@ export default function DrawingOverlay({
     const ch = supabase.channel(chName, { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'stroke' }, ({ payload }) => {
       if (!payload?.id) return;
+      // 라이브 OFF 시 다른 참가자 신규 stroke 무시 (이미 로드된 strokes 는 유지)
+      if (!followingRef.current) return;
       // id 기준 upsert — 같은 stroke가 다시 broadcast 되면(예: 사각형 이동/리사이즈)
       // 중복 추가하지 않고 in-place 갱신.
       setStrokes((prev) => {
@@ -338,14 +347,17 @@ export default function DrawingOverlay({
       }
     });
     ch.on('broadcast', { event: 'undo' }, () => {
+      if (!followingRef.current) return;
       // 레거시 — 마지막 stroke 제거 (과거 버전 호환)
       setStrokes((prev) => prev.slice(0, -1));
     });
     ch.on('broadcast', { event: 'erase' }, ({ payload }) => {
       if (!payload?.id) return;
+      if (!followingRef.current) return;
       setStrokes((prev) => prev.filter((s) => s.id !== payload.id));
     });
     ch.on('broadcast', { event: 'clear' }, () => {
+      if (!followingRef.current) return;
       setStrokes([]);
       setRedoStack([]);
       setUndoStack([]);
@@ -361,6 +373,8 @@ export default function DrawingOverlay({
   const broadcast = (event, payload) => {
     const ch = channelRef.current;
     if (!ch) return;
+    // 라이브 OFF 면 송신 차단 — 라이브 = 양방향 공유 스위치 정책 (커서/페이지/오픈/드로잉 동일)
+    if (!followingRef.current) return;
     try { ch.send({ type: 'broadcast', event, payload }); } catch {}
   };
 
