@@ -453,6 +453,7 @@ function ImageZoomOverlay({
                   onClose={() => setDrawingActive(false)}
                   toolbarContainer={toolbarHost}
                   readOnly={!drawingActive}
+                  following={following}
                 />
               )}
               {/* 라이브 커서 — 이미지 콘텐츠 박스 위에 직접 마운트
@@ -1211,6 +1212,15 @@ function DocumentPanel({
     }, 1000);
     return () => clearInterval(t);
   }, []);
+
+  // 라이브 OFF 전환 즉시 다른 참가자 커서 모두 제거
+  //   (수신은 useViewerSync 에서 차단되지만, 이미 들어와 있던 커서가 5초 fade 까지
+  //    화면에 남으면 사용자에게 "라이브 켜진 거 같은데?" 혼란을 줄 수 있음)
+  useEffect(() => {
+    if (!following) {
+      setRemoteCursors((prev) => (Object.keys(prev).length ? {} : prev));
+    }
+  }, [following]);
 
   // 이미지 로드 후: 실제 이미지 너비에 맞춰 패널 폭을 정확히 조정
   // 이미지가 원래 폭보다 작으면 줄이고, 크면 확장 (최대 제한 내에서)

@@ -45,7 +45,8 @@ export function useViewerSync(meetingId) {
       handlersRef.current.onPage?.(payload, followingRef.current);
     });
     ch.on('broadcast', { event: 'viewer:cursor' }, ({ payload }) => {
-      // 커서는 follow 여부와 무관하게 항상 수신 (다른 사용자 위치 표시는 항상 유용)
+      // 라이브 OFF 면 수신 차단 — 라이브 = 양방향 공유 스위치 정책 (페이지/오픈/드로잉/커서 동일)
+      if (!followingRef.current) return;
       handlersRef.current.onCursor?.(payload);
     });
     ch.subscribe();
@@ -59,6 +60,9 @@ export function useViewerSync(meetingId) {
   const broadcast = useCallback((event, payload) => {
     const ch = channelRef.current;
     if (!ch) return;
+    // 라이브 = 양방향 공유 스위치. OFF면 일체 송신 차단 (open/close/page/cursor 모두)
+    //   → 라이브 끄고 혼자 자료 검토할 때 다른 참가자에게 의도치 않은 영향 X
+    if (!followingRef.current) return;
     try {
       ch.send({
         type: 'broadcast',

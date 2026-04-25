@@ -434,6 +434,7 @@ export default function PdfViewer({
                 onClose={onCloseDrawing}
                 toolbarContainer={toolbarContainer}
                 readOnly={!drawingActive}
+                following={following}
               />
             )}
             {/* 라이브 커서 — pageWrapRef 위에 직접 마운트, 페이지 일치 시만 표시 */}
