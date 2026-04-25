@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, Plus, X, Trash2, UserPlus, UserMinus, Check, Search, Edit2,
-  Mail, UserCog, Loader2, AlertCircle, ChevronRight, KeyRound, Copy,
+  Mail, UserCog, Loader2, AlertCircle, ChevronRight, KeyRound, Copy, ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -455,29 +455,29 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-150"
       onClick={() => !confirmDeleteTeam && !confirmDeleteUser && !editingTeamId && !editingMember && onClose?.()}
     >
       <div
-        className="bg-bg-secondary border border-border-default rounded-xl shadow-2xl w-full max-w-5xl h-[min(720px,90vh)] flex flex-col overflow-hidden"
+        className="bg-bg-secondary border border-border-default md:rounded-xl shadow-2xl w-full max-w-5xl h-full md:h-[min(720px,90vh)] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ═══ 헤더 ═══ */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-divider bg-bg-primary/30">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-purple/20 to-brand-orange/15 flex items-center justify-center">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-border-divider bg-bg-primary/30">
+          <div className="flex items-center gap-2.5 md:gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-brand-purple/20 to-brand-orange/15 flex items-center justify-center shrink-0">
               <Users size={18} className="text-brand-purple" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-txt-primary">팀 & 직원 관리</h2>
-              <p className="text-xs text-txt-secondary">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base md:text-lg font-semibold text-txt-primary truncate">팀 & 직원 관리</h2>
+              <p className="hidden sm:block text-xs text-txt-secondary truncate">
                 팀을 만들고 직원을 배정·초대하세요. 회의 만들기에 자동 반영됩니다.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary transition-colors"
+            className="shrink-0 p-2 rounded-md text-txt-muted hover:bg-bg-tertiary hover:text-txt-primary transition-colors"
             title="닫기 (Esc)"
           >
             <X size={18} />
@@ -485,7 +485,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
         </div>
 
         {/* ═══ 탭 ═══ */}
-        <div className="px-6 pt-3 border-b border-border-divider flex gap-1 shrink-0">
+        <div className="px-4 md:px-6 pt-2 md:pt-3 border-b border-border-divider flex gap-1 shrink-0">
           {[
             { id: 'teams', label: '팀 관리', icon: Users },
             { id: 'members', label: '직원 관리', icon: UserCog },
@@ -496,7 +496,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 text-sm font-medium transition-colors ${
                   active ? 'text-txt-primary' : 'text-txt-secondary hover:text-txt-primary'
                 }`}
               >
@@ -513,7 +513,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
           // ──────── 직원 관리 탭 ────────
           <div className="flex-1 overflow-hidden flex flex-col">
             {/* 초대 섹션 */}
-            <div className="p-5 border-b border-border-divider bg-bg-tertiary/30 shrink-0">
+            <div className="p-4 md:p-5 border-b border-border-divider bg-bg-tertiary/30 shrink-0">
               <div className="flex items-center gap-2 mb-3">
                 <Mail size={16} className="text-brand-purple" />
                 <h3 className="text-sm font-semibold text-txt-primary">새 직원 초대</h3>
@@ -576,7 +576,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                     disabled={inviting}
                     className="flex-1 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-1.5 text-xs text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50 disabled:opacity-50 font-mono"
                   />
-                  <span className="text-[10px] text-txt-muted shrink-0">
+                  <span className="hidden md:inline text-[10px] text-txt-muted shrink-0">
                     DM/채널 알림용
                   </span>
                 </div>
@@ -584,7 +584,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
             </div>
 
             {/* 전체 직원 리스트 */}
-            <div className="p-5 flex-1 overflow-hidden flex flex-col">
+            <div className="p-4 md:p-5 flex-1 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between mb-3 shrink-0">
                 <h3 className="text-sm font-semibold text-txt-primary">
                   전체 직원 <span className="text-txt-muted">({members.length})</span>
@@ -648,27 +648,31 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                             </p>
                           </div>
 
-                          <SlackIdInlineEdit
-                            member={m}
-                            onSaved={(newId) => {
-                              setMembers((prev) =>
-                                prev.map((x) => (x.id === m.id ? { ...x, slack_user_id: newId } : x))
-                              );
-                            }}
-                          />
+                          {/* Slack ID — 데스크톱만 (모바일은 편집 모달에서 변경) */}
+                          <div className="hidden md:block">
+                            <SlackIdInlineEdit
+                              member={m}
+                              onSaved={(newId) => {
+                                setMembers((prev) =>
+                                  prev.map((x) => (x.id === m.id ? { ...x, slack_user_id: newId } : x))
+                                );
+                              }}
+                            />
+                          </div>
 
                           <button
                             onClick={() => setEditingMember(m)}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 rounded transition-all"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 md:p-2 text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 rounded transition-all shrink-0"
                             title="직원 정보 편집"
                           >
-                            <Edit2 size={16} />
+                            <Edit2 size={15} />
                           </button>
 
+                          {/* 비밀번호 재설정 — 데스크톱만 (모바일은 편집 모달에서) */}
                           <button
                             onClick={() => resetLinkLoadingId !== m.id && handleGenerateResetLink(m)}
                             disabled={resetLinkLoadingId === m.id}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-brand-orange hover:bg-brand-orange/10 rounded transition-all disabled:opacity-40"
+                            className="hidden md:inline-flex opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-brand-orange hover:bg-brand-orange/10 rounded transition-all disabled:opacity-40"
                             title="비밀번호 재설정 링크 생성 (초대 메일이 안 닿은 경우)"
                           >
                             {resetLinkLoadingId === m.id
@@ -679,10 +683,10 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                           <button
                             onClick={() => !isSelf && !deleting && setConfirmDeleteUser(m)}
                             disabled={isSelf || deleting}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 md:p-2 text-txt-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all disabled:opacity-20 disabled:cursor-not-allowed shrink-0"
                             title={isSelf ? '자기 자신은 삭제할 수 없음' : '직원 삭제'}
                           >
-                            {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                            {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                           </button>
                         </div>
                       );
@@ -695,8 +699,8 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
         ) : (
           // ──────── 팀 관리 탭 ────────
           <div className="flex-1 flex overflow-hidden">
-            {/* 좌측: 팀 목록 */}
-            <div className="w-[340px] border-r border-border-divider flex flex-col">
+            {/* 좌측: 팀 목록 — 모바일: 팀 미선택 시 전체, 선택 시 숨김 / 데스크톱: 항상 좌측 340px */}
+            <div className={`w-full md:w-[340px] md:border-r border-border-divider flex-col ${selectedTeamId ? 'hidden md:flex' : 'flex'}`}>
               {/* 새 팀 생성 */}
               <div className="p-4 border-b border-border-divider">
                 <label className="block text-[11px] text-txt-muted font-medium mb-2 uppercase tracking-wider">
@@ -824,8 +828,8 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
               </div>
             </div>
 
-            {/* 우측: 선택된 팀 상세 */}
-            <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary/30">
+            {/* 우측: 선택된 팀 상세 — 모바일: 선택 시만, 데스크톱: 항상 */}
+            <div className={`flex-1 flex-col overflow-hidden bg-bg-primary/30 ${selectedTeamId ? 'flex' : 'hidden md:flex'}`}>
               {!selectedTeamId ? (
                 <div className="flex-1 flex items-center justify-center text-center p-8">
                   <div>
@@ -844,9 +848,17 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                 </div>
               ) : (
                 <>
-                  <div className="px-6 py-4 border-b border-border-divider bg-bg-secondary/50 shrink-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-brand-purple/15 flex items-center justify-center">
+                  <div className="px-4 md:px-6 py-3 md:py-4 border-b border-border-divider bg-bg-secondary/50 shrink-0">
+                    <div className="flex items-center gap-2.5 md:gap-3">
+                      {/* 모바일 전용 뒤로가기 — 팀 목록으로 복귀 */}
+                      <button
+                        onClick={() => setSelectedTeamId(null)}
+                        className="md:hidden shrink-0 -ml-1 w-9 h-9 rounded-md flex items-center justify-center hover:bg-bg-tertiary text-txt-secondary"
+                        aria-label="팀 목록으로"
+                      >
+                        <ArrowLeft size={18} />
+                      </button>
+                      <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-brand-purple/15 flex items-center justify-center shrink-0">
                         <Users size={18} className="text-brand-purple" />
                       </div>
                       <div>
@@ -858,7 +870,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-hide">
+                  <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5 md:space-y-6 scrollbar-hide">
                     {/* 현재 멤버 */}
                     <section>
                       <h4 className="text-xs text-txt-primary font-semibold uppercase tracking-wider mb-2.5">
@@ -956,13 +968,13 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
         )}
 
         {/* ═══ 푸터 ═══ */}
-        <div className="px-6 py-3 border-t border-border-divider bg-bg-primary/30 flex items-center justify-between shrink-0">
-          <p className="text-[11px] text-txt-muted">
+        <div className="px-4 md:px-6 py-2.5 md:py-3 border-t border-border-divider bg-bg-primary/30 flex items-center justify-between gap-3 shrink-0">
+          <p className="text-[11px] text-txt-muted truncate">
             {teams.length}개 팀 · {members.length}명 직원 · 배정 {assignments.length}건
           </p>
           <button
             onClick={onClose}
-            className="px-5 py-1.5 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90 transition-opacity"
+            className="shrink-0 px-5 py-1.5 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90 transition-opacity"
           >
             완료
           </button>

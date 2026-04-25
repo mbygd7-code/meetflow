@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, CheckCircle2, MessageSquare,
@@ -11,7 +11,9 @@ import { getOverallGrade, gradeToStyle } from '@/utils/gradeUtils';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import TaskSlidePanel from '@/components/task/TaskSlidePanel';
-import MyTaskCard from '@/components/task/MyTaskCard';
+import MemberTaskCard from '@/components/task/MemberTaskCard';
+import { useTaskStore } from '@/stores/taskStore';
+import { useToastStore } from '@/stores/toastStore';
 
 // ── 참여도 점수 계산 ──
 function calcParticipationScore(msgCount, meetingCount) {
@@ -106,6 +108,58 @@ export default function EmployeeDetailPage() {
   const [reportLoading, setReportLoading] = useState(false);
 
   const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
+  const updateTaskInStore = useTaskStore((s) => s.updateTask);
+  const addToast = useToastStore((s) => s.addToast);
+  const [members, setMembers] = useState([]);
+
+  // 멤버 목록 (담당자 드롭다운용)
+  useEffect(() => {
+    if (!SUPABASE_ENABLED) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('id, name, email, avatar_color, role, slack_user_id')
+          .order('name');
+        if (!cancelled) setMembers(data || []);
+      } catch (err) {
+        console.error('[EmployeeDetailPage] members load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [SUPABASE_ENABLED]);
+
+  // ── 태스크 인라인 편집 핸들러 ──
+  const updateTaskFieldDb = useCallback(async (taskId, patch) => {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', taskId)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('편집 권한이 없습니다');
+      // 로컬 state + 글로벌 store 양쪽 동기화
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...data } : t)));
+      updateTaskInStore(taskId, data);
+      return data;
+    } catch (err) {
+      console.error('[EmployeeDetailPage] update failed:', err);
+      addToast?.('업데이트 실패: ' + (err.message || err), 'error', 3000);
+      return null;
+    }
+  }, [updateTaskInStore, addToast]);
+
+  const handleStatusChange = useCallback(
+    (taskId, newStatus) => updateTaskFieldDb(taskId, { status: newStatus }),
+    [updateTaskFieldDb]
+  );
+  const handleUpdateTask = useCallback(
+    (taskId, patch) => updateTaskFieldDb(taskId, patch),
+    [updateTaskFieldDb]
+  );
 
   // 데모 직원 데이터
   const MOCK_EMPLOYEES = {
@@ -539,7 +593,7 @@ export default function EmployeeDetailPage() {
       </div>
       {/* 메인 콘텐츠 끝 */}
 
-      {/* ═══ 오른쪽 사이드바: 배정 태스크 (MyTaskCard 재사용) ═══ */}
+      {/* ═══ 오른쪽 사이드바: 배정 태스크 (MemberTaskCard 재사용) ═══ */}
       <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 lg:overflow-y-auto lg:max-h-[calc(100vh-120px)] scrollbar-hide relative">
         {/* 태스크 상세 슬라이드 패널 */}
         <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
@@ -561,13 +615,15 @@ export default function EmployeeDetailPage() {
         {tasks.length === 0 ? (
           <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {tasks.map((task) => (
-              <MyTaskCard
+              <MemberTaskCard
                 key={task.id}
                 task={task}
-                selected={selectedTask?.id === task.id}
-                onSelect={(t) => setSelectedTask(selectedTask?.id === t.id ? null : t)}
+                members={members}
+                onClick={(t) => setSelectedTask(selectedTask?.id === t.id ? null : t)}
+                onQuickStatus={handleStatusChange}
+                onQuickUpdate={handleUpdateTask}
               />
             ))}
           </div>

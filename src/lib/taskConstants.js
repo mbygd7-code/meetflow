@@ -1,5 +1,5 @@
 // 태스크 관련 공통 상수 — priority/status 매핑, 매직 넘버
-// 여러 컴포넌트(MyTaskCard, TaskCard, TaskSlidePanel, DashboardPage 등)에서 재사용
+// 여러 컴포넌트(MemberTaskCard, TaskCard, TaskSlidePanel, DashboardPage 등)에서 재사용
 
 import { Circle, CircleDot, CheckCircle2 } from 'lucide-react';
 

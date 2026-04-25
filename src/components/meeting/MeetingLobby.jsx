@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Search, X, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
@@ -38,9 +38,21 @@ export default function MeetingLobby({ pageTitle }) {
   const { meetings, deleteMeeting } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
   const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // 24시간 경과한 예정 회의 자동 취소 (Slack 알림 포함)
   useAutoCancelMeetings();
+
+  // ?new=1 쿼리 파라미터로 진입 시 새 회의 모달 자동 오픈 (CommandPalette → '새 회의 시작')
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setModalOpen(true);
+      // 파라미터 제거 — 새로고침/뒤로가기 시 재트리거 방지
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // 사용자가 수동으로 탭을 선택했는지 추적 (수동 선택 후엔 자동 전환 안 함)
   const userSelectedRef = useRef(false);

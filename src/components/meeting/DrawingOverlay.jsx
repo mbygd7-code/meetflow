@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2 } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -51,6 +51,17 @@ function distPointSegment(px, py, ax, ay, bx, by) {
 function findHitStroke(px, py, strokes, w, h, threshold = 10) {
   for (let i = strokes.length - 1; i >= 0; i--) {
     const s = strokes[i];
+    if (s?.kind === 'rect') {
+      // 사각형 — 테두리 근처 클릭만 hit (내부 드래그는 HTML overlay가 처리)
+      const rx = s.x * w, ry = s.y * h, rw = s.w * w, rh = s.h * h;
+      const left = rx, right = rx + rw, top = ry, bottom = ry + rh;
+      const onVerticalEdge = (Math.abs(px - left) <= threshold || Math.abs(px - right) <= threshold) &&
+        py >= top - threshold && py <= bottom + threshold;
+      const onHorizontalEdge = (Math.abs(py - top) <= threshold || Math.abs(py - bottom) <= threshold) &&
+        px >= left - threshold && px <= right + threshold;
+      if (onVerticalEdge || onHorizontalEdge) return s;
+      continue;
+    }
     if (!s?.points || s.points.length < 2) continue;
     for (let j = 0; j < s.points.length - 1; j++) {
       const a = toPx(s.points[j].x, s.points[j].y, w, h);
@@ -95,6 +106,12 @@ export default function DrawingOverlay({
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
+  const [eraserHoverId, setEraserHoverId] = useState(null);  // 지우개 모드 hover — 해당 stroke 하이라이트
+  const [tool, setTool] = useState('pen');  // 'pen' | 'rect' — 그리기 도구
+  // 지우개 OFF 시 hover 해제
+  useEffect(() => {
+    if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
+  }, [eraserMode, eraserHoverId]);
   const [visible, setVisible] = useState(true);     // 드로잉+주석 시각 토글
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -336,26 +353,64 @@ export default function DrawingOverlay({
     if (!cv) return;
     const ctx = cv.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, cv.width, cv.height);
+    // ctx는 이미 ctx.scale(dpr, dpr) 적용된 상태 → 좌표 계산은 CSS 차원 기준이어야 함.
+    // (cv.width/cv.height는 DPR 곱해진 internal px라서 추가로 2배 어긋남)
+    const cssW = width || cv.clientWidth || 0;
+    const cssH = height || cv.clientHeight || 0;
+    ctx.clearRect(0, 0, cssW, cssH);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = LINE_WIDTH;
 
     const drawStroke = (s) => {
-      if (!s?.points || s.points.length === 0) return;
-      ctx.strokeStyle = s.color || '#EF4444';
+      if (!s) return;
+      const isHover = eraserMode && s.id && s.id === eraserHoverId;
+      // 사각형
+      if (s.kind === 'rect') {
+        if (isHover) {
+          ctx.save();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = LINE_WIDTH + 2;
+          ctx.shadowColor = 'rgba(239, 68, 68, 0.85)';
+          ctx.shadowBlur = 6;
+        } else {
+          ctx.strokeStyle = s.color || '#EF4444';
+          ctx.lineWidth = LINE_WIDTH;
+        }
+        const x = (s.x || 0) * cssW;
+        const y = (s.y || 0) * cssH;
+        const w = (s.w || 0) * cssW;
+        const h = (s.h || 0) * cssH;
+        ctx.strokeRect(x, y, w, h);
+        if (isHover) ctx.restore();
+        return;
+      }
+      // 자유 곡선(path) — 기존 로직
+      if (!s.points || s.points.length === 0) return;
+      // 지우개 hover 중인 stroke → 흰색 + 굵게 + 살짝 글로우로 "지워질 대상" 강조
+      if (isHover) {
+        ctx.save();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = LINE_WIDTH + 2;
+        ctx.shadowColor = 'rgba(239, 68, 68, 0.85)';
+        ctx.shadowBlur = 6;
+      } else {
+        ctx.strokeStyle = s.color || '#EF4444';
+        ctx.lineWidth = LINE_WIDTH;
+      }
       ctx.beginPath();
-      const first = toPx(s.points[0].x, s.points[0].y, cv.width, cv.height);
+      const first = toPx(s.points[0].x, s.points[0].y, cssW, cssH);
       ctx.moveTo(first.x, first.y);
       for (let i = 1; i < s.points.length; i++) {
-        const p = toPx(s.points[i].x, s.points[i].y, cv.width, cv.height);
+        const p = toPx(s.points[i].x, s.points[i].y, cssW, cssH);
         ctx.lineTo(p.x, p.y);
       }
       ctx.stroke();
+      if (isHover) ctx.restore();
     };
     for (const s of strokes) drawStroke(s);
     if (drawingRef.current) drawStroke(drawingRef.current);
-  }, [strokes]);
+  }, [strokes, width, height, eraserMode, eraserHoverId]);
 
   // 캔버스 크기 설정 (devicePixelRatio 고려)
   useEffect(() => {
@@ -417,6 +472,18 @@ export default function DrawingOverlay({
     };
   }, [strokes, loaded, readOnly, meetingId, targetKey, user?.id]);
 
+  // 지우개 — 단일 stroke 삭제 (canvas 클릭/아바타 클릭 공용)
+  const eraseStrokeById = (strokeId) => {
+    if (!strokeId) return;
+    const removed = strokes.find((s) => s.id === strokeId);
+    if (!removed) return;
+    setStrokes((prev) => prev.filter((s) => s.id !== strokeId));
+    setUndoStack((prev) => [...prev, { type: 'erase', stroke: removed }]);
+    setRedoStack([]);
+    broadcast('erase', { id: strokeId });
+    setEraserHoverId(null);
+  };
+
   // 포인터 핸들러
   const getLocalXY = (e) => {
     const cv = canvasRef.current;
@@ -441,34 +508,78 @@ export default function DrawingOverlay({
     // ── 지우개 모드: 클릭한 스트로크 1개만 삭제 ──
     if (eraserMode) {
       const hit = findHitStroke(p.x, p.y, strokes, w, h);
-      if (hit) {
-        setStrokes((prev) => prev.filter((s) => s.id !== hit.id));
-        setUndoStack((prev) => [...prev, { type: 'erase', stroke: hit }]);
-        setRedoStack([]);
-        broadcast('erase', { id: hit.id });
-      }
+      if (hit) eraseStrokeById(hit.id);
       return;
     }
 
     cv.setPointerCapture?.(e.pointerId);
     const n = toNorm(p.x, p.y, w, h);
-    drawingRef.current = {
-      id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      user_id: myIdRef.current,
-      user_name: myInfo.name,
-      user_color: myInfo.color,
-      color,
-      points: [n],
-    };
+    if (tool === 'rect') {
+      // 사각형 — 드래그 시작점이 pivot. pointermove에서 (x,y,w,h) 갱신.
+      drawingRef.current = {
+        id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'rect',
+        user_id: myIdRef.current,
+        user_name: myInfo.name,
+        user_color: myInfo.color,
+        color,
+        _pivotX: n.x,
+        _pivotY: n.y,
+        x: n.x,
+        y: n.y,
+        w: 0,
+        h: 0,
+      };
+    } else {
+      drawingRef.current = {
+        id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        user_id: myIdRef.current,
+        user_name: myInfo.name,
+        user_color: myInfo.color,
+        color,
+        points: [n],
+      };
+    }
     setRedoStack([]);  // 새 스트로크 시작 → redo 스택 폐기
     redraw();
   };
 
   const onPointerMove = (e) => {
-    if (!drawingRef.current) return;
+    // 지우개 모드 hover 감지 — 그리기 중이 아닐 때 커서 아래 stroke 하이라이트
+    if (!drawingRef.current) {
+      if (eraserMode) {
+        const cv0 = canvasRef.current;
+        if (!cv0) return;
+        const p0 = getLocalXY(e);
+        const w0 = cv0.clientWidth;
+        const h0 = cv0.clientHeight;
+        const hit = findHitStroke(p0.x, p0.y, strokes, w0, h0);
+        const nextId = hit?.id || null;
+        if (nextId !== eraserHoverId) setEraserHoverId(nextId);
+      }
+      return;
+    }
     e.preventDefault();
     const cv = canvasRef.current;
     if (!cv) return;
+
+    // 사각형 — 드래그 중 (x,y,w,h) 동적 갱신
+    if (drawingRef.current.kind === 'rect') {
+      const rect0 = cv.getBoundingClientRect();
+      const w0 = cv.clientWidth;
+      const h0 = cv.clientHeight;
+      const x = e.clientX - rect0.left;
+      const y = e.clientY - rect0.top;
+      const n = toNorm(x, y, w0, h0);
+      const sx = drawingRef.current._pivotX;
+      const sy = drawingRef.current._pivotY;
+      drawingRef.current.x = Math.min(sx, n.x);
+      drawingRef.current.y = Math.min(sy, n.y);
+      drawingRef.current.w = Math.abs(n.x - sx);
+      drawingRef.current.h = Math.abs(n.y - sy);
+      redraw();
+      return;
+    }
 
     // ── 고해상도 서브프레임 포인트 수집 ──
     // 브라우저는 보통 프레임당 pointermove 1개만 디스패치하지만, 마우스/펜은
@@ -511,7 +622,11 @@ export default function DrawingOverlay({
     try { cv?.releasePointerCapture?.(e.pointerId); } catch {}
     const finished = drawingRef.current;
     drawingRef.current = null;
-    if (finished.points.length > 1) {
+    const isRect = finished.kind === 'rect';
+    const valid = isRect
+      ? (finished.w > 0.005 && finished.h > 0.005)  // 너무 작은 사각형 무시
+      : (finished.points && finished.points.length > 1);
+    if (valid) {
       // 회의 전체(globalSeqByUser) + 현재 자료 strokes 중 내 최대 seq + 1
       const uid = finished.user_id;
       let currMax = globalSeqByUser[uid] || 0;
@@ -522,6 +637,11 @@ export default function DrawingOverlay({
       }
       finished.seq = currMax + 1;
       setGlobalSeqByUser((prev) => ({ ...prev, [uid]: finished.seq }));
+      if (isRect) {
+        // pivot 임시 필드 제거 후 저장
+        delete finished._pivotX;
+        delete finished._pivotY;
+      }
       setStrokes((prev) => [...prev, finished]);
       setUndoStack((prev) => [...prev, { type: 'draw', stroke: finished }]);
       broadcast('stroke', finished);
@@ -657,16 +777,25 @@ export default function DrawingOverlay({
     return result;
   }, [messages, strokes, strokeSeqMap]);
 
-  // 각 stroke의 last point 위치에 아바타 + 순번 뱃지
+  // 각 stroke의 마커 위치: path는 마지막 점, rect는 우상단 모서리
   const avatarMarkers = useMemo(() => {
     const markers = [];
     for (const s of strokes) {
-      if (!s.points || s.points.length === 0) continue;
-      const last = s.points[s.points.length - 1];
+      let mx, my;
+      if (s.kind === 'rect') {
+        mx = (s.x + s.w) * (width || 0);
+        my = s.y * (height || 0);
+      } else if (s.points && s.points.length > 0) {
+        const last = s.points[s.points.length - 1];
+        mx = last.x * (width || 0);
+        my = last.y * (height || 0);
+      } else {
+        continue;
+      }
       markers.push({
         strokeId: s.id,
-        x: last.x * (width || 0),
-        y: last.y * (height || 0),
+        x: mx,
+        y: my,
         name: s.user_name || '사용자',
         userId: s.user_id,
         seq: strokeSeqMap[s.id] || 0,
@@ -709,11 +838,12 @@ export default function DrawingOverlay({
         onPointerMove={readOnly ? undefined : onPointerMove}
         onPointerUp={readOnly ? undefined : onPointerUp}
         onPointerCancel={readOnly ? undefined : onPointerUp}
+        onPointerLeave={readOnly ? undefined : () => setEraserHoverId(null)}
         style={{
           position: 'absolute',
           inset: 0,
           touchAction: 'none',
-          cursor: readOnly ? 'default' : (eraserMode ? 'cell' : 'crosshair'),
+          cursor: readOnly ? 'default' : (eraserMode ? 'cell' : (tool === 'rect' ? 'crosshair' : 'crosshair')),
           zIndex: 5,
           opacity: visible ? 1 : 0,
           pointerEvents: readOnly ? 'none' : (visible ? 'auto' : 'none'),
@@ -722,8 +852,107 @@ export default function DrawingOverlay({
         }}
       />
 
+      {/* 사각형 stroke — HTML 오버레이로 이동/리사이즈 핸들 제공.
+          내부 드래그 → 이동 / 우하단 핸들 드래그 → 크기 조절.
+          지우개 모드일 때는 클릭 시 삭제(eraseStrokeById). */}
+      {visible && !readOnly && strokes.filter((s) => s.kind === 'rect').map((s) => {
+        const left = (s.x || 0) * (width || 0);
+        const top = (s.y || 0) * (height || 0);
+        const w = (s.w || 0) * (width || 0);
+        const h = (s.h || 0) * (height || 0);
+
+        const startInteraction = (mode) => (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          if (eraserMode) {
+            eraseStrokeById(s.id);
+            return;
+          }
+          const startClientX = e.clientX;
+          const startClientY = e.clientY;
+          const orig = { x: s.x, y: s.y, w: s.w, h: s.h };
+          const cw = width || 1;
+          const ch = height || 1;
+          const onMove = (ev) => {
+            const dxN = (ev.clientX - startClientX) / cw;
+            const dyN = (ev.clientY - startClientY) / ch;
+            setStrokes((prev) => prev.map((st) => {
+              if (st.id !== s.id) return st;
+              if (mode === 'move') {
+                const nx = Math.min(1 - st.w, Math.max(0, orig.x + dxN));
+                const ny = Math.min(1 - st.h, Math.max(0, orig.y + dyN));
+                return { ...st, x: nx, y: ny };
+              }
+              // resize — 우하단 핸들. 시작점(좌상단)은 고정.
+              const nw = Math.max(0.005, Math.min(1 - orig.x, orig.w + dxN));
+              const nh = Math.max(0.005, Math.min(1 - orig.y, orig.h + dyN));
+              return { ...st, w: nw, h: nh };
+            }));
+          };
+          const onUp = () => {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            // 변경된 stroke 브로드캐스트 — 최신 값 참조
+            const latest = (latestStrokesRef.current || []).find((st) => st.id === s.id);
+            if (latest) broadcast('stroke', latest);
+          };
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        };
+
+        const isEraseHover = eraserMode && s.id === eraserHoverId;
+
+        return (
+          <div
+            key={`rect-${s.id}`}
+            onPointerEnter={eraserMode ? () => setEraserHoverId(s.id) : undefined}
+            onPointerLeave={eraserMode ? () => setEraserHoverId((id) => (id === s.id ? null : id)) : undefined}
+            style={{
+              position: 'absolute',
+              left: `${left}px`,
+              top: `${top}px`,
+              width: `${w}px`,
+              height: `${h}px`,
+              zIndex: 6,  // 캔버스(5) 위 — 사각형 자체 인터랙션이 우선.
+              // 어떤 도구 모드든 기존 사각형 위에서는 이동/리사이즈/삭제가 가능하도록 항상 auto.
+              // 새 사각형은 빈 영역에서만 그려짐.
+              pointerEvents: 'auto',
+              cursor: eraserMode ? 'cell' : 'move',
+              background: 'transparent',
+              boxShadow: isEraseHover ? '0 0 0 2px rgba(239,68,68,0.85), 0 0 12px rgba(239,68,68,0.5)' : 'none',
+            }}
+            onPointerDown={startInteraction('move')}
+            title={eraserMode ? '클릭하면 사각형 삭제' : '드래그하여 이동 · 우하단 핸들로 크기 조절'}
+          >
+            {/* 우하단 리사이즈 핸들 — 원형. 사각형 도구나 일반 모드 모두에서 동작 */}
+            {!eraserMode && (
+              <div
+                onPointerDown={startInteraction('resize')}
+                style={{
+                  position: 'absolute',
+                  right: -7,
+                  bottom: -7,
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: `2px solid ${s.color || '#EF4444'}`,
+                  cursor: 'nwse-resize',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.25)',
+                  pointerEvents: 'auto',
+                  zIndex: 5,
+                }}
+                title="드래그하여 크기 조절"
+              />
+            )}
+          </div>
+        );
+      })}
+
       {/* 각 stroke 끝 지점에 사용자 아바타 + 순번 뱃지 — visible=false면 숨김 */}
-      {visible && avatarMarkers.map((m) => (
+      {visible && avatarMarkers.map((m) => {
+        const isEraseHover = eraserMode && m.strokeId === eraserHoverId;
+        return (
         <div
           key={m.strokeId}
           className="group/dmark absolute z-[6] pointer-events-auto"
@@ -732,19 +961,37 @@ export default function DrawingOverlay({
             top: `${m.y}px`,
             transform: 'translate(-50%, -130%)',
           }}
+          onMouseEnter={eraserMode && !readOnly ? () => setEraserHoverId(m.strokeId) : undefined}
+          onMouseLeave={eraserMode && !readOnly ? () => setEraserHoverId((id) => (id === m.strokeId ? null : id)) : undefined}
         >
-          {/* 아바타 본체 — 클릭 시 채팅 태그 주입 */}
+          {/* 아바타 본체 — 일반: 채팅 태그 주입 / 지우개 모드: 해당 라인 삭제 */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); handleAvatarClick(m); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (eraserMode && !readOnly) {
+                eraseStrokeById(m.strokeId);
+              } else {
+                handleAvatarClick(m);
+              }
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white hover:scale-110 transition-transform"
+            className={`relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white transition-transform ${
+              isEraseHover ? 'scale-110' : 'hover:scale-110'
+            }`}
             style={{
               backgroundColor: m.color,
-              boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${m.strokeColor}, 0 3px 6px rgba(0,0,0,0.35)`,
+              boxShadow: isEraseHover
+                ? `0 0 0 2px #fff, 0 0 0 5px #EF4444, 0 0 12px rgba(239,68,68,0.7)`
+                : `0 0 0 2px #fff, 0 0 0 4px ${m.strokeColor}, 0 3px 6px rgba(0,0,0,0.35)`,
+              cursor: eraserMode && !readOnly ? 'cell' : 'pointer',
             }}
-            title={`${m.name} · #${m.seq} · 클릭하면 채팅 태그`}
+            title={
+              eraserMode && !readOnly
+                ? `${m.name} · #${m.seq} · 클릭하면 라인 삭제`
+                : `${m.name} · #${m.seq} · 클릭하면 채팅 태그`
+            }
           >
             {(m.name || '?')[0]}
             <span
@@ -792,7 +1039,8 @@ export default function DrawingOverlay({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* 플로팅 툴바 — readOnly면 숨김. toolbarContainer 지정 시 해당 노드로 포털 */}
       {!readOnly && (() => {
@@ -807,7 +1055,34 @@ export default function DrawingOverlay({
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-0.5 pr-1 mr-1 border-r border-[#e0e0e0]">
-              <Pencil size={14} className="text-[#555]" />
+              {/* 사각형 도구 */}
+              <button
+                onClick={() => { setTool('rect'); if (eraserMode) setEraserMode(false); }}
+                className={`${toolbarCommonCls} ${
+                  tool === 'rect' && !eraserMode
+                    ? 'text-white bg-brand-purple hover:bg-brand-purple/90'
+                    : 'text-[#555] hover:text-brand-purple hover:bg-brand-purple/10'
+                }`}
+                title="사각형 그리기 — 드래그하여 박스 생성"
+                aria-pressed={tool === 'rect' && !eraserMode}
+                aria-label="사각형 도구"
+              >
+                <Square size={14} />
+              </button>
+              {/* 자유 곡선(연필) 도구 */}
+              <button
+                onClick={() => { setTool('pen'); if (eraserMode) setEraserMode(false); }}
+                className={`${toolbarCommonCls} ${
+                  tool === 'pen' && !eraserMode
+                    ? 'text-white bg-brand-purple hover:bg-brand-purple/90'
+                    : 'text-[#555] hover:text-brand-purple hover:bg-brand-purple/10'
+                }`}
+                title="자유 곡선 그리기 (연필)"
+                aria-pressed={tool === 'pen' && !eraserMode}
+                aria-label="연필 도구"
+              >
+                <Pencil size={14} />
+              </button>
             </div>
 
             {/* 컬러 3개 */}

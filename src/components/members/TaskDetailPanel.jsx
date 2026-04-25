@@ -25,7 +25,7 @@ const PRIORITY_MAP = {
 };
 
 const STATUS_MAP = {
-  todo: { label: '할 일', dot: 'bg-txt-muted' },
+  todo: { label: '대기', dot: 'bg-txt-muted' },
   in_progress: { label: '진행 중', dot: 'bg-brand-purple' },
   review: { label: '검토', dot: 'bg-brand-orange' },
   done: { label: '완료', dot: 'bg-status-success' },

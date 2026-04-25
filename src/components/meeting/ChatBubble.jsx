@@ -160,6 +160,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
   return (
     <div
       className={`group/bubble flex gap-3 fade-in ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+      onMouseLeave={() => setReactOpen(false)}
     >
       {/* 아바타 */}
       {isAi ? (
@@ -170,8 +171,8 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
       {/* 메시지 컨테이너 */}
       <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
-        {/* 발신자 정보 — 리액션 있으면 리액션 행에 통합되므로 숨김 */}
-        <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'hidden' : ''}`}>
+        {/* 발신자 정보 — (사람) 리액션 있으면 리액션 행에 통합되므로 숨김. AI는 리액션 비활성. */}
+        <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'} ${(hasReactions && !isAi) ? 'hidden' : ''}`}>
           <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
             {senderName}
           </span>
@@ -188,8 +189,8 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
         {/* 말풍선 */}
         <div className="relative">
-          {/* 리액션 표시 — 이름+AI+시간 + 리액션 한 줄 */}
-          {hasReactions && (
+          {/* 리액션 표시 — 이름+AI+시간 + 리액션 한 줄 (AI 메시지는 리액션 비활성) */}
+          {hasReactions && !isAi && (
             <div className={`flex items-center gap-2 mb-1.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
               <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
                 {senderName}
@@ -223,7 +224,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
           <div
             onClick={readonly ? undefined : handleQuote}
-            className={`px-4 py-3 text-sm leading-relaxed ${readonly ? '' : 'cursor-pointer'} ${
+            className={`relative px-4 py-3 text-sm leading-relaxed ${readonly ? '' : 'cursor-pointer'} ${
               isQuestion
                 ? 'text-txt-primary bg-brand-orange/10 border border-brand-orange/25 rounded-xl rounded-tl-sm hover:border-brand-orange/40'
                 : isAi
@@ -233,6 +234,16 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                     : 'text-txt-primary bg-bg-tertiary border border-border-subtle rounded-xl rounded-tl-sm hover:border-border-default whitespace-pre-wrap'
             } transition-all`}
           >
+            {/* AI 피드백 버튼 — 말풍선 위에 떠있는 floating pill (말풍선과 겹치지 않음) */}
+            {isAi && !readonly && message.id && !String(message.id).startsWith('m-local-') && !String(message.id).startsWith('stream-') && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute bottom-full right-2 mb-2 z-10 flex items-center"
+                title="이 답변에 대한 피드백"
+              >
+                <FeedbackButtons messageId={message.id} />
+              </div>
+            )}
             {/* 질문 표시 */}
             {isQuestion && (
               <div className="flex items-center gap-1.5 mb-2 text-brand-orange">
@@ -421,13 +432,6 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
             );
           })()}
 
-          {/* AI 메시지 피드백 (Phase 3) — 항상 은은하게, 호버 시 진해짐 */}
-          {isAi && !readonly && message.id && !String(message.id).startsWith('m-local-') && !String(message.id).startsWith('stream-') && (
-            <div className="flex items-center justify-end gap-1 mt-1.5 opacity-60 hover:opacity-100 transition-opacity">
-              <FeedbackButtons messageId={message.id} compact />
-            </div>
-          )}
-
           {/* 호버 액션 */}
           <div className="flex items-center gap-2 mt-1.5 justify-end opacity-0 group-hover/bubble:opacity-100 transition-opacity">
             <div className="flex gap-1.5">
@@ -438,7 +442,8 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
             <button onClick={(e) => { e.stopPropagation(); handleQuote(); }} className="p-1.5 text-txt-muted hover:text-brand-purple transition-colors" title="인용 답글">
               <Reply size={18} />
             </button>
-            {/* 리액션 토글 */}
+            {/* 리액션 토글 — AI 메시지에는 노출하지 않음 (피드백 버튼으로 대체) */}
+            {!isAi && (
             <div className="relative">
               <button
                 onClick={(e) => { e.stopPropagation(); setReactOpen(!reactOpen); }}
@@ -462,6 +467,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
                 </div>
               )}
             </div>
+            )}
             </>)}
             </div>
           </div>

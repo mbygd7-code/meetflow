@@ -73,8 +73,8 @@ export default function FeedbackButtons({ messageId, compact = false }) {
   const isDown = my?.rating === -1;
   const hasAnyFeedback = !!agg && (agg.up > 0 || agg.down > 0);
 
-  const btnBase = `inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors ${
-    compact ? 'text-[10px]' : 'text-[11px]'
+  const btnBase = `inline-flex items-center gap-1 rounded-md transition-colors ${
+    compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[12px] font-medium px-2 py-1'
   }`;
 
   return (
@@ -87,7 +87,7 @@ export default function FeedbackButtons({ messageId, compact = false }) {
         title={isUp ? '피드백 취소' : '도움됐어요'}
         aria-pressed={isUp}
       >
-        <ThumbsUp size={compact ? 11 : 12} />
+        <ThumbsUp size={compact ? 11 : 15} strokeWidth={2.2} />
         {hasAnyFeedback && agg.up > 0 && <span>{agg.up}</span>}
       </button>
 
@@ -99,7 +99,7 @@ export default function FeedbackButtons({ messageId, compact = false }) {
         title={isDown ? '피드백 취소' : '개선이 필요해요'}
         aria-pressed={isDown}
       >
-        <ThumbsDown size={compact ? 11 : 12} />
+        <ThumbsDown size={compact ? 11 : 15} strokeWidth={2.2} />
         {hasAnyFeedback && agg.down > 0 && <span>{agg.down}</span>}
       </button>
 
@@ -107,7 +107,7 @@ export default function FeedbackButtons({ messageId, compact = false }) {
       {reasonOpen && (
         <div
           ref={popoverRef}
-          className="absolute top-full right-0 mt-1 z-20 bg-bg-content border border-border-default rounded-lg shadow-lg p-1 min-w-[140px]"
+          className="absolute top-full right-0 mt-1 z-30 bg-bg-secondary border border-border-default rounded-lg shadow-xl p-1 min-w-[140px]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-2 py-1 border-b border-border-subtle mb-1">

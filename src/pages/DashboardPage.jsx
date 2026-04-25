@@ -12,7 +12,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
-import MyTaskCard from '@/components/task/MyTaskCard';
+import MemberTaskCard from '@/components/task/MemberTaskCard';
 import TaskDetailPanel from '@/components/members/TaskDetailPanel';
 import EmptyState from '@/components/ui/EmptyState';
 import { useToastStore } from '@/stores/toastStore';
@@ -212,7 +212,7 @@ export default function DashboardPage() {
           title="긴급 업무"
           subtitle={focusTasks.length > 0 ? '가장 먼저 처리하면 좋을 업무' : '아직 할당된 업무가 없어요'}
           action={
-            <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+            <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
               모든 태스크 <ArrowRight size={14} />
             </Link>
           }
@@ -242,7 +242,7 @@ export default function DashboardPage() {
               }
               actions={[
                 { label: '새 회의 시작', to: '/meetings', icon: MessageSquare, variant: 'gradient' },
-                { label: '태스크 직접 만들기', to: '/tasks', icon: CircleDot, variant: 'secondary' },
+                { label: '태스크 직접 만들기', to: '/members', icon: CircleDot, variant: 'secondary' },
               ]}
             />
           )}
@@ -354,7 +354,7 @@ export default function DashboardPage() {
               : undefined
           }
           action={
-            <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+            <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
               전체 <ArrowRight size={13} />
             </Link>
           }
@@ -368,17 +368,17 @@ export default function DashboardPage() {
                   ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
                   : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
               }
-              actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+              actions={[{ label: '새 태스크', to: '/members', icon: CircleDot, variant: 'secondary' }]}
               compact
             />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {myActiveTasks.map((t) => (
-                <MyTaskCard
+                <MemberTaskCard
                   key={t.id}
                   task={t}
                   members={members}
-                  onSelect={handleSelectTask}
+                  onClick={handleSelectTask}
                   onQuickStatus={handleStatusChange}
                   onQuickUpdate={handleUpdateTask}
                 />
@@ -398,7 +398,7 @@ export default function DashboardPage() {
               {taskCounts.done > 0 && <> · 완료 {taskCounts.done}</>}
             </p>
           </div>
-          <Link to="/tasks" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
+          <Link to="/members" className="text-xs text-txt-secondary hover:text-txt-primary flex items-center gap-1">
             전체 <ArrowRight size={13} />
           </Link>
         </div>
@@ -412,17 +412,17 @@ export default function DashboardPage() {
                 ? '회의가 끝나면 AI가 자동으로 내게 필요한 일을 정리해 줍니다.'
                 : '회의에 참여하거나 직접 만들어 업무를 정리해 보세요.'
             }
-            actions={[{ label: '새 태스크', to: '/tasks', icon: CircleDot, variant: 'secondary' }]}
+            actions={[{ label: '새 태스크', to: '/members', icon: CircleDot, variant: 'secondary' }]}
             compact
           />
         ) : (
-          <div className="space-y-2 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
+          <div className="space-y-1.5 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
             {myActiveTasks.map((t) => (
-              <MyTaskCard
+              <MemberTaskCard
                 key={t.id}
                 task={t}
                 members={members}
-                onSelect={handleSelectTask}
+                onClick={handleSelectTask}
                 onQuickStatus={handleStatusChange}
                 onQuickUpdate={handleUpdateTask}
               />

@@ -89,9 +89,18 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
             <p className={`text-sm font-semibold ${selectedId === null ? 'text-txt-primary' : 'text-txt-primary/90'}`}>
               전체 ({totalStats.total})
             </p>
-            <p className="text-[10px] text-txt-muted">
-              진행 {totalStats.inProgress} · 완료 {totalStats.done}
-              {totalStats.overdue > 0 && <span className="text-status-error"> · 지연 {totalStats.overdue}</span>}
+            <p className="text-[11px] text-txt-secondary font-medium flex items-center gap-2">
+              <span>
+                진행 <span className="text-txt-primary font-bold tabular-nums text-[13px] ml-0.5">{totalStats.inProgress}</span>
+              </span>
+              <span>
+                완료 <span className="text-txt-primary font-bold tabular-nums text-[13px] ml-0.5">{totalStats.done}</span>
+              </span>
+              {totalStats.overdue > 0 && (
+                <span>
+                  지연 <span className="text-status-error font-bold tabular-nums text-[13px] ml-0.5">{totalStats.overdue}</span>
+                </span>
+              )}
             </p>
           </div>
           {selectedId === null && <ChevronRight size={14} className="text-brand-purple" />}
@@ -116,7 +125,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
             return (
               <button
                 key={m.id}
-                onClick={() => onSelect(m.id)}
+                onClick={() => onSelect(isSelected ? null : m.id)}
                 className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-md mb-0.5 transition-all border text-left group ${
                   isSelected
                     ? 'bg-brand-purple/10 border-brand-purple/30 shadow-sm'
@@ -143,19 +152,20 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
                   </div>
 
                   {/* 통계 */}
-                  <div className="flex items-center gap-2 text-[10px] text-txt-muted mb-1">
-                    <span>
-                      <span className="text-txt-primary font-semibold tabular-nums">{stats.done}</span>/
-                      <span className="tabular-nums">{stats.total}</span>
+                  <div className="flex items-center gap-2.5 text-[11px] text-txt-secondary mb-1">
+                    <span className="font-medium">
+                      완료 <span className="text-txt-primary font-bold tabular-nums text-[13px] ml-0.5">{stats.done}</span>
+                      <span className="text-txt-muted">/</span>
+                      <span className="tabular-nums text-txt-secondary">{stats.total}</span>
                     </span>
                     {stats.inProgress > 0 && (
-                      <span className="text-brand-purple">
-                        진행 {stats.inProgress}
+                      <span className="font-medium">
+                        진행 <span className="text-txt-primary font-bold tabular-nums text-[13px] ml-0.5">{stats.inProgress}</span>
                       </span>
                     )}
                     {stats.overdue > 0 && (
-                      <span className="text-status-error font-semibold">
-                        ⚠ {stats.overdue}
+                      <span className="font-medium">
+                        지연 <span className="text-status-error font-bold tabular-nums text-[13px] ml-0.5">{stats.overdue}</span>
                       </span>
                     )}
                   </div>

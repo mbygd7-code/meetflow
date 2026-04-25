@@ -7,7 +7,7 @@ import { useThemeStore } from '@/stores/themeStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useNavigate } from 'react-router-dom';
 import { useTaskStore } from '@/stores/taskStore';
-import { useSidebar } from './Layout';
+import { useSidebar, useCommandPalette } from './Layout';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -56,6 +56,7 @@ export default function TopBar() {
   const showActiveMeetingBar = activeMeeting?.status === 'active' && !pathname.startsWith('/meetings/');
   const { tasks } = useTaskStore();
   const { setSidebarOpen } = useSidebar();
+  const palette = useCommandPalette();
   const [editOpen, setEditOpen] = useState(false);
   const [editMessages, setEditMessages] = useState([]);
   const [editShowGreeting, setEditShowGreeting] = useState(true);
@@ -192,8 +193,15 @@ export default function TopBar() {
 
         {/* 우측 액션 — lg에서 My Tasks(300px)와 동일 너비 */}
         <div className="flex items-center gap-1 md:gap-1.5 shrink-0 lg:w-[300px] lg:justify-end">
-          <button className="hidden md:block p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
+          <button
+            type="button"
+            onClick={() => palette?.openPalette?.()}
+            className="flex items-center gap-2 p-2 md:px-2.5 md:h-9 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            title="검색 (⌘K 또는 /)"
+            aria-label="검색"
+          >
             <Search size={17} strokeWidth={2} />
+            <kbd className="hidden lg:inline text-[10px] text-txt-muted bg-bg-tertiary border border-border-subtle rounded px-1.5 py-0.5 font-mono leading-none">⌘K</kbd>
           </button>
           <button className="relative p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
             <Bell size={17} strokeWidth={2} />

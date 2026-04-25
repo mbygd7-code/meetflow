@@ -1,4 +1,4 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut } from 'lucide-react';
@@ -980,6 +980,8 @@ export default function MeetingRoom() {
   //   요청자 → "회의 종료" (전체 종료 + 회의록 생성)
   //   참가자 → "나가기" (혼자만 퇴장, 회의는 계속)
   const isCreator = !!(meeting?.created_by && user?.id && meeting.created_by === user.id);
+  // 자동개입 토글 권한 — 회의 요청자(생성자) 또는 관리자만 제어 가능
+  const canToggleAutoIntervene = isCreator || user?.role === 'admin';
   const [activeAgendaId, setActiveAgendaId] = useState(null);
   const [aiThinking, setAiThinking] = useState(null);
   const [polls, setPolls] = useState([]);
@@ -1376,39 +1378,40 @@ export default function MeetingRoom() {
           )}
         </div>
 
-        {/* 우측 액션: 자동개입 토글 + 요약 + 회의 종료 */}
+        {/* 우측 액션: 자동개입 토글 + 회의 종료 */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          {/* 자동개입 토글 */}
+          {/* 자동개입 토글 — 회의 요청자/관리자만 제어 가능 */}
           <div className="hidden md:flex items-center gap-2">
-            <span className="text-[10px] text-txt-muted font-medium">자동개입</span>
+            <span className={`text-[10px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>자동개입</span>
             <button
-              onClick={() => setAiAutoIntervene((v) => !v)}
+              onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
+              disabled={!canToggleAutoIntervene}
               className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
                 aiAutoIntervene ? 'bg-brand-purple' : 'bg-bg-tertiary border border-border-default'
-              }`}
-              title={aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만'}
+              } ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
+              title={
+                canToggleAutoIntervene
+                  ? (aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만')
+                  : '회의 요청자 또는 관리자만 변경할 수 있습니다'
+              }
             >
               <span className={`absolute top-1/2 -translate-y-1/2 ${aiAutoIntervene ? 'left-[18px]' : 'left-[3px]'} w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm`} />
             </button>
           </div>
 
-          {/* 모바일 자동개입 */}
+          {/* 모바일 자동개입 — 회의 요청자/관리자만 제어 가능 */}
           <button
-            onClick={() => setAiAutoIntervene((v) => !v)}
-            className={`md:hidden p-1.5 rounded-md transition-colors ${aiAutoIntervene ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted'}`}
-            title={aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만'}
+            onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
+            disabled={!canToggleAutoIntervene}
+            className={`md:hidden p-1.5 rounded-md transition-colors ${aiAutoIntervene ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted'} ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
+            title={
+              canToggleAutoIntervene
+                ? (aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만')
+                : '회의 요청자 또는 관리자만 변경할 수 있습니다'
+            }
           >
             {aiAutoIntervene ? <Zap size={18} /> : <ZapOff size={18} />}
           </button>
-
-          {/* 요약 버튼 */}
-          <Link
-            to={`/summaries/${id}`}
-            className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-md text-xs font-medium text-brand-purple bg-brand-purple/10 border border-brand-purple/20 hover:bg-brand-purple/20 transition-colors"
-          >
-            <Sparkles size={15} />
-            <span className="hidden md:inline">요약</span>
-          </Link>
 
           {/* 요청자 → "회의 종료" (전체 종료 + 회의록 작성 안내) /
               참가자 → "나가기" (즉시 퇴장, 확인창 없음) */}
