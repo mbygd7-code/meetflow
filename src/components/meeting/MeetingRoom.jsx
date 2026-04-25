@@ -173,7 +173,20 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
 function ImageZoomOverlay({
   file, url, onClose, onImageLoad, meetingId, messages = [],
   following, setFollowing, vbroadcast, remoteCursors = {},
+  setMyViewerState,
 }) {
+  // 내 뷰어 상태 hook 에 동기화 (이미지는 페이지 개념 없음 → page=1)
+  useEffect(() => {
+    if (typeof setMyViewerState !== 'function') return;
+    setMyViewerState({
+      fileId: file?.id || file?.name,
+      fileName: file?.name,
+      page: 1,
+    });
+    return () => {
+      setMyViewerState(null);
+    };
+  }, [file?.id, file?.name, setMyViewerState]);
   const [zoomScale, setZoomScale] = useState(100);   // 50~300 (%)
   const [sliderOpen, setSliderOpen] = useState(false);
   const [drawingActive, setDrawingActive] = useState(false);
@@ -564,6 +577,10 @@ function ImageZoomOverlay({
 function DocumentZoomOverlay({
   file, url, onClose, meetingId, messages = [],
   following, setFollowing, vbroadcast, remoteCursors = {}, setViewerHandler,
+  // 라이브 OFF→ON 동기화: 내 상태를 hook 에 알림 + 외부에서 받은 초기 페이지 적용
+  setMyViewerState,
+  initialPage = null,
+  onInitialPageApplied,
 }) {
   const [drawingActive, setDrawingActive] = useState(false);
   const [toolbarHost, setToolbarHost] = useState(null);
@@ -576,12 +593,37 @@ function DocumentZoomOverlay({
   const isImageType = file?.type?.startsWith?.('image/');
   const fileId = file?.id || file?.name;
 
+  // 내 현재 페이지 — request-sync 응답에 사용 + UI 상태 추적
+  const [myCurrentPage, setMyCurrentPage] = useState(1);
+
   // 페이지 변경 broadcast (PdfViewer로부터 콜백 받음)
   const handlePageChange = useCallback((page) => {
+    setMyCurrentPage(page);
     if (typeof vbroadcast === 'function') {
       vbroadcast('viewer:page', { fileId, page });
     }
   }, [vbroadcast, fileId]);
+
+  // 내 뷰어 상태 hook 에 동기화 (request-sync 응답에 사용)
+  useEffect(() => {
+    if (typeof setMyViewerState !== 'function') return;
+    setMyViewerState({
+      fileId,
+      fileName: file?.name,
+      page: myCurrentPage,
+    });
+    return () => {
+      setMyViewerState(null);
+    };
+  }, [fileId, file?.name, myCurrentPage, setMyViewerState]);
+
+  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답) — 한 번만 적용
+  useEffect(() => {
+    if (initialPage == null || initialPage <= 0) return;
+    setPresenterPage(initialPage);
+    onInitialPageApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPage]);
 
   // viewer:page 수신 → following=true 일 때만 페이지 변경 적용
   // 언마운트 시 핸들러 청소 (stale 클로저로 setPresenterPage 호출 방지)
@@ -1068,7 +1110,10 @@ function DocumentPanel({
   // ── 라이브 동기화: 다른 참가자와 같은 자료/페이지/커서 보기 ──
   //   following=true 일 때만 다른 사람이 연 자료를 자동으로 따라감 (의도하지 않은 화면 변경 방지).
   //   브로드캐스트(보내기)는 항상 자동 — 따라가기 모드와 무관.
-  const { broadcast: vbroadcast, setHandler: setViewerHandler, following, setFollowing } = useViewerSync(meetingId);
+  const { broadcast: vbroadcast, setHandler: setViewerHandler, following, setFollowing, setMyViewerState } = useViewerSync(meetingId);
+  // 라이브 OFF→ON 전환 시 다른 라이브 사용자가 보낸 viewer:state 를 받아 적용할 때 사용
+  // PdfViewer 의 presenterPage 로 흘러갈 "초기 페이지 점프 신호"
+  const [pendingInitialPage, setPendingInitialPage] = useState(null);
   // 다른 참가자 커서 — { userId: { x, y, name, color, fileId, page, ts } }
   const [remoteCursors, setRemoteCursors] = useState({});
 
@@ -1192,6 +1237,22 @@ function DocumentPanel({
           ts: Date.now(),
         },
       }));
+    });
+    // 동기화 응답 수신 (내가 라이브 OFF→ON 전환했을 때 다른 라이브 사용자가 보냄)
+    // → 자료 자동 오픈 + 해당 페이지로 점프
+    setViewerHandler('onState', async (payload) => {
+      if (!payload?.fileId) return;
+      // 이미 같은 파일을 보고 있으면 페이지만 점프
+      const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
+      if (currentId !== payload.fileId) {
+        const target = files.find((f) => (f.id || f.name) === payload.fileId);
+        if (!target) return;
+        await openFileLocal(target);
+      }
+      // 페이지 정보가 있으면 해당 페이지로 점프 신호 전달 (PDF만 의미 있음)
+      if (typeof payload.page === 'number' && payload.page > 0) {
+        setPendingInitialPage(payload.page);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, zoomFile, docFile, widthBeforeZoom]);
@@ -1366,6 +1427,7 @@ function DocumentPanel({
             setFollowing={setFollowing}
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
+            setMyViewerState={setMyViewerState}
           />
         )}
 
@@ -1382,6 +1444,9 @@ function DocumentPanel({
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
             setViewerHandler={setViewerHandler}
+            setMyViewerState={setMyViewerState}
+            initialPage={pendingInitialPage}
+            onInitialPageApplied={() => setPendingInitialPage(null)}
           />
         )}
 

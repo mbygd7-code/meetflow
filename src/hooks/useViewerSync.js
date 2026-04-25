@@ -2,17 +2,27 @@
 //
 // 채널: mvw:<meetingId> (meeting-viewer)
 // 이벤트:
-//   viewer:open   — { fileId, fileName }            : 누군가 자료 열었음
-//   viewer:close  — { fileId }                       : 자료 닫음
-//   viewer:page   — { fileId, page }                 : PDF 페이지 변경
-//   viewer:cursor — { fileId, page, x, y }           : 마우스 좌표 (0~1 정규화)
+//   viewer:open         — { fileId, fileName }            : 누군가 자료 열었음
+//   viewer:close        — { fileId }                       : 자료 닫음
+//   viewer:page         — { fileId, page }                 : PDF 페이지 변경
+//   viewer:cursor       — { fileId, page, x, y }           : 마우스 좌표 (0~1, 콘텐츠 박스 기준)
+//   viewer:request-sync — { }                              : "현재 라이브 상태 알려줘" 요청
+//                                                            (라이브 OFF→ON 전환 시 자동 broadcast)
+//   viewer:state        — { fileId, fileName, page }       : "내 현재 상태" 응답
+//                                                            (request-sync 받은 라이브 사용자가 broadcast)
 //
 // 페이로드에 자동 첨부: _user = { id, name, color }
 //
+// 라이브(following) = 양방향 공유 스위치:
+//   ON  → 송신/수신 모두 활성. OFF→ON 전환 시 다른 라이브 사용자에게 현재 상태 받아옴
+//   OFF → 송신/수신 모두 차단 (완전 로컬)
+//
 // 사용:
-//   const { broadcast, setHandler, following, setFollowing } = useViewerSync(meetingId);
+//   const { broadcast, setHandler, following, setFollowing, setMyViewerState } = useViewerSync(meetingId);
 //   useEffect(() => setHandler('onOpen', (p) => { ... }), []);
+//   useEffect(() => setHandler('onState', (p) => { ... }), []);  // 동기화 응답 처리
 //   broadcast('viewer:open', { fileId, fileName });
+//   setMyViewerState({ fileId, fileName, page });  // 내 상태를 hook 에 알림 → request-sync 응답에 사용
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -29,6 +39,12 @@ export function useViewerSync(meetingId) {
   const [following, setFollowing] = useState(false);
   const followingRef = useRef(false);
   followingRef.current = following;
+  // 내 현재 뷰어 상태 — request-sync 응답에 사용
+  //   { fileId, fileName, page } | null
+  const myStateRef = useRef(null);
+  const setMyViewerState = useCallback((state) => {
+    myStateRef.current = state || null;
+  }, []);
 
   useEffect(() => {
     if (!SUPABASE_ENABLED || !meetingId) return;
@@ -49,13 +65,41 @@ export function useViewerSync(meetingId) {
       if (!followingRef.current) return;
       handlersRef.current.onCursor?.(payload);
     });
+    // 누군가가 "현재 상태 알려줘" 요청 → 내가 라이브 ON 이고 자료 보고 있으면 응답
+    ch.on('broadcast', { event: 'viewer:request-sync' }, () => {
+      if (!followingRef.current) return;
+      const s = myStateRef.current;
+      if (!s?.fileId) return;
+      // 응답 — broadcast() 가 따로 following 게이트 체크하지만 이미 위에서 통과했으니 OK
+      try {
+        ch.send({
+          type: 'broadcast',
+          event: 'viewer:state',
+          payload: {
+            fileId: s.fileId,
+            fileName: s.fileName,
+            page: s.page,
+            _user: {
+              id: user?.id,
+              name: user?.name || '참가자',
+              color: user?.avatar_color || '#723CEB',
+            },
+          },
+        });
+      } catch {}
+    });
+    // 동기화 응답 수신 — 라이브 ON 일 때만 적용
+    ch.on('broadcast', { event: 'viewer:state' }, ({ payload }) => {
+      if (!followingRef.current) return;
+      handlersRef.current.onState?.(payload);
+    });
     ch.subscribe();
     channelRef.current = ch;
     return () => {
       try { supabase.removeChannel(ch); } catch {}
       channelRef.current = null;
     };
-  }, [meetingId]);
+  }, [meetingId, user]);
 
   const broadcast = useCallback((event, payload) => {
     const ch = channelRef.current;
@@ -79,9 +123,21 @@ export function useViewerSync(meetingId) {
     } catch {}
   }, [user]);
 
+  // 라이브 OFF → ON 전환 시: "현재 라이브 상태 알려줘" 요청
+  //   다른 라이브 사용자가 viewer:state 로 응답 → onState 핸들러가 자료 자동 오픈 + 페이지 점프
+  const prevFollowingRef = useRef(following);
+  useEffect(() => {
+    const wasFollowing = prevFollowingRef.current;
+    prevFollowingRef.current = following;
+    if (!wasFollowing && following) {
+      // followingRef.current 는 위에서 동기 갱신되어 이 시점에 true 임 → broadcast 통과
+      broadcast('viewer:request-sync', {});
+    }
+  }, [following, broadcast]);
+
   const setHandler = useCallback((name, fn) => {
     handlersRef.current[name] = fn;
   }, []);
 
-  return { broadcast, setHandler, following, setFollowing };
+  return { broadcast, setHandler, following, setFollowing, setMyViewerState };
 }
