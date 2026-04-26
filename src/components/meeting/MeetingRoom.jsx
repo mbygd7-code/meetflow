@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2 } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -23,9 +23,11 @@ import PdfViewer from './PdfViewer';
 import DrawingOverlay from './DrawingOverlay';
 import RemoteCursorsLayer from './RemoteCursorsLayer';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
+import { getSourceMeta } from '@/lib/googleDocsUrl';
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
-function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
+// canDelete=true 이면 우상단에 삭제(X) 버튼 노출 — onDelete 콜백은 confirm 후 호출됨.
+function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDelete = false, onDelete }) {
   const [thumbUrl, setThumbUrl] = useState(null);
   const isPdf = file.type === 'application/pdf';
   const thumbContainerRef = useRef(null);
@@ -65,6 +67,38 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
       : `${(file.size / 1024).toFixed(0)}KB`
     : '';
 
+  // 외부 출처(Google Docs 등) 메타 — 썸네일에 작은 뱃지 노출
+  const sourceMeta = getSourceMeta(file.source_kind);
+  const SourceBadge = sourceMeta ? (
+    <div
+      className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold text-white shadow-sm pointer-events-none"
+      style={{ backgroundColor: sourceMeta.color }}
+      title={`${sourceMeta.label}에서 가져온 PDF`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-white/90" />
+      {sourceMeta.label}
+    </div>
+  ) : null;
+
+  // 삭제 버튼 — 권한자(업로더/회의 생성자/관리자)에게만 노출. 호버 시 표시.
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (typeof onDelete === 'function') onDelete(file);
+  };
+  const DeleteBtn = canDelete ? (
+    <button
+      type="button"
+      onClick={handleDeleteClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-black/55 hover:bg-status-error/90 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm z-10"
+      title="자료 삭제"
+      aria-label="자료 삭제"
+    >
+      <Trash2 size={12} strokeWidth={2.2} />
+    </button>
+  ) : null;
+
   // 이미지: 섹션 폭에 맞춰 adaptive 크기 (갤러리)
   if (isImage) {
     return (
@@ -73,7 +107,7 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
         className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
         title={file.name}
       >
-        <div className="w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
+        <div className="relative w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
           {thumbUrl ? (
             <img
               src={thumbUrl}
@@ -84,6 +118,8 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
           ) : (
             <div className="text-txt-muted text-[10px]">로딩…</div>
           )}
+          {SourceBadge}
+          {DeleteBtn}
         </div>
         {!compact && (
           <div className="px-2 py-1.5">
@@ -107,7 +143,7 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
       >
         <div
           ref={thumbContainerRef}
-          className="w-full aspect-[1/1.414] bg-white flex items-center justify-center overflow-hidden"
+          className="relative w-full aspect-[1/1.414] bg-white flex items-center justify-center overflow-hidden"
         >
           {thumbUrl ? (
             <PdfDocument
@@ -127,6 +163,8 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
           ) : (
             <div className="text-txt-muted text-[10px]">로딩…</div>
           )}
+          {SourceBadge}
+          {DeleteBtn}
         </div>
         {!compact && (
           <div className="px-2 py-1.5">
@@ -149,13 +187,15 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
       style={{ width: docWidth }}
       title={file.name}
     >
-      <div className={`w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
+      <div className={`relative w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
         <FileText size={compact ? 20 : 32} strokeWidth={1.4} />
         {!compact && (
           <span className="text-[9px] uppercase tracking-wider">
             {(file.name?.split('.').pop() || 'FILE').slice(0, 6)}
           </span>
         )}
+        {SourceBadge}
+        {DeleteBtn}
       </div>
       {!compact && (
         <div className="px-2 py-1.5">
@@ -202,7 +242,38 @@ function ImageZoomOverlay({
   const sliderContainerRef = useRef(null);
   const imageRef = useRef(null);
   const cursorThrottleRef = useRef(0);
+  // 슬라이더/줌 컨트롤과 상호작용 중 — pan 차단용 (이벤트 race 방지)
+  const sliderInteractingRef = useRef(false);
+  // 줌 변경 시 visible center 보존을 위한 prev zoom 추적
+  const prevZoomRef = useRef(100);
   const isZoomed = zoomScale > 100;
+
+  // ── 줌 변경 시 화면 중심 고정 ──
+  // zoomScale 변경 → 이미지 크기가 % 단위로 변함 → safe-center 정렬로 인해
+  // 이미지 콘텐츠가 시각적으로 "드래그되는 것처럼" 보이는 현상 방지.
+  // 보이는 영역의 중심이 zoom 전후 동일한 이미지 좌표를 가리키도록 scrollLeft/Top 재계산.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prev = prevZoomRef.current;
+    if (!el || prev === zoomScale) {
+      prevZoomRef.current = zoomScale;
+      return;
+    }
+    const factor = zoomScale / prev;
+    // zoom 적용 직전 중심 좌표 (콘텐츠 기준)
+    const centerX = el.scrollLeft + el.clientWidth / 2;
+    const centerY = el.scrollTop + el.clientHeight / 2;
+    const targetCenterX = centerX * factor;
+    const targetCenterY = centerY * factor;
+    prevZoomRef.current = zoomScale;
+    // 이미지 width % 적용으로 scrollWidth/Height 가 업데이트된 후 scroll 위치 조정
+    requestAnimationFrame(() => {
+      const cur = scrollRef.current;
+      if (!cur) return;
+      cur.scrollLeft = Math.max(0, targetCenterX - cur.clientWidth / 2);
+      cur.scrollTop = Math.max(0, targetCenterY - cur.clientHeight / 2);
+    });
+  }, [zoomScale]);
 
   // 이미지 리사이즈 감지 — 줌/뷰포트/폭 변화 모두 캔버스에 즉시 반영
   // (img의 clientWidth/Height가 바뀌면 DrawingOverlay width/height prop이 새 값으로 갱신됨)
@@ -293,6 +364,8 @@ function ImageZoomOverlay({
   // 드래그 이동 (pan) — 확대 상태에서만 활성화
   const onPanStart = (e) => {
     if (!isZoomed) return;
+    // 슬라이더와 상호작용 중이면 pan 절대 시작 금지 (이벤트 race 방지)
+    if (sliderInteractingRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     // 슬라이더 컨테이너/버튼/input/링크 영역 클릭은 무시
@@ -483,13 +556,31 @@ function ImageZoomOverlay({
 
         </div>
 
-        {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
+        {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임)
+            슬라이더 드래그 중 pan 이 절대 트리거되지 않도록 sliderInteractingRef 플래그 사용 */}
         <div
           ref={sliderContainerRef}
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            sliderInteractingRef.current = true;
+            const release = () => {
+              sliderInteractingRef.current = false;
+              document.removeEventListener('mouseup', release);
+              document.removeEventListener('pointerup', release);
+              document.removeEventListener('touchend', release);
+              document.removeEventListener('touchcancel', release);
+            };
+            document.addEventListener('mouseup', release);
+            document.addEventListener('pointerup', release);
+            document.addEventListener('touchend', release);
+            document.addEventListener('touchcancel', release);
+          }}
           onMouseMove={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            sliderInteractingRef.current = true;
+          }}
           onTouchMove={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2"
@@ -584,6 +675,7 @@ function DocumentZoomOverlay({
   // 라이브 OFF→ON 동기화: 내 상태를 hook 에 알림 + 외부에서 받은 초기 페이지 적용
   setMyViewerState,
   initialPage = null,
+  initialPageFileId = null,
   onInitialPageApplied,
 }) {
   const [drawingActive, setDrawingActive] = useState(false);
@@ -628,13 +720,20 @@ function DocumentZoomOverlay({
     };
   }, [setMyViewerState]);
 
-  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답) — 값이 들어올 때마다 적용
+  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답)
+  // — 같은 파일에 대한 응답일 때만 적용. 다른 파일(이전에 열었던 자료)의 페이지가
+  //   잘못 적용되어 페이지가 점프하는 사고 방지.
   useEffect(() => {
     if (initialPage == null || initialPage <= 0) return;
+    // 응답에 fileId가 명시돼 있고 현재 파일과 다르면 무시 + reset
+    if (initialPageFileId && initialPageFileId !== fileId) {
+      onInitialPageApplied?.();
+      return;
+    }
     setPresenterPage(initialPage);
     onInitialPageApplied?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPage]);
+  }, [initialPage, initialPageFileId, fileId]);
 
   // viewer:page 수신 → following=true 일 때만 페이지 변경 적용
   // 언마운트 시 핸들러 청소 (stale 클로저로 setPresenterPage 호출 방지)
@@ -1104,13 +1203,15 @@ function DocumentPanel({
   files = [], getUrl, meetingId, messages = [], onViewerChange,
   mobileOpen = false,    // 모바일에서 풀스크린 드로어로 표시
   onMobileClose,
+  // 자료 삭제 권한 체크용
+  currentUserId, isAdmin, meetingCreatedBy, onDeleteFile,
 }) {
-  // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
+  // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 200px: 1열 컴팩트 썸네일 보기)
   const [width, setWidth] = useState(() => {
     try {
-      const v = parseInt(localStorage.getItem('meetflow_doc_panel_width') || '420', 10);
-      return Number.isFinite(v) ? Math.max(80, v) : 420;
-    } catch { return 420; }
+      const v = parseInt(localStorage.getItem('meetflow_doc_panel_width') || '200', 10);
+      return Number.isFinite(v) ? Math.max(80, v) : 200;
+    } catch { return 200; }
   });
   const [zoomFile, setZoomFile] = useState(null);     // 패널 내 확대할 이미지 파일
   const [zoomUrl, setZoomUrl] = useState(null);
@@ -1125,15 +1226,20 @@ function DocumentPanel({
   const { broadcast: vbroadcast, setHandler: setViewerHandler, following, setFollowing, setMyViewerState } = useViewerSync(meetingId);
   // 라이브 OFF→ON 전환 시 다른 라이브 사용자가 보낸 viewer:state 를 받아 적용할 때 사용
   // PdfViewer 의 presenterPage 로 흘러갈 "초기 페이지 점프 신호"
+  // pendingInitialPageFileId — 이 페이지가 어느 파일을 위한 것인지. 다른 파일이 열리면 무시됨.
   const [pendingInitialPage, setPendingInitialPage] = useState(null);
+  const [pendingInitialPageFileId, setPendingInitialPageFileId] = useState(null);
   // 다른 참가자 커서 — { userId: { x, y, name, color, fileId, page, ts } }
   const [remoteCursors, setRemoteCursors] = useState({});
 
-  // 폭 변경 시 localStorage 저장 — 단, 이미지 확대 중에는 저장하지 않음 (원래 폭 유지)
+  // 폭 변경 시 localStorage 저장 — 자료(이미지/문서) 뷰 활성 중에는 저장하지 않음.
+  // 이유: 자료를 열면 패널이 자동 확장되는데(이미지 480px / 문서 820px), 그 값이
+  // localStorage에 저장되면 다음 회의 진입 시에도 확장된 상태로 시작 → 사용자가 원하지 않음.
+  // 자료 닫으면 widthBeforeZoom으로 복원되므로 그 시점의 폭이 정상적으로 저장됨.
   useEffect(() => {
-    if (zoomFile) return;
+    if (zoomFile || docFile) return;
     try { localStorage.setItem('meetflow_doc_panel_width', String(width)); } catch {}
-  }, [width, zoomFile]);
+  }, [width, zoomFile, docFile]);
 
   // 풀사이즈 뷰어(이미지 확대 or 문서 윈도우) 활성 여부를 부모에 전달 →
   // 활성 중에는 AI 자동 개입 중단 (호출한 경우에만 응답).
@@ -1262,8 +1368,10 @@ function DocumentPanel({
         await openFileLocal(target);
       }
       // 페이지 정보가 있으면 해당 페이지로 점프 신호 전달 (PDF만 의미 있음)
+      // fileId도 함께 기록 → 새 파일이 열린 후 매칭될 때만 적용되어 다른 파일로 점프 방지.
       if (typeof payload.page === 'number' && payload.page > 0) {
         setPendingInitialPage(payload.page);
+        setPendingInitialPageFileId(payload.fileId);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1317,6 +1425,15 @@ function DocumentPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, zoomFile, docFile]);
+
+  // 어떤 자료도 열려있지 않으면 stale pendingInitialPage 정리
+  // (자료를 닫은 후 다른 파일을 열 때 이전 동기화 응답이 잘못 적용되는 것 방지)
+  useEffect(() => {
+    if (!docFile && !zoomFile && (pendingInitialPage !== null || pendingInitialPageFileId !== null)) {
+      setPendingInitialPage(null);
+      setPendingInitialPageFileId(null);
+    }
+  }, [docFile, zoomFile, pendingInitialPage, pendingInitialPageFileId]);
 
   // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-340px (채팅창 최소 340px 보장)
   // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
@@ -1412,23 +1529,36 @@ function DocumentPanel({
             </div>
           ) : (
             <div className={`flex flex-col ${isCompact ? 'gap-1.5' : 'gap-2.5'}`}>
-              {files.map((f) => (
-                <FileThumbCard
-                  key={f.id || f.name}
-                  file={f}
-                  getUrl={getUrl}
-                  onClick={() => handleFileClick(f)}
-                  isImage={isImageFile(f)}
-                  compact={isCompact}
-                />
-              ))}
+              {files.map((f) => {
+                // 삭제 권한: 업로더 본인 / 회의 생성자 / 관리자
+                const canDelete = !!currentUserId && (
+                  f.uploaded_by === currentUserId ||
+                  meetingCreatedBy === currentUserId ||
+                  !!isAdmin
+                );
+                return (
+                  <FileThumbCard
+                    key={f.id || f.name}
+                    file={f}
+                    getUrl={getUrl}
+                    onClick={() => handleFileClick(f)}
+                    isImage={isImageFile(f)}
+                    compact={isCompact}
+                    canDelete={canDelete}
+                    onDelete={onDeleteFile}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* 이미지 확대 오버레이 — 패널 내부를 덮음. 패널은 자동으로 최대 폭까지 확장 */}
+        {/* 이미지 확대 오버레이 — 패널 내부를 덮음. 패널은 자동으로 최대 폭까지 확장.
+            key 에 fileId 부착 → 다른 파일로 전환 시 컴포넌트가 완전히 remount되어
+            이전 파일의 페이지/뷰어 상태가 새 파일에 영향을 주지 않음. */}
         {zoomFile && (
           <ImageZoomOverlay
+            key={`img:${zoomFile.id || zoomFile.name}`}
             file={zoomFile}
             url={zoomUrl}
             onClose={closeZoom}
@@ -1443,9 +1573,13 @@ function DocumentPanel({
           />
         )}
 
-        {/* 문서 확대 오버레이 — 이미지와 동일한 패턴으로 패널 내부를 덮음 (포털/모달 X) */}
+        {/* 문서 확대 오버레이 — 이미지와 동일한 패턴으로 패널 내부를 덮음 (포털/모달 X)
+            key 에 fileId 부착 → 다른 PDF로 전환 시 완전 remount.
+            initialPage(=pendingInitialPage) 는 onState 응답 직후 자동 reset 되지만,
+            방금 도착한 값이 새 파일과 매칭되지 않으면 적용되지 않도록 expectedFileId 도 함께 전달. */}
         {docFile && (
           <DocumentZoomOverlay
+            key={`doc:${docFile.id || docFile.name}`}
             file={docFile}
             url={docUrl}
             onClose={closeDoc}
@@ -1458,7 +1592,8 @@ function DocumentPanel({
             setViewerHandler={setViewerHandler}
             setMyViewerState={setMyViewerState}
             initialPage={pendingInitialPage}
-            onInitialPageApplied={() => setPendingInitialPage(null)}
+            initialPageFileId={pendingInitialPageFileId}
+            onInitialPageApplied={() => { setPendingInitialPage(null); setPendingInitialPageFileId(null); }}
           />
         )}
 
@@ -1551,7 +1686,13 @@ export default function MeetingRoom() {
   }, [materialViewerActive, setSidebarForceMinimized]);
   // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
   // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
-  const { files: meetingFiles, uploadFile: uploadMeetingFile, getDownloadUrl: getMeetingFileUrl } = useMeetingFiles(id);
+  const {
+    files: meetingFiles,
+    uploadFile: uploadMeetingFile,
+    getDownloadUrl: getMeetingFileUrl,
+    importFromGoogleDocs: importGoogleDocsFile,
+    deleteFile: deleteMeetingFile,
+  } = useMeetingFiles(id);
   const { messages, sendMessage } = useRealtimeMessages(id);
 
   // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
@@ -1733,6 +1874,27 @@ export default function MeetingRoom() {
       console.error('[handleFileUpload] 실패:', err);
     }
   }, [uploadMeetingFile]);
+
+  // URL → PDF 변환 핸들러 (ChatArea의 "URL로 자료 추가" 폼에서 호출)
+  // Google Docs/Sheets/Slides URL을 서버측에서 PDF로 변환 후 Storage에 저장 → 일반 PDF처럼 동작.
+  const handleImportUrl = useCallback(async (url, options = {}) => {
+    return await importGoogleDocsFile({ url, ...options });
+  }, [importGoogleDocsFile]);
+
+  // 자료 삭제 핸들러 (DocumentPanel에서 X 버튼 클릭 시 호출)
+  // 권한: 업로더 / 회의 생성자 / 관리자만 — UI에서 이미 게이트하지만 DB RLS로 한 번 더 확인됨.
+  const handleDeleteFile = useCallback(async (file) => {
+    if (!file?.id) return;
+    const ok = window.confirm(`"${file.name}" 자료를 정말 삭제할까요?\n삭제하면 복구할 수 없어요.`);
+    if (!ok) return;
+    try {
+      await deleteMeetingFile(file);
+      addToast(`"${file.name}" 삭제되었습니다`, 'success', 2500);
+    } catch (err) {
+      console.error('[handleDeleteFile] 실패:', err);
+      addToast(err?.message || '자료 삭제에 실패했습니다', 'error', 4000);
+    }
+  }, [deleteMeetingFile, addToast]);
 
   // 참가자 재입장 공지 — 이전에 나간 적이 있다면 자동으로 "다시 입장" 시스템 메시지 전송.
   //   - 요청자는 제외 (요청자는 "나가기" 개념이 없음)
@@ -2025,6 +2187,10 @@ export default function MeetingRoom() {
           onViewerChange={setMaterialViewerActive}
           mobileOpen={mobileDocOpen}
           onMobileClose={() => setMobileDocOpen(false)}
+          currentUserId={user?.id}
+          isAdmin={user?.role === 'admin'}
+          meetingCreatedBy={meeting?.created_by}
+          onDeleteFile={handleDeleteFile}
         />
 
         {/* 채팅 영역 */}
@@ -2034,6 +2200,7 @@ export default function MeetingRoom() {
           disabled={meeting.status === 'completed'}
           aiThinking={aiThinking}
           onFileUpload={handleFileUpload}
+          onImportUrl={handleImportUrl}
           autoIntervene={aiAutoIntervene}
           aiError={aiError}
         />

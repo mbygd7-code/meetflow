@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap, AlertTriangle, LogOut, UserPlus } from 'lucide-react';
+import { ArrowUp, AtSign, X, Plus, Paperclip, Mic, MicOff, Keyboard, ZapOff, Zap, AlertTriangle, LogOut, UserPlus, Link2, Loader2, ClipboardPaste } from 'lucide-react';
 import ChatBubble from './ChatBubble';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { parseGoogleDocsUrl } from '@/lib/googleDocsUrl';
 
-export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, autoIntervene = true, aiError = null }) {
+export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, onImportUrl, autoIntervene = true, aiError = null }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
   const [reactions, setReactions] = useState({});
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  // URL 자료 추가 폼 상태
+  const [urlFormOpen, setUrlFormOpen] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlError, setUrlError] = useState(null);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const urlInputRef = useRef(null);
 
   // 자동개입 상태 배너: 초기 OFF 상태면 10초, 토글 변경 시 5초 표시 후 자동 숨김
   const [banner, setBanner] = useState(null); // { kind: 'off' | 'on', visible: bool }
@@ -257,6 +264,135 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
           className="hidden"
         />
 
+        {/* URL 자료 추가 인라인 폼 — Google Docs/Sheets/Slides 자동 PDF 변환 */}
+        {urlFormOpen && (() => {
+          const detected = parseGoogleDocsUrl(urlInput);
+          const submit = async () => {
+            const trimmed = urlInput.trim();
+            if (!trimmed) { setUrlError('URL을 입력해주세요'); return; }
+            if (!detected) { setUrlError('Google Docs/Sheets/Slides URL만 지원합니다'); return; }
+            setUrlImporting(true);
+            setUrlError(null);
+            try {
+              await onImportUrl?.(trimmed);
+              setUrlFormOpen(false);
+              setUrlInput('');
+            } catch (err) {
+              setUrlError(err?.message || 'PDF 변환 중 오류가 발생했습니다');
+            } finally {
+              setUrlImporting(false);
+            }
+          };
+          return (
+            <div className="mb-2 px-3 py-3 bg-bg-secondary border border-border-subtle rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Link2 size={15} className="text-brand-purple" />
+                <span className="text-xs font-semibold text-txt-primary">URL로 자료 추가</span>
+                <button
+                  onClick={() => { setUrlFormOpen(false); setUrlError(null); setUrlInput(''); }}
+                  className="ml-auto p-0.5 text-txt-muted hover:text-txt-primary"
+                  disabled={urlImporting}
+                  title="닫기"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="relative flex items-center">
+                <input
+                  ref={urlInputRef}
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => { setUrlInput(e.target.value); setUrlError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !urlImporting) submit();
+                  }}
+                  // 우클릭/단축키 컨텍스트 메뉴가 부모 핸들러에 의해 막히지 않도록 명시.
+                  onContextMenu={(e) => e.stopPropagation()}
+                  // 부모의 onPaste 핸들러 격리 + native paste의 결과를 onChange 가 받도록.
+                  onPaste={(e) => { e.stopPropagation(); }}
+                  placeholder="https://docs.google.com/document/d/..."
+                  disabled={urlImporting}
+                  autoFocus
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="flex-1 bg-bg-tertiary border border-border-subtle rounded-md pl-3 pr-9 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:border-brand-purple/50 focus:ring-[3px] focus:ring-brand-purple/15 disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  // 버튼 클릭으로 input의 focus가 빠지지 않게 mousedown 단계에서 prevent.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={async () => {
+                    setUrlError(null);
+                    // 1) 항상 먼저 input 으로 포커스 — 실패 시 사용자가 곧바로 ⌘V 가능.
+                    const inp = urlInputRef.current;
+                    inp?.focus();
+                    inp?.select?.();
+                    // 2) Clipboard API readText 시도.
+                    //    일부 브라우저(권한 차단/포커스 문제/비-시큐어 컨텍스트)에서는 실패할 수 있음.
+                    try {
+                      if (navigator.clipboard?.readText) {
+                        const txt = await navigator.clipboard.readText();
+                        if (txt && txt.trim()) {
+                          setUrlInput(txt.trim());
+                          return;
+                        }
+                      }
+                      throw new Error('empty-or-unsupported');
+                    } catch {
+                      // 3) 폴백 안내 — input 은 이미 focus + select 상태이므로 ⌘V 한 번이면 됨
+                      setUrlError('붙여넣기 권한이 차단되어 있어요. 입력칸이 활성된 상태에서 ⌘V (Mac) 또는 Ctrl+V 를 눌러주세요.');
+                    }
+                  }}
+                  disabled={urlImporting}
+                  title="클립보드에서 붙여넣기"
+                  aria-label="클립보드에서 붙여넣기"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ClipboardPaste size={15} />
+                </button>
+              </div>
+              {detected && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ backgroundColor: detected.color }}
+                  />
+                  <span className="text-txt-secondary">{detected.label} 감지됨</span>
+                </div>
+              )}
+              {urlError && (
+                <p className="mt-2 text-[11px] text-status-error flex items-center gap-1">
+                  <AlertTriangle size={12} /> {urlError}
+                </p>
+              )}
+              <p className="mt-2 text-[11px] text-txt-muted leading-relaxed">
+                ⓘ "링크가 있는 모든 사용자에게 보기 권한"이 부여된 문서만 가져올 수 있어요.
+                첨부 시점의 내용이 PDF로 고정됩니다.
+              </p>
+              <div className="mt-2.5 flex items-center justify-end gap-1.5">
+                <button
+                  onClick={() => { setUrlFormOpen(false); setUrlError(null); setUrlInput(''); }}
+                  disabled={urlImporting}
+                  className="px-3 py-1.5 text-xs font-medium text-txt-secondary hover:text-txt-primary disabled:opacity-50 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={urlImporting || !urlInput.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-purple hover:bg-brand-purple/90 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {urlImporting ? (
+                    <><Loader2 size={13} className="animate-spin" /> 가져오는 중...</>
+                  ) : (
+                    'PDF로 가져오기'
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* 입력 영역: 텍스트 ↔ 음성 트랜지션 */}
         <div className="flex flex-col items-center gap-0">
           {!voiceMode ? ( <>
@@ -281,6 +417,18 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                       >
                         <Paperclip size={17} className="text-txt-muted" />
                         자료 업로드
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPlusMenuOpen(false);
+                          setUrlFormOpen(true);
+                          setUrlError(null);
+                          setUrlInput('');
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-txt-primary hover:bg-bg-tertiary transition-colors"
+                      >
+                        <Link2 size={17} className="text-txt-muted" />
+                        URL로 자료 추가
                       </button>
                       <button
                         onClick={() => { setPlusMenuOpen(false); setVoiceMode(true); }}

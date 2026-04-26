@@ -156,5 +156,55 @@ export function useMeetingFiles(meetingId) {
     return data?.signedUrl || null;
   }, []);
 
-  return { files, loading, uploadFile, deleteFile, getDownloadUrl };
+  // ── Google Docs/Sheets/Slides URL → PDF 자동 변환 ──
+  // Edge Function `import-google-doc` 호출 → 서버측에서 PDF export + Storage 업로드 + DB INSERT.
+  // 결과 row는 Realtime INSERT 구독이 자동 반영하므로 수동으로 setFiles 호출 불필요(중복 방지).
+  // replaceFileId를 넘기면 "다시 가져오기" — 기존 row + Storage 자동 삭제.
+  const importFromGoogleDocs = useCallback(
+    async ({ url, customName, replaceFileId } = {}) => {
+      if (!meetingId || !user?.id) {
+        throw new Error('meetingId 또는 사용자 정보가 없습니다');
+      }
+      if (!url) throw new Error('URL이 필요합니다');
+      const { data, error } = await supabase.functions.invoke('import-google-doc', {
+        body: { meetingId, url, customName, replaceFileId },
+      });
+      if (error) {
+        // Edge Function 에러 응답 본문에서 메시지 추출.
+        // supabase-js v2는 FunctionsHttpError의 context가 Response 객체 자체임.
+        let serverMsg = null;
+        try {
+          const ctx = error.context;
+          if (ctx) {
+            // Response 객체이면 .text() 직접 호출, 아니면 .response 시도
+            const responseLike = typeof ctx.text === 'function' ? ctx : ctx.response;
+            if (responseLike && typeof responseLike.text === 'function') {
+              const txt = await responseLike.text();
+              try {
+                serverMsg = JSON.parse(txt)?.error;
+              } catch {
+                serverMsg = txt && txt.length < 300 ? txt : null;
+              }
+            }
+          }
+        } catch { /* ignore */ }
+        const msg = serverMsg || error.message || 'PDF 변환 중 오류가 발생했습니다';
+        const e = new Error(msg);
+        e.cause = error;
+        throw e;
+      }
+      if (data?.error) throw new Error(data.error);
+      // Realtime이 반영하지만, 즉각 표시를 위해 낙관적으로 prepend
+      if (data?.file) {
+        setFiles((prev) => {
+          if (prev.some((f) => f.id === data.file.id)) return prev;
+          return [data.file, ...prev];
+        });
+      }
+      return data?.file || null;
+    },
+    [meetingId, user]
+  );
+
+  return { files, loading, uploadFile, deleteFile, getDownloadUrl, importFromGoogleDocs };
 }

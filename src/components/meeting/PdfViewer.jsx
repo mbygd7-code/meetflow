@@ -51,6 +51,33 @@ export default function PdfViewer({
   const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
   const cursorThrottleRef = useRef(0);
 
+  // PDF annotation 링크 — URL별 안정된 target 이름으로 재설정.
+  //   - 같은 URL 다시 클릭 → 브라우저가 기존 탭(같은 name)을 재사용하여 포커스/네비게이션
+  //   - 다른 URL → 새 탭 (다른 name) 생성
+  // react-pdf 가 매 페이지 렌더 시 annotation 을 새로 그리므로 매 렌더 후
+  // 직접 anchor의 target/rel 속성을 갱신해 줘야 함. (click 위임 보다 안정)
+  // MutationObserver 로 annotation layer 변화도 감지.
+  useEffect(() => {
+    const el = pageWrapRef.current;
+    if (!el) return;
+    const updateLinkTargets = () => {
+      const anchors = el.querySelectorAll('.react-pdf__Page__annotations a, .annotationLayer a');
+      anchors.forEach((a) => {
+        const href = a.getAttribute('href') || '';
+        if (!/^https?:/i.test(href)) return;
+        const targetName = `meetflow_pdflink_${href.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 100)}`;
+        if (a.target !== targetName) a.target = targetName;
+        // rel 도 안전하게
+        a.rel = 'noopener noreferrer';
+      });
+    };
+    updateLinkTargets();
+    // annotation 노드는 페이지 변경/리사이즈 시 react-pdf 가 재생성 → DOM 변화 감시
+    const mo = new MutationObserver(updateLinkTargets);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [pageNumber, fitWidth, zoom]);
+
   useEffect(() => {
     const el = pageWrapRef.current;
     if (!el) return;
@@ -390,6 +417,10 @@ export default function PdfViewer({
           file={url}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
+          // PDF 내 외부 링크는 새 탭으로 열기 + 보안 옵션 명시
+          // (회의방을 떠나지 않도록 + window.opener 노출 방지)
+          externalLinkTarget="_blank"
+          externalLinkRel="noopener noreferrer"
           loading={
             <div className="flex items-center gap-2 text-txt-muted py-8">
               <Loader2 size={18} className="animate-spin" />
@@ -422,7 +453,9 @@ export default function PdfViewer({
             <Page
               pageNumber={pageNumber}
               width={pageWidth}
-              renderAnnotationLayer={false}
+              // PDF 내 하이퍼링크(파란 텍스트)를 클릭 가능하게 — annotation layer가 그려져야 함.
+              // textLayer는 false 유지: 텍스트 선택은 별개 기능이고 활성화 시 비용 큼.
+              renderAnnotationLayer={true}
               renderTextLayer={false}
               className="shadow-lg"
             />
