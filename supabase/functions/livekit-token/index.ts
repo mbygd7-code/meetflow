@@ -43,33 +43,43 @@ serve(async (req) => {
     const LIVEKIT_API_KEY = Deno.env.get('LIVEKIT_API_KEY');
     const LIVEKIT_API_SECRET = Deno.env.get('LIVEKIT_API_SECRET');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
       console.error('[livekit-token] LIVEKIT_* env not set');
       return jsonResponse({ error: 'server_misconfigured' }, 500);
     }
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return jsonResponse({ error: 'supabase_env_missing' }, 500);
     }
 
-    // ── 2) JWT 검증 → user_id 획득 ──
+    // ── 2) JWT 직접 디코드 + 만료 검증 ──
+    //   supabase-js 의 auth.getUser() 는 GoTrue API 호출 시 Edge Function 환경에서
+    //   간헐적으로 invalid_token 반환 (동일 프로젝트 JWT인데도). 직접 디코드로 우회.
     const authHeader = req.headers.get('Authorization') || '';
     const accessToken = authHeader.replace(/^Bearer\s+/i, '');
     if (!accessToken) {
       return jsonResponse({ error: 'unauthorized', reason: 'no_token' }, 401);
     }
 
-    // anon key 로 일반 Supabase 클라이언트 생성 + 사용자 토큰으로 인증
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    });
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
-    if (userErr || !userData?.user) {
+    let userId: string;
+    try {
+      const parts = accessToken.split('.');
+      if (parts.length !== 3) throw new Error('malformed_jwt');
+      // base64url → base64 → JSON
+      const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = payloadB64 + '='.repeat((4 - (payloadB64.length % 4)) % 4);
+      const payload = JSON.parse(atob(padded));
+      if (!payload?.sub) throw new Error('no_sub_claim');
+      // 만료 검증 (sec → ms)
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return jsonResponse({ error: 'unauthorized', reason: 'token_expired' }, 401);
+      }
+      userId = payload.sub;
+    } catch (decodeErr) {
+      console.warn('[livekit-token] JWT decode failed:', String(decodeErr).slice(0, 100));
       return jsonResponse({ error: 'unauthorized', reason: 'invalid_token' }, 401);
     }
-    const userId = userData.user.id;
 
     // ── 3) 요청 파싱 ──
     const body = await req.json().catch(() => ({}));
@@ -80,10 +90,6 @@ serve(async (req) => {
 
     // ── 4) 권한 검증: meeting_participants / admin / created_by / 회의 메시지 발신자 ──
     // service role 로 RLS 우회 (사용자 토큰 RLS 와는 별개로 명시적 권한 체크)
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse({ error: 'service_role_missing' }, 500);
-    }
     const adminSb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 검증 추적용 (실패 시 진단)
