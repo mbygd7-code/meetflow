@@ -44,10 +44,10 @@ export default function VoiceJoinButton({
       <button
         onClick={handleClick}
         className={`${baseClass} bg-status-error/15 text-status-error border border-status-error/30 hover:bg-status-error hover:text-white shadow-sm`}
-        title={`음성 회의 나가기 (현재 ${participantCount}명 참여 중)`}
+        title={`음성 종료 (현재 ${participantCount}명 참여 중)`}
       >
         <PhoneOff size={size === 'sm' ? 12 : 14} strokeWidth={2.4} />
-        나가기
+        음성 종료
         {participantCount > 0 && (
           <span className="ml-0.5 text-[10px] opacity-80">·{participantCount}</span>
         )}
