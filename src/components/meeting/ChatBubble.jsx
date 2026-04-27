@@ -79,7 +79,7 @@ function extractActionItems(content) {
   return items;
 }
 
-export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, reactions = {}, readonly = false }) {
+export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, onMention, reactions = {}, readonly = false }) {
   const [copied, setCopied] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
   const [quoteExpanded, setQuoteExpanded] = useState(false);
@@ -162,11 +162,27 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
       className={`group/bubble flex gap-3 fade-in ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
       onMouseLeave={() => setReactOpen(false)}
     >
-      {/* 아바타 */}
+      {/* 아바타 — 클릭 시 입력창에 @멘션 자동 삽입 (본인/읽기전용 제외) */}
       {isAi ? (
         <MiloAvatar employeeId={employeeId} size="md" showTooltip />
       ) : (
-        <Avatar name={senderName} color={senderColor} size="md" />
+        <button
+          type="button"
+          onClick={() => {
+            if (isMine || readonly) return;
+            onMention?.(senderName);
+          }}
+          disabled={isMine || readonly}
+          className={`shrink-0 rounded-full transition-transform ${
+            isMine || readonly
+              ? 'cursor-default'
+              : 'hover:scale-110 hover:ring-2 hover:ring-brand-purple/40 cursor-pointer'
+          }`}
+          title={isMine ? '나' : `@${senderName} 멘션하기`}
+          aria-label={isMine ? '내 아바타' : `${senderName}님 멘션`}
+        >
+          <Avatar name={senderName} color={senderColor} size="md" />
+        </button>
       )}
 
       {/* 메시지 컨테이너 */}

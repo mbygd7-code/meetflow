@@ -192,6 +192,19 @@ export default function ChatArea({
     textareaRef.current?.focus();
   };
 
+  // 채팅 버블 아바타 클릭 → 입력창에 @멘션 삽입 (커서 위치 무관, 끝에 추가)
+  const handleMention = (name) => {
+    if (!name) return;
+    const tag = `@${name} `;
+    setInput((prev) => {
+      // 이미 같은 멘션이 있으면 중복 추가 X
+      if (prev.includes(tag.trim())) return prev;
+      const sep = prev && !prev.endsWith(' ') ? ' ' : '';
+      return prev + sep + tag;
+    });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* 메시지 리스트 */}
@@ -223,7 +236,7 @@ export default function ChatArea({
                 </div>
               );
             })() : (
-              <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} reactions={reactions} />
+              <ChatBubble key={m.id} message={m} currentUserId={user?.id} onQuote={handleQuote} onReact={handleReact} onActionClick={onSend} onMention={handleMention} reactions={reactions} />
             )
           ))
         )}
