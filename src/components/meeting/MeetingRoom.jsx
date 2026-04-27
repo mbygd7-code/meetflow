@@ -854,24 +854,24 @@ function DocumentZoomOverlay({
         </div>
       </div>
 
-      {/* 통합 툴바 — PDF 컨트롤 + 드로잉 툴바
-          데스크톱: 한 줄 / 모바일: 두 줄 wrap (PDF 위, 드로잉 아래)
-          배경: 투명 + 높이는 자식(흰색 pill) 에 맞춤 — 라운드 툴바 아래 회색 잔여 공간 제거 */}
-      {(isPdf || drawingActive) && (
-        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 py-1 md:py-1.5 shrink-0 w-full min-w-0 max-w-full">
-          {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
-          <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto" />
-          {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
-          <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-x-auto scrollbar-hide" />
-        </div>
-      )}
-
-      {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드 */}
+      {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드
+          통합 툴바는 본문 위에 absolute 떠있는 형태로 들어감 (회색 빈 공간 제거)
+          툴바 활성 시 상단 padding 으로 콘텐츠가 가려지지 않게 공간 확보 */}
       <div
         ref={bodyRef}
         onMouseMove={handleFallbackMouseMove}
-        className="flex-1 relative bg-bg-tertiary/30 overflow-hidden"
+        className={`flex-1 relative bg-bg-tertiary/30 overflow-hidden ${(isPdf || drawingActive) ? 'pt-12 md:pt-12' : ''}`}
       >
+        {/* 통합 툴바 (absolute 떠있는 오버레이) — PDF 컨트롤 + 드로잉 툴바
+            본문 콘텐츠 위에 떠 있어 흰색 라운드 pill 만 보이고 회색 박스 시각 잡음 0 */}
+        {(isPdf || drawingActive) && (
+          <div className="absolute top-1.5 left-0 right-0 z-20 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 pointer-events-none">
+            {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
+            <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto pointer-events-auto" />
+            {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
+            <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-x-auto scrollbar-hide pointer-events-auto" />
+          </div>
+        )}
         {isPdf && url ? (
           <PdfViewer
             url={url}
