@@ -1800,6 +1800,17 @@ export default function MeetingRoom() {
   // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
   const lk = useLiveKitVoice(id);
 
+  // ── milo-analyze warmup ping ──
+  // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
+  // 실패하며 브라우저에 CORS 에러로 보임. 회의방 진입 즉시 ping 보내 함수 깨움.
+  // 응답 기다리지 않음 (fire-and-forget). 실패해도 무시 (실제 AI 호출 시 retry 함).
+  useEffect(() => {
+    if (!id) return;
+    if (!import.meta.env.VITE_SUPABASE_URL) return;
+    supabase.functions.invoke('milo-analyze', { body: { ping: true } })
+      .catch(() => { /* 무시 */ });
+  }, [id]);
+
   // 음성 참여 안내 모달 — 첫 참여 시 1회 (다시 안 보기 옵션)
   const [voiceIntroOpen, setVoiceIntroOpen] = useState(false);
   const handleVoiceJoinClick = useCallback(() => {

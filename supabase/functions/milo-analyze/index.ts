@@ -142,7 +142,18 @@ serve(async (req) => {
   let model = 'unknown';
 
   try {
-    const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge, isExplicitCall } = await req.json();
+    const body = await req.json();
+
+    // Warmup ping — 회의방 진입 시 함수 cold start 회피용. 즉시 200 반환.
+    //   Anthropic API 호출 안 함, 비용·지연 0.
+    if (body?.ping === true) {
+      return new Response(
+        JSON.stringify({ ok: true, ts: Date.now() }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { messages, agenda, preset, context, miloSettings, compressedContext, googleDocsSummary, skipKnowledge, isExplicitCall } = body;
 
     // ── AI 전문가 이름 매핑 (transcript 라벨링용) ──
     const AI_NAME_MAP: Record<string, string> = {
