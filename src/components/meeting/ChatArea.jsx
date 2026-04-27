@@ -582,7 +582,11 @@ export default function ChatArea({
                   {((!voiceConnected && isListening) || (voiceConnected && !voiceMuted)) && (
                     <span className="absolute inset-0 rounded-full bg-status-error/30 animate-ping" />
                   )}
-                  {(voiceConnected ? voiceMuted : !isListening) ? <Mic size={26} /> : <MicOff size={26} />}
+                  {/* 아이콘: 발언 중(활성) → Mic, 음소거(비활성) → MicOff(대각선)
+                      LiveKit 모드: voiceMuted 가 진실, STT-only 모드: isListening 이 진실 */}
+                  {(voiceConnected ? !voiceMuted : isListening)
+                    ? <Mic size={26} />
+                    : <MicOff size={26} />}
                 </button>
 
                 {/* 텍스트 모드 */}
