@@ -1543,8 +1543,12 @@ function DocumentPanel({
   // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
   const onResizerDown = (e) => {
     e.preventDefault();
+    // 사용자가 의도적으로 드래그하면 collapsed 상태 해제 — drag 결과가 즉시 반영됨
+    if (userCollapsed) setUserCollapsed(false);
     const startX = e.clientX;
-    const startW = width;
+    // 화면에 실제로 그려진 폭부터 드래그 시작 — collapsed/clamp 상태에서 점프 방지
+    //   userCollapsed=true 면 baseWidth=MIN_WIDTH 였으므로 그 값에서, 아니면 effectiveWidth 그대로
+    const startW = userCollapsed ? MIN_WIDTH : effectiveWidth;
     const minWForDrag = (zoomFile || docFile) ? 480 : 80;
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
@@ -1571,7 +1575,10 @@ function DocumentPanel({
   const isEmpty = files.length === 0;
   // 풀사이즈 뷰어(zoom/doc) 열려 있으면 state값이 작아도 480px 이상 보장
   const viewerActive = !!(zoomFile || docFile);
-  const baseWidth = isEmpty ? MIN_WIDTH : width;
+  // 사용자가 헤더를 클릭하여 의도적으로 접은 상태 — width 보존, 렌더만 MIN_WIDTH 로 강제
+  // 다시 헤더(컴팩트 모드)를 클릭하면 false 로 돌아가 저장된 width 로 복원됨
+  const [userCollapsed, setUserCollapsed] = useState(false);
+  const baseWidth = (isEmpty || userCollapsed) ? MIN_WIDTH : width;
   // 채팅 최소폭(400px) 보장을 위해 자료 패널 최대폭을 (윈도우 폭 - 400) 으로 클램프
   // — 저장된 width 가 너무 크거나 창이 좁아진 경우에도 채팅이 잘리지 않음
   const maxAllowed = Math.max(MIN_WIDTH, winW - CHAT_MIN_WIDTH);
@@ -1602,24 +1609,52 @@ function DocumentPanel({
           '--panel-w': `${effectiveWidth}px`,
         }}
       >
-        {/* 헤더 — 컴팩트 모드에서는 심플하게. 모바일에서는 닫기 버튼 통합 */}
-        <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
+        {/* 헤더 — 컴팩트 모드에서는 심플하게. 모바일에서는 닫기 버튼 통합
+            확장 상태(헤더 배경 클릭) → 컴팩트로 접힘. 컴팩트 상태(헤더 배경 클릭) → 확장 복원.
+            단 풀사이즈 뷰어(zoom/doc) 활성 시에는 토글 비활성화 (의도치 않은 너비 변경 방지). */}
+        <div
+          onClick={() => {
+            if (viewerActive || isEmpty) return; // 풀스크린 / 빈 패널은 토글 무효
+            setUserCollapsed((c) => !c);
+          }}
+          className={`border-b border-border-divider shrink-0 select-none ${
+            (!viewerActive && !isEmpty) ? 'cursor-pointer hover:bg-bg-tertiary/30 transition-colors' : ''
+          } ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}
+          title={viewerActive ? undefined : (isCompact ? '클릭하여 자료 패널 펼치기' : '클릭하여 자료 패널 접기')}
+        >
           <FolderOpen size={isCompact ? 14 : 14} className="text-brand-purple shrink-0" />
           {!isCompact && (
             <>
               <span className="text-sm font-semibold text-txt-primary">자료</span>
               <span className="text-[10px] text-txt-muted">{files.length}개</span>
-              {/* 모바일 드로어 닫기 — 헤더 우측 */}
-              {mobileOpen && (
-                <button
-                  onClick={onMobileClose}
-                  className="md:hidden ml-auto p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
-                  aria-label="자료 패널 닫기"
-                  title="닫기"
-                >
-                  <X size={18} />
-                </button>
-              )}
+              {/* 우측 액션 영역 — ml-auto 로 우측 정렬 */}
+              <div className="ml-auto flex items-center gap-1">
+                {/* 데스크톱 접기 버튼 — 풀스크린 뷰어 미활성 + 빈 패널 아님 */}
+                {!viewerActive && !isEmpty && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // 헤더 onClick 중복 호출 방지 — 자체 처리
+                      setUserCollapsed(true);
+                    }}
+                    className="hidden md:inline-flex p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                    aria-label="자료 패널 접기"
+                    title="자료 패널 접기"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                {/* 모바일 드로어 닫기 */}
+                {mobileOpen && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMobileClose?.(); }}
+                    className="md:hidden p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                    aria-label="자료 패널 닫기"
+                    title="닫기"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
             </>
           )}
           {isCompact && files.length > 0 && (

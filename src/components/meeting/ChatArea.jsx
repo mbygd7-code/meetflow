@@ -254,11 +254,11 @@ export default function ChatArea({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden">
       {/* 메시지 리스트 */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-6 py-5 space-y-5"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-6 py-5 space-y-5"
       >
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-txt-muted text-sm">
@@ -308,7 +308,7 @@ export default function ChatArea({
       </div>
 
       {/* 입력창 — 섹션은 솔리드 bg로 고정, 위쪽에 별도 페이드 레이어를 올려 메시지 페이드 효과 */}
-      <div className="relative px-6 pb-5 pt-2" style={{ background: 'var(--bg-primary)' }}>
+      <div className="relative px-3 md:px-6 pb-3 md:pb-5 pt-2" style={{ background: 'var(--bg-primary)' }}>
         {/* 메시지창 위로 올라가는 페이드 레이어 (더 높이 올림) */}
         <div
           aria-hidden
@@ -572,7 +572,7 @@ export default function ChatArea({
                 placeholder="의견을 입력하세요..."
                 rows={1}
                 disabled={disabled}
-                className="flex-1 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
+                className="flex-1 min-w-0 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
                 onContextMenu={(e) => e.stopPropagation()}
                 style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               />
