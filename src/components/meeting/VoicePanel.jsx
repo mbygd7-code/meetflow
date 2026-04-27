@@ -16,7 +16,11 @@ export default function VoicePanel({
   onChangeVoiceMode,
   pttPressed = false,
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  // 모바일(< md, 768px) 에서는 기본 접힘 — 화면 공간 절약. 데스크톱은 기본 펼침.
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 767px)').matches;
+  });
 
   const total = participants.length;
   const speakingCount = activeSpeakers?.size || 0;

@@ -242,7 +242,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
           <div
             onClick={readonly ? undefined : handleQuote}
-            className={`relative px-4 py-3 text-sm leading-relaxed ${readonly ? '' : 'cursor-pointer'} ${
+            className={`relative px-4 py-3 text-sm leading-relaxed break-words [overflow-wrap:anywhere] ${readonly ? '' : 'cursor-pointer'} ${
               isQuestion
                 ? 'text-txt-primary bg-brand-orange/10 border border-brand-orange/25 rounded-xl rounded-tl-sm hover:border-brand-orange/40'
                 : isAi

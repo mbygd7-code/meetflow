@@ -58,6 +58,18 @@ export default function ChatArea({
     return () => clearTimeout(bannerTimerRef.current);
   }, [autoIntervene]);
 
+  // 음성 모드 진입 시 Space 단축키 힌트 강조 (2초간 보라 아웃라인) — 사용자에게 PTT 가능성 환기
+  const [spaceHintGlow, setSpaceHintGlow] = useState(false);
+  useEffect(() => {
+    if (!voiceConnected) {
+      setSpaceHintGlow(false);
+      return;
+    }
+    setSpaceHintGlow(true);
+    const t = setTimeout(() => setSpaceHintGlow(false), 2000);
+    return () => clearTimeout(t);
+  }, [voiceConnected]);
+
   // 드로잉 태그 이벤트 리스너 — DrawingOverlay 아바타 클릭 시 input에 태그 주입 +
   //   구조화 참조(drawing_annotations metadata)를 송신 시 포함할 수 있도록 누적.
   const [pendingDrawingRefs, setPendingDrawingRefs] = useState([]);
@@ -242,7 +254,7 @@ export default function ChatArea({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
       {/* 메시지 리스트 */}
       <div
         ref={scrollRef}
@@ -686,7 +698,13 @@ export default function ChatArea({
                 {voiceConnected ? (
                   <>
                     {voiceMuted ? '음소거 중 · 클릭 또는' : '발언 중 · 클릭 또는'}
-                    <kbd className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-txt-primary bg-bg-tertiary border border-border-default shadow-sm">
+                    <kbd
+                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-txt-primary border transition-all duration-300 ${
+                        spaceHintGlow
+                          ? 'border-border-default bg-bg-tertiary shadow-sm'
+                          : 'border-transparent bg-transparent shadow-none'
+                      }`}
+                    >
                       Space
                     </kbd>
                     {voiceMuted ? '로 발언' : '로 음소거'}

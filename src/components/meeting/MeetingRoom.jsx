@@ -703,6 +703,8 @@ function DocumentZoomOverlay({
   onInitialPageApplied,
   // PDF 안 링크 클릭 → 부모(DocumentPanel)가 iframe 오픈 + broadcast 처리
   onPdfLinkClick,
+  // PDF 줌 시 자료 섹션 확장 — 부모(DocumentPanel) 가 폭 floor 갱신
+  onContentWidthChange,
 }) {
   const [drawingActive, setDrawingActive] = useState(false);
   const [toolbarHost, setToolbarHost] = useState(null);
@@ -891,6 +893,7 @@ function DocumentZoomOverlay({
             remoteCursors={remoteCursors}
             following={following}
             onLinkClick={onPdfLinkClick}
+            onContentWidthChange={onContentWidthChange}
           />
         ) : isImageType && url ? (
           <div className="relative w-full h-full">
@@ -1237,6 +1240,18 @@ function DocumentPanel({
   // 자료 삭제 권한 체크용
   currentUserId, isAdmin, meetingCreatedBy, onDeleteFile,
 }) {
+  // 채팅 최소 가로폭 — 모바일 화면 사이즈. 자료 패널 최대 확장은 항상 (winW - CHAT_MIN_WIDTH) 로 제한
+  const CHAT_MIN_WIDTH = 400;
+  // 윈도우 폭 추적 — 창 크기 변경 시에도 채팅 최소폭 보장
+  const [winW, setWinW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280));
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  // PDF 줌 시 자료 섹션 확장 — PdfViewer 가 보고한 페이지폭 이상으로 패널을 키워 콘텐츠가 잘리지 않게.
+  //   zoom<=1 이면 0 (확장 비활성). 채팅 최소폭 (CHAT_MIN_WIDTH) 으로 클램프됨.
+  const [zoomedContentW, setZoomedContentW] = useState(0);
   // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 200px: 1열 컴팩트 썸네일 보기)
   const [width, setWidth] = useState(() => {
     try {
@@ -1524,7 +1539,7 @@ function DocumentPanel({
     }
   }, [docFile, zoomFile, pendingInitialPage, pendingInitialPageFileId]);
 
-  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-340px (채팅창 최소 340px 보장)
+  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-CHAT_MIN_WIDTH (채팅창 모바일 최소 가로폭 보장)
   // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
   const onResizerDown = (e) => {
     e.preventDefault();
@@ -1533,7 +1548,9 @@ function DocumentPanel({
     const minWForDrag = (zoomFile || docFile) ? 480 : 80;
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
-      const next = Math.max(minWForDrag, Math.min(window.innerWidth - 340, startW + dx));
+      // 우측 한계 — 화면 폭에서 채팅 최소폭(400)을 뺀 값까지만 자료 패널 확장 허용
+      const maxW = Math.max(minWForDrag, window.innerWidth - CHAT_MIN_WIDTH);
+      const next = Math.max(minWForDrag, Math.min(maxW, startW + dx));
       setWidth(next);
     };
     const onUp = () => {
@@ -1555,7 +1572,15 @@ function DocumentPanel({
   // 풀사이즈 뷰어(zoom/doc) 열려 있으면 state값이 작아도 480px 이상 보장
   const viewerActive = !!(zoomFile || docFile);
   const baseWidth = isEmpty ? MIN_WIDTH : width;
-  const effectiveWidth = viewerActive ? Math.max(480, baseWidth) : baseWidth;
+  // 채팅 최소폭(400px) 보장을 위해 자료 패널 최대폭을 (윈도우 폭 - 400) 으로 클램프
+  // — 저장된 width 가 너무 크거나 창이 좁아진 경우에도 채팅이 잘리지 않음
+  const maxAllowed = Math.max(MIN_WIDTH, winW - CHAT_MIN_WIDTH);
+  // PDF 줌 시 콘텐츠 폭 + 좌우 여백/툴바 padding (~48px) 만큼 floor 로 추가 — 잘림 방지
+  const ZOOM_CHROME_PAD = 48;
+  const zoomFloor = zoomedContentW > 0 ? zoomedContentW + ZOOM_CHROME_PAD : 0;
+  const desiredBase = Math.max(baseWidth, zoomFloor);
+  const clampedBase = Math.min(desiredBase, maxAllowed);
+  const effectiveWidth = viewerActive ? Math.max(480, clampedBase) : clampedBase;
 
   // 항상 1열 유지 — 패널 폭이 커질수록 썸네일도 같이 커짐 (세로 리스트)
   const isCompact = effectiveWidth < 180; // 매우 좁을 때: 헤더/파일명 숨김
@@ -1684,6 +1709,7 @@ function DocumentPanel({
             initialPageFileId={pendingInitialPageFileId}
             onInitialPageApplied={() => { setPendingInitialPage(null); setPendingInitialPageFileId(null); }}
             onPdfLinkClick={handlePdfLinkClick}
+            onContentWidthChange={setZoomedContentW}
           />
         )}
 
@@ -2203,50 +2229,47 @@ export default function MeetingRoom() {
         document.body
       )}
 
-      {/* ═══ 헤더 ═══ */}
-      <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {/* 모바일 햄버거 — 사이드바 드로어 토글 (다른 페이지로 이동) */}
+      {/* ═══ 헤더 ═══ — 한 줄. 모바일은 모든 액션을 32px 아이콘 버튼으로 통일해 컴팩트하게 */}
+      <div className="flex items-center justify-between px-2.5 md:px-6 py-2 md:py-4 gap-2 md:gap-3 border-b border-border-divider">
+        {/* 좌측: 메뉴/닫기 + 제목 + 상태 dot */}
+        <div className="flex items-center gap-1.5 md:gap-3 min-w-0 flex-1">
+          {/* 모바일 햄버거 — 사이드바 드로어 토글 */}
           <button
             onClick={() => setSidebarOpen?.(true)}
-            className="md:hidden p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
+            className="md:hidden inline-flex items-center justify-center w-8 h-8 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
             aria-label="메뉴 열기"
             title="메뉴"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
-          <button onClick={() => safeNavigate('/meetings')} className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0">
+          <button
+            onClick={() => safeNavigate('/meetings')}
+            className="hidden md:inline-flex p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
+            aria-label="회의 목록으로"
+            title="회의 목록"
+          >
             <X size={18} />
           </button>
-          <h1 className="text-base md:text-[22px] font-medium text-txt-primary tracking-tight truncate">
+          <h1 className="text-[14px] md:text-[22px] font-medium text-txt-primary tracking-tight truncate min-w-0">
             {meeting.title}
           </h1>
           {meeting.status === 'active' && (
-            <Badge variant="success">
-              <span className="w-3 h-3 rounded-full bg-status-error pulse-dot mr-1" />
-              <span className="hidden md:inline">진행 중</span>
-            </Badge>
+            <>
+              {/* 모바일: 작은 dot 만 */}
+              <span
+                className="md:hidden shrink-0 w-2 h-2 rounded-full bg-status-error pulse-dot"
+                title="진행 중"
+              />
+              {/* 데스크톱: dot + "진행 중" 텍스트 — 제목과 충분히 떨어뜨려 가독성 ↑ */}
+              <span className="hidden md:inline-flex items-center gap-1.5 shrink-0 md:ml-4">
+                <span className="w-2.5 h-2.5 rounded-full bg-status-error pulse-dot" />
+                <span className="text-[11px] font-semibold text-status-success">진행 중</span>
+              </span>
+            </>
           )}
-        </div>
-
-        {/* 우측 액션: 음성참여 + 자동개입 토글 + 회의 종료 */}
-        <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출 */}
-          {meeting.status === 'active' && (
-            <VoiceJoinButton
-              connected={lk.connected}
-              connecting={lk.connecting}
-              error={lk.error}
-              participantCount={lk.participants.length}
-              onJoin={handleVoiceJoinClick}
-              onLeave={lk.leave}
-              size="sm"
-            />
-          )}
-
-          {/* 자동개입 토글 — 회의 요청자/관리자만 제어 가능 */}
-          <div className="hidden md:flex items-center gap-2">
-            <span className={`text-[10px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>자동개입</span>
+          {/* AI 자동 개입 토글 (데스크톱) — 진행중 우측에 충분한 간격 */}
+          <div className="hidden md:flex items-center gap-2 ml-6 shrink-0">
+            <span className={`text-[11px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>AI 자동 개입</span>
             <button
               onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
               disabled={!canToggleAutoIntervene}
@@ -2262,57 +2285,90 @@ export default function MeetingRoom() {
               <span className={`absolute top-1/2 -translate-y-1/2 ${aiAutoIntervene ? 'left-[18px]' : 'left-[3px]'} w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm`} />
             </button>
           </div>
+        </div>
 
-          {/* 모바일 자료 버튼 — 자료 패널 드로어 열기 */}
+        {/* 우측 액션: 모바일 = 아이콘 전용 32px, 데스크톱 = 라벨 동반 */}
+        <div className="flex items-center gap-1 md:gap-3 shrink-0">
+          {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출
+              모바일은 아이콘 전용, 데스크톱은 라벨 포함 */}
+          {meeting.status === 'active' && (
+            <>
+              <div className="md:hidden">
+                <VoiceJoinButton
+                  connected={lk.connected}
+                  connecting={lk.connecting}
+                  error={lk.error}
+                  participantCount={lk.participants.length}
+                  onJoin={handleVoiceJoinClick}
+                  onLeave={lk.leave}
+                  iconOnly
+                />
+              </div>
+              <div className="hidden md:block">
+                <VoiceJoinButton
+                  connected={lk.connected}
+                  connecting={lk.connecting}
+                  error={lk.error}
+                  participantCount={lk.participants.length}
+                  onJoin={handleVoiceJoinClick}
+                  onLeave={lk.leave}
+                  size="sm"
+                />
+              </div>
+            </>
+          )}
+
+          {/* 모바일 자료 버튼 — 32×32 아이콘 + 카운트 뱃지 */}
           <button
             onClick={() => setMobileDocOpen(true)}
-            className="md:hidden relative p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            className="md:hidden inline-flex items-center justify-center w-8 h-8 relative rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
             aria-label="자료 보기"
             title="자료"
           >
-            <FolderOpen size={18} />
+            <FolderOpen size={16} />
             {meetingFiles.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-brand-purple leading-none">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-brand-purple leading-none">
                 {meetingFiles.length}
               </span>
             )}
           </button>
 
-          {/* 모바일 자동개입 — 회의 요청자/관리자만 제어 가능 */}
+          {/* 모바일 자동개입 — 32×32 아이콘 (Zap/ZapOff) */}
           <button
             onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
             disabled={!canToggleAutoIntervene}
-            className={`md:hidden p-1.5 rounded-md transition-colors ${aiAutoIntervene ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted'} ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
+            className={`md:hidden inline-flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+              aiAutoIntervene
+                ? 'text-brand-purple bg-brand-purple/10 hover:bg-brand-purple/15'
+                : 'text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary'
+            } ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
             title={
               canToggleAutoIntervene
                 ? (aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만')
                 : '회의 요청자 또는 관리자만 변경할 수 있습니다'
             }
           >
-            {aiAutoIntervene ? <Zap size={18} /> : <ZapOff size={18} />}
+            {aiAutoIntervene ? <Zap size={16} /> : <ZapOff size={16} />}
           </button>
 
-          {/* 요청자 → "회의 종료" (전체 종료 + 회의록 작성 안내) /
-              참가자 → "나가기" (즉시 퇴장, 확인창 없음) */}
+          {/* 회의 종료 / 나가기 — 모바일 아이콘 전용, 데스크톱 라벨 포함 */}
           {isCreator ? (
             <button
               onClick={handleEndClick}
-              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
+              className="inline-flex items-center justify-center md:gap-2 w-8 h-8 md:w-auto md:h-auto md:px-4 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-sm font-medium hover:bg-status-error/20 transition-colors"
               title="회의를 종료하고 회의록을 생성합니다"
             >
               <Square size={16} strokeWidth={2.4} />
               <span className="hidden md:inline">회의 종료</span>
-              <span className="md:hidden">종료</span>
             </button>
           ) : (
             <button
               onClick={handleLeaveMeeting}
-              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-bg-tertiary border border-border-default text-txt-secondary text-xs md:text-sm font-medium hover:text-txt-primary hover:border-border-focus transition-colors"
+              className="inline-flex items-center justify-center md:gap-2 w-8 h-8 md:w-auto md:h-auto md:px-4 md:py-2 rounded-md bg-bg-tertiary border border-border-default text-txt-secondary text-sm font-medium hover:text-txt-primary hover:border-border-focus transition-colors"
               title="회의에서 나갑니다 (회의는 계속 진행)"
             >
               <LogOut size={16} strokeWidth={2.4} />
               <span className="hidden md:inline">나가기</span>
-              <span className="md:hidden">나가기</span>
             </button>
           )}
         </div>
