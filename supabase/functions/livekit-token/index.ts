@@ -78,13 +78,21 @@ serve(async (req) => {
       return jsonResponse({ error: 'meetingId_required' }, 400);
     }
 
-    // ── 4) 권한 검증: meeting_participants 또는 admin ──
-    // service role 로 RLS 우회하여 정확한 검증 (사용자 토큰 RLS 와는 별개로 우리가 명시적으로 권한 체크)
+    // ── 4) 권한 검증: meeting_participants / admin / created_by / 회의 메시지 발신자 ──
+    // service role 로 RLS 우회 (사용자 토큰 RLS 와는 별개로 명시적 권한 체크)
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!SUPABASE_SERVICE_ROLE_KEY) {
       return jsonResponse({ error: 'service_role_missing' }, 500);
     }
     const adminSb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // 검증 추적용 (실패 시 진단)
+    const checks: Record<string, boolean> = {
+      participant: false,
+      admin: false,
+      creator: false,
+      messenger: false,
+    };
 
     // 4a) meeting_participants 체크
     const { data: participantRow } = await adminSb
@@ -93,34 +101,51 @@ serve(async (req) => {
       .eq('meeting_id', meetingId)
       .eq('user_id', userId)
       .maybeSingle();
+    checks.participant = !!participantRow;
+    let allowed = checks.participant;
 
-    let allowed = !!participantRow;
-
-    // 4b) 미허용 시 — admin 또는 meeting created_by 우회
+    // 4b) admin 우회
     if (!allowed) {
       const { data: profile } = await adminSb
         .from('users')
         .select('role')
         .eq('id', userId)
         .maybeSingle();
-      if (profile?.role === 'admin') {
-        allowed = true;
-      } else {
-        const { data: meetingRow } = await adminSb
-          .from('meetings')
-          .select('created_by')
-          .eq('id', meetingId)
-          .maybeSingle();
-        if (meetingRow?.created_by === userId) {
-          allowed = true;
-        }
-      }
+      checks.admin = profile?.role === 'admin';
+      if (checks.admin) allowed = true;
+    }
+
+    // 4c) 회의 생성자 우회
+    if (!allowed) {
+      const { data: meetingRow } = await adminSb
+        .from('meetings')
+        .select('created_by')
+        .eq('id', meetingId)
+        .maybeSingle();
+      checks.creator = meetingRow?.created_by === userId;
+      if (checks.creator) allowed = true;
+    }
+
+    // 4d) 회의에 메시지 보낸 적 있으면 사실상 참여자로 간주 (정식 등록 누락 회복)
+    if (!allowed) {
+      const { count } = await adminSb
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('meeting_id', meetingId)
+        .eq('user_id', userId)
+        .limit(1);
+      checks.messenger = (count || 0) > 0;
+      if (checks.messenger) allowed = true;
     }
 
     if (!allowed) {
-      console.warn(`[livekit-token] denied: user=${userId.slice(0, 8)} meeting=${meetingId.slice(0, 8)}`);
-      return jsonResponse({ error: 'forbidden', reason: 'not_a_participant' }, 403);
+      console.warn(`[livekit-token] denied: user=${userId.slice(0, 8)} meeting=${meetingId.slice(0, 8)} checks=${JSON.stringify(checks)}`);
+      return jsonResponse(
+        { error: 'forbidden', reason: 'not_a_participant', checks },
+        403
+      );
     }
+    console.log(`[livekit-token] allowed: user=${userId.slice(0, 8)} meeting=${meetingId.slice(0, 8)} via=${Object.keys(checks).find((k) => checks[k])}`);
 
     // ── 5) 사용자 표시 이름 조회 (LiveKit Participant.name 으로 사용 → UI 친화적) ──
     const { data: profile2 } = await adminSb
