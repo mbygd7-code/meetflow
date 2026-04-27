@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
 import { supabase } from '@/lib/supabase';
+import { logLiveKitSession } from '@/lib/serviceUsage';
 
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
@@ -67,6 +68,8 @@ export function useLiveKitVoice(meetingId) {
   // 원격 오디오 트랙별 <audio> 엘리먼트 — Map<`${identity}:${trackSid}`, HTMLAudioElement>
   //   leave/언마운트 시 일괄 정리
   const audioContainersRef = useRef(new Map());
+  // 사용량 계측: connect 시각 기록 → leave 시 (now - joinedAt) 으로 분 계산
+  const joinedAtRef = useRef(null);
 
   // 참가자 목록을 Room 으로부터 새로 빌드
   const rebuildParticipants = useCallback(() => {
@@ -189,6 +192,7 @@ export function useLiveKitVoice(meetingId) {
       // 연결
       await room.connect(url, token, { autoSubscribe: true });
       roomRef.current = room;
+      joinedAtRef.current = Date.now();
       setConnected(true);
 
       // iOS Safari autoplay: room.startAudio() 사용자 제스처 컨텍스트에서 호출
@@ -233,6 +237,14 @@ export function useLiveKitVoice(meetingId) {
   const leave = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
+    // 사용량 계측: 본인 참여 분 + 평균 참가자 수로 추정
+    //   (정확히는 각 참가자별 분당 누적이지만, MVP 는 본인 세션 기준만 자체 기록)
+    if (joinedAtRef.current) {
+      const durationSec = Math.max(0, (Date.now() - joinedAtRef.current) / 1000);
+      const participantCount = Math.max(1, room.numParticipants || 1);
+      logLiveKitSession({ meetingId, durationSeconds: durationSec, participantCount }).catch(() => {});
+      joinedAtRef.current = null;
+    }
     try { await room.disconnect(); } catch {}
     try { room.removeAllListeners(); } catch {}
     roomRef.current = null;
@@ -241,7 +253,7 @@ export function useLiveKitVoice(meetingId) {
     setActiveSpeakers(new Set());
     setParticipants([]);
     setLocalStream(null);
-  }, [cleanupAudioElements]);
+  }, [cleanupAudioElements, meetingId]);
 
   // === 음소거 토글 ===
   const toggleMute = useCallback(async () => {
@@ -352,6 +364,13 @@ export function useLiveKitVoice(meetingId) {
     return () => {
       const room = roomRef.current;
       if (room) {
+        // 사용량 계측 — leave() 가 호출되지 않은 채 페이지 이탈한 경우에도 기록
+        if (joinedAtRef.current) {
+          const durationSec = Math.max(0, (Date.now() - joinedAtRef.current) / 1000);
+          const pcount = Math.max(1, room.numParticipants || 1);
+          logLiveKitSession({ meetingId, durationSeconds: durationSec, participantCount: pcount }).catch(() => {});
+          joinedAtRef.current = null;
+        }
         try { room.disconnect(); } catch {}
         try { room.removeAllListeners(); } catch {}
         roomRef.current = null;

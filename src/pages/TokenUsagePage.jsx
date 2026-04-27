@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Coins, Zap, AlertTriangle, ArrowLeft, RefreshCw,
-  TrendingDown, Database,
+  TrendingDown, Database, Headphones, Mic, Server,
 } from 'lucide-react';
 import { MetricCard, SectionPanel, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
+import { SERVICE_PRICING } from '@/lib/serviceUsage';
 
 // AI 직원 이름 맵
 const EMP_NAME = {};
@@ -36,30 +37,50 @@ function formatCost(dollars) {
 
 export default function TokenUsagePage() {
   const [logs, setLogs] = useState([]);
+  const [serviceLogs, setServiceLogs] = useState([]);  // service_usage_logs (LiveKit/STT 등)
+  const [billings, setBillings] = useState([]);        // service_usage_billing (Phase B 외부 정산)
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('7d'); // 7d | 30d | all
 
-  // DB에서 사용량 로그 로드
+  // DB에서 사용량 로그 로드 — Anthropic + 외부 인프라 + 외부 정산 동시
   const loadLogs = async () => {
     setLoading(true);
     try {
-      let query = supabase
+      const sinceIso = period === '7d'
+        ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        : period === '30d'
+          ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+
+      // ai_usage_logs (Anthropic 토큰)
+      let aiQuery = supabase
         .from('ai_usage_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(500);
+      if (sinceIso) aiQuery = aiQuery.gte('created_at', sinceIso);
 
-      if (period === '7d') {
-        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        query = query.gte('created_at', since);
-      } else if (period === '30d') {
-        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        query = query.gte('created_at', since);
-      }
+      // service_usage_logs (LiveKit / STT / Edge Functions / Storage)
+      let svcQuery = supabase
+        .from('service_usage_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(2000);
+      if (sinceIso) svcQuery = svcQuery.gte('created_at', sinceIso);
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setLogs(data || []);
+      // service_usage_billing (월 1회 외부 API 동기화 정확 청구액)
+      const billingQuery = supabase
+        .from('service_usage_billing')
+        .select('*')
+        .order('period_start', { ascending: false })
+        .limit(36);
+
+      const [aiRes, svcRes, billRes] = await Promise.all([aiQuery, svcQuery, billingQuery]);
+      if (aiRes.error) throw aiRes.error;
+      setLogs(aiRes.data || []);
+      // service_usage_logs / billing 은 마이그레이션 적용 전이면 에러 — 조용히 빈 배열로
+      setServiceLogs(svcRes.error ? [] : (svcRes.data || []));
+      setBillings(billRes.error ? [] : (billRes.data || []));
     } catch (err) {
       console.error('[TokenUsagePage] Load failed:', err);
       setLogs([]);
@@ -124,6 +145,43 @@ export default function TokenUsagePage() {
   }, [logs]);
 
   const maxEmployeeTokens = Math.max(1, ...Object.values(stats.byEmployee).map((e) => e.inputTokens + e.outputTokens));
+
+  // ── 인프라 사용량 집계 (LiveKit / STT / Edge Functions / Storage) ──
+  const infraStats = useMemo(() => {
+    const byService = {};
+    serviceLogs.forEach((l) => {
+      const s = l.service || 'unknown';
+      if (!byService[s]) byService[s] = { count: 0, units: 0, unitType: l.unit_type, cost: 0 };
+      byService[s].count++;
+      byService[s].units += parseFloat(l.units || 0);
+      byService[s].cost += parseFloat(l.estimated_cost || 0);
+    });
+    const total = Object.values(byService).reduce((s, v) => s + v.cost, 0);
+    return { byService, total };
+  }, [serviceLogs]);
+
+  // 외부 정산 합계 (Phase B — 월 1회 외부 API 동기화 결과)
+  const billingTotals = useMemo(() => {
+    const byService = {};
+    let latestPeriod = null;
+    billings.forEach((b) => {
+      const s = b.service;
+      if (!byService[s]) byService[s] = { amount: 0, source: b.source, period_start: b.period_start, period_end: b.period_end };
+      byService[s].amount += parseFloat(b.amount || 0);
+      const ps = new Date(b.period_start).getTime();
+      if (!latestPeriod || ps > latestPeriod) latestPeriod = ps;
+    });
+    const total = Object.values(byService).reduce((s, v) => s + v.amount, 0);
+    return { byService, total, latestPeriod };
+  }, [billings]);
+
+  // 서비스별 아이콘/라벨 매핑
+  const SERVICE_META = {
+    livekit: { icon: Headphones, label: SERVICE_PRICING.livekit.label, color: 'text-brand-purple' },
+    stt: { icon: Mic, label: SERVICE_PRICING.stt.label, color: 'text-brand-orange' },
+    edge_function: { icon: Server, label: SERVICE_PRICING.edge_function.label, color: 'text-status-info' },
+    storage: { icon: Database, label: SERVICE_PRICING.storage.label, color: 'text-status-success' },
+  };
 
   return (
     <div className="max-w-[1400px] mx-auto p-3 md:p-6 space-y-4">
@@ -266,6 +324,74 @@ export default function TokenUsagePage() {
           </div>
         </SectionPanel>
       </div>
+
+      {/* ═══ 인프라 비용 (LiveKit / STT / Edge Functions / Storage) ═══ */}
+      <SectionPanel
+        title="인프라 비용"
+        subtitle="음성 회의·자막·서버리스·저장소 등 외부 유료 서비스 추정 비용"
+      >
+        <div className="space-y-3">
+          {Object.entries(infraStats.byService).length === 0 && (
+            <p className="text-xs text-txt-muted text-center py-4">
+              아직 인프라 사용량 데이터가 없습니다. 음성 회의를 진행하거나 STT 를 사용하면 여기에 기록됩니다.
+            </p>
+          )}
+          {Object.entries(infraStats.byService)
+            .sort(([, a], [, b]) => b.cost - a.cost)
+            .map(([service, data]) => {
+              const meta = SERVICE_META[service] || { icon: Server, label: service, color: 'text-txt-secondary' };
+              const Icon = meta.icon;
+              const billed = billingTotals.byService[service]?.amount;
+              return (
+                <div key={service} className="flex items-center justify-between p-3 bg-bg-tertiary rounded-lg border border-border-subtle">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg bg-bg-secondary flex items-center justify-center shrink-0 ${meta.color}`}>
+                      <Icon size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-txt-primary truncate">{meta.label}</p>
+                      <p className="text-[10px] text-txt-muted mt-0.5">
+                        {data.count}건 · {data.units.toFixed(1)} {data.unitType}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-brand-purple">{formatCost(data.cost)}</p>
+                    <p className="text-[10px] text-txt-muted">
+                      {billed != null ? `정산 ${formatCost(billed)}` : '추정'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+
+          {/* 합계 */}
+          {Object.keys(infraStats.byService).length > 0 && (
+            <div className="flex items-center justify-between pt-3 border-t border-border-divider">
+              <span className="text-sm font-medium text-txt-primary">인프라 총 추정 비용</span>
+              <div className="text-right">
+                <span className="text-lg font-bold text-brand-purple">{formatCost(infraStats.total)}</span>
+                {billingTotals.total > 0 && (
+                  <p className="text-[10px] text-status-success">
+                    외부 정산 합계 {formatCost(billingTotals.total)}
+                    {billingTotals.latestPeriod && (
+                      <> · 최근 {new Date(billingTotals.latestPeriod).toLocaleDateString('ko-KR')}</>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 종합 — Anthropic + 인프라 합계 */}
+          <div className="flex items-center justify-between pt-3 mt-2 border-t-2 border-brand-purple/30">
+            <span className="text-sm font-semibold text-txt-primary">전체 추정 비용 (AI + 인프라)</span>
+            <span className="text-xl font-bold text-brand-purple">
+              {formatCost(stats.estimatedCost + infraStats.total)}
+            </span>
+          </div>
+        </div>
+      </SectionPanel>
 
       {/* 하단: 최근 호출 로그 테이블 */}
       <SectionPanel title="최근 호출 로그" subtitle={`최근 ${Math.min(logs.length, 50)}건`}>

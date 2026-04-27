@@ -15,7 +15,7 @@ const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
  *   주입 시 자체 getUserMedia 호출 스킵 → 마이크 권한 모달 1회만, 자원도 절약 (Google STT 경로에서만 의미)
  * @returns {{ isListening, start, stop, interim, error, supported }}
  */
-export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTranscript, onInterim, externalStream = null } = {}) {
+export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTranscript, onInterim, externalStream = null, meetingId = null } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [interim, setInterim] = useState('');
   const [error, setError] = useState(null);
@@ -26,6 +26,8 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  // 사용량 계측: chunk 시작 시점 기록 → onstop 시 (now - startedAt) 으로 durationMs 계산
+  const chunkStartedAtRef = useRef(null);
 
   // Web Speech API 지원 여부
   const webSpeechSupported = typeof window !== 'undefined' &&
@@ -114,6 +116,10 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
+      // 녹음 시작 시각 기록
+      const onStart = () => { chunkStartedAtRef.current = Date.now(); };
+      mediaRecorder.addEventListener('start', onStart);
+
       mediaRecorder.onstop = async () => {
         // 스트림 정리 — 외부 주입이면 소유권이 외부에 있으니 우리는 stop 안 함
         if (!useExternal) {
@@ -140,8 +146,13 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
           const headers = session?.access_token
             ? { Authorization: `Bearer ${session.access_token}` }
             : {};
+          // durationMs — 녹음 시작 ~ stop 까지의 경과 시간 (서버가 사용량 로그에 반영)
+          const durationMs = chunkStartedAtRef.current
+            ? Math.max(0, Date.now() - chunkStartedAtRef.current)
+            : null;
+          chunkStartedAtRef.current = null;
           const { data, error: fnError } = await supabase.functions.invoke('stt-recognize', {
-            body: { audio: base64, language },
+            body: { audio: base64, language, meetingId, durationMs },
             headers,
           });
           setInterim('');
