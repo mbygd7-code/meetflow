@@ -4,6 +4,25 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
 
+// iOS Safari viewport 높이 보정
+//   100vh / 100dvh 가 첫 로드 시 URL 바 영역을 잘못 포함하는 케이스 회피.
+//   visualViewport.height 를 직접 측정해 --app-h CSS 변수로 주입.
+//   Layout 루트가 height: var(--app-h) 로 이를 사용 → 항상 visible viewport 와 정확히 일치.
+(function initVhVar() {
+  const setVh = () => {
+    const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    document.documentElement.style.setProperty('--app-h', `${h}px`);
+  };
+  setVh();
+  window.addEventListener('resize', setVh);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setVh);
+    window.visualViewport.addEventListener('scroll', setVh);
+  }
+  window.addEventListener('orientationchange', () => setTimeout(setVh, 100));
+  window.addEventListener('load', setVh);
+})();
+
 // 모든 줌(핀치줌, input 포커스 확대 등) 감지 → 액션 없으면 2초 후 부드럽게 리셋
 (function initZoomReset() {
   if (!window.visualViewport) return;

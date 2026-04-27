@@ -116,7 +116,10 @@ export default function Layout() {
   return (
     <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen, sidebarForceMinimized, setSidebarForceMinimized }}>
       <CommandPaletteContext.Provider value={{ paletteOpen, setPaletteOpen, openPalette: () => setPaletteOpen(true) }}>
-      <div className="flex flex-col h-screen h-[100dvh] bg-bg-primary text-txt-primary">
+      <div
+        className="flex flex-col bg-bg-primary text-txt-primary"
+        style={{ height: 'var(--app-h, 100dvh)' }}
+      >
         {!hideTopBar && <TopBar />}
         <div className="flex flex-1 overflow-hidden">
           {/* 데스크톱 사이드바 */}
