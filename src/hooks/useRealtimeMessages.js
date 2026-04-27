@@ -90,6 +90,19 @@ export function useRealtimeMessages(meetingId) {
     });
   }, []);
 
+  // 로컬 메시지 강제 제거 — postgres_changes DELETE 가 fire 안 되는 ghost 행
+  // (DB 에 없지만 broadcast/캐시로 로컬에만 남은 케이스) 정리용.
+  // window event 'meetflow:remove-message' 로 트리거.
+  useEffect(() => {
+    const handler = (e) => {
+      const id = e?.detail?.id;
+      if (!id) return;
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    };
+    window.addEventListener('meetflow:remove-message', handler);
+    return () => window.removeEventListener('meetflow:remove-message', handler);
+  }, []);
+
   useEffect(() => {
     if (!meetingId) return;
 

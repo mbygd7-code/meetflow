@@ -143,15 +143,16 @@ export default function DrawingOverlay({
         return;
       }
       if (!data || data.length === 0) {
-        // RLS 가 차단 — 메시지의 user_id 가 현재 auth.uid() 와 다르거나 NULL
-        const { data: sessionData } = await supabase.auth.getSession();
-        console.warn('[DrawingOverlay] 메모 삭제 영향받은 행 0:', {
-          msgId,
-          auth_uid: sessionData?.session?.user?.id,
-          store_user_id: user?.id,
-          hint: '메시지의 user_id 가 NULL 또는 다른 사용자일 가능성. SQL 로 확인 필요.',
-        });
-        alert('이 메모는 삭제 권한이 없습니다. 시스템 메시지이거나 다른 사용자의 메모일 수 있어요.');
+        // 0 rows 케이스 — 두 시나리오:
+        //   (a) RLS 가 차단 (다른 사용자/관리자만 가능 메시지)
+        //   (b) DB 에 행이 없음 (ghost — broadcast/optimistic 로 로컬에만 존재)
+        // 어느 쪽이든 사용자 입장에선 "메모 사라지게" 가 자연스러운 동작 →
+        // 로컬 state 에서 강제 제거. 서버 이벤트로 다른 참가자 화면엔 영향 없음
+        // (그들의 화면엔 DB 기준 메시지가 있다면 여전히 보임).
+        console.warn('[DrawingOverlay] 메모 삭제 영향받은 행 0 — 로컬 정리:', msgId);
+        try {
+          window.dispatchEvent(new CustomEvent('meetflow:remove-message', { detail: { id: msgId } }));
+        } catch {}
         return;
       }
       console.log('[DrawingOverlay] 메모 삭제 성공:', msgId);
