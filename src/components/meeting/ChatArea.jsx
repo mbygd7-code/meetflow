@@ -253,8 +253,38 @@ export default function ChatArea({
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
+  // ── 모바일 시스템 키보드 추적 ──
+  // visualViewport API 로 키보드가 차지하는 높이를 계산해 입력창을 키보드 바로 위로 올림.
+  // iOS Safari/Android Chrome 모두 지원. 데스크톱은 keyboardHeight=0 으로 영향 없음.
+  //   keyboardHeight = window.innerHeight - visualViewport.height (- offsetTop)
+  //   너무 작은 값(<50px) 은 노이즈로 무시 (주소창 토글 등)
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const update = () => {
+      const overlap = window.innerHeight - vv.height - vv.offsetTop;
+      setKeyboardHeight(overlap > 50 ? Math.round(overlap) : 0);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden">
+    <div
+      className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden"
+      style={{
+        // 키보드 높이만큼 컨테이너를 줄여 → 내부 플렉스 레이아웃이 자동으로 입력창을 키보드 위로 올림.
+        // 메시지 리스트는 flex-1 이라 줄어든 공간에 맞춰 스크롤 영역도 자동 축소.
+        paddingBottom: keyboardHeight ? `${keyboardHeight}px` : undefined,
+        transition: 'padding-bottom 0.15s ease-out',
+      }}
+    >
       {/* 메시지 리스트 */}
       <div
         ref={scrollRef}
