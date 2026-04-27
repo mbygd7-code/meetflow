@@ -62,6 +62,9 @@ export default function ChatArea({
     const handler = (e) => {
       const tag = e?.detail?.tag;
       if (!tag) return;
+      // 음성 입력 모드면 텍스트 모드로 자동 전환 (LiveKit 통화는 유지) —
+      // 자료 위 프로필 클릭으로 드로잉 메모를 작성하려면 textarea 가 필요.
+      setVoiceMode(false);
       setInput((prev) => {
         if (prev.includes(tag.trim())) return prev;
         const sep = prev && !prev.endsWith(' ') ? ' ' : '';
@@ -80,7 +83,8 @@ export default function ChatArea({
         if (prev.some((r) => `${r.user_name}-${r.seq}-${r.stroke_id}` === key)) return prev;
         return [...prev, ref];
       });
-      requestAnimationFrame(() => textareaRef.current?.focus());
+      // textarea 가 모드 전환 후 마운트되도록 두 번째 rAF 사용 (단일 rAF 보다 안전)
+      requestAnimationFrame(() => requestAnimationFrame(() => textareaRef.current?.focus()));
     };
     window.addEventListener('meetflow:drawing-tag', handler);
     return () => window.removeEventListener('meetflow:drawing-tag', handler);
@@ -193,16 +197,17 @@ export default function ChatArea({
   };
 
   // 채팅 버블 아바타 클릭 → 입력창에 @멘션 삽입 (커서 위치 무관, 끝에 추가)
+  // 음성 입력 모드면 텍스트 모드로 자동 전환 (LiveKit 통화는 유지)
   const handleMention = (name) => {
     if (!name) return;
+    setVoiceMode(false);
     const tag = `@${name} `;
     setInput((prev) => {
-      // 이미 같은 멘션이 있으면 중복 추가 X
       if (prev.includes(tag.trim())) return prev;
       const sep = prev && !prev.endsWith(' ') ? ' ' : '';
       return prev + sep + tag;
     });
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    requestAnimationFrame(() => requestAnimationFrame(() => textareaRef.current?.focus()));
   };
 
   return (
