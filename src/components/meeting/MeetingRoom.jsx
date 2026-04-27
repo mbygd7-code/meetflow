@@ -104,12 +104,24 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
     </button>
   ) : null;
 
+  // 카드 클릭 — 키보드 접근성 (button 시멘틱 대체) — Enter/Space 로 클릭 트리거
+  const cardKeyHandler = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick?.();
+    }
+  };
+
   // 이미지: 섹션 폭에 맞춰 adaptive 크기 (갤러리)
+  // 카드를 div(role=button) 로 둠 — 내부에 삭제 button 중첩되어도 DOM 검증 위반 X
   if (isImage) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        onKeyDown={cardKeyHandler}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
         title={file.name}
       >
         <div className="relative w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
@@ -134,16 +146,19 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
             {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
           </div>
         )}
-      </button>
+      </div>
     );
   }
 
   // PDF: 첫 페이지를 썸네일로 렌더 (이미지와 유사한 adaptive 레이아웃, aspect A4)
   if (isPdf) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        onKeyDown={cardKeyHandler}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
         title={file.name}
       >
         <div
@@ -179,16 +194,19 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
             {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
           </div>
         )}
-      </button>
+      </div>
     );
   }
 
   // 일반 문서: compact 모드에서는 작게, 아니면 140px 중앙 정렬 (섹션 폭에 영향 안 받음)
   const docWidth = compact ? '100%' : 140;
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+      onKeyDown={cardKeyHandler}
+      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
       style={{ width: docWidth }}
       title={file.name}
     >
@@ -210,7 +228,7 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
           {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
