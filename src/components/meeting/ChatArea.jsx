@@ -599,12 +599,18 @@ export default function ChatArea({
                 </button>
               </div>
 
-              <p className="text-[10px] text-txt-muted">
-                {voiceConnected
-                  ? (voiceMuted
-                      ? '음소거 중 · 클릭 또는 Space 로 발언'
-                      : '발언 중 · 클릭 또는 Space 로 음소거')
-                  : (isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언')}
+              <p className="text-[10px] text-txt-muted inline-flex items-center gap-1 flex-wrap justify-center">
+                {voiceConnected ? (
+                  <>
+                    {voiceMuted ? '음소거 중 · 클릭 또는' : '발언 중 · 클릭 또는'}
+                    <kbd className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-txt-primary bg-bg-tertiary border border-border-default shadow-sm">
+                      Space
+                    </kbd>
+                    {voiceMuted ? '로 발언' : '로 음소거'}
+                  </>
+                ) : (
+                  isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언'
+                )}
               </p>
               {sttError && <p className="text-xs text-status-error">{sttError}</p>}
               {!voiceConnected && !sttSupported && (
