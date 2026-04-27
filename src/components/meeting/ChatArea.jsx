@@ -22,6 +22,11 @@ export default function ChatArea({
   const [reactions, setReactions] = useState({});
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  // 음성 모드 전용 대기 컨텍스트 — 드로잉 마커/아바타 클릭 시 다음 STT 발언에 첨부될 태그
+  //   { tag: string, label: string, color?: string, refs?: array | null }
+  const [pendingVoiceCtx, setPendingVoiceCtx] = useState(null);
+  const pendingVoiceCtxRef = useRef(null);
+  useEffect(() => { pendingVoiceCtxRef.current = pendingVoiceCtx; }, [pendingVoiceCtx]);
   // URL 자료 추가 폼 상태
   const [urlFormOpen, setUrlFormOpen] = useState(false);
   const [urlInput, setUrlInput] = useState('');
@@ -62,15 +67,6 @@ export default function ChatArea({
     const handler = (e) => {
       const tag = e?.detail?.tag;
       if (!tag) return;
-      // 음성 입력 모드면 텍스트 모드로 자동 전환 (LiveKit 통화는 유지) —
-      // 자료 위 프로필 클릭으로 드로잉 메모를 작성하려면 textarea 가 필요.
-      setVoiceMode(false);
-      setInput((prev) => {
-        if (prev.includes(tag.trim())) return prev;
-        const sep = prev && !prev.endsWith(' ') ? ' ' : '';
-        return prev + sep + tag;
-      });
-      // 구조화 참조 누적 (중복 제거)
       const ref = {
         target_key: e.detail.targetKey || null,
         file_name: e.detail.fileName || null,
@@ -78,17 +74,34 @@ export default function ChatArea({
         seq: e.detail.seq || null,
         stroke_id: e.detail.strokeId || null,
       };
+      // 음성 모드일 때: 텍스트 모드로 전환하지 않고 대기 컨텍스트로 stage.
+      //   다음 STT 발언이 도착하면 태그 + drawing_annotations 메타데이터 자동 첨부.
+      if (voiceMode) {
+        setPendingVoiceCtx({
+          tag: tag.trim(),
+          label: e.detail.userName && typeof e.detail.seq === 'number'
+            ? `${e.detail.userName} #${e.detail.seq}`
+            : tag.trim(),
+          refs: [ref],
+        });
+        return;
+      }
+      // 텍스트 모드: 기존 동작 — 입력창에 태그 삽입
+      setInput((prev) => {
+        if (prev.includes(tag.trim())) return prev;
+        const sep = prev && !prev.endsWith(' ') ? ' ' : '';
+        return prev + sep + tag;
+      });
       setPendingDrawingRefs((prev) => {
         const key = `${ref.user_name}-${ref.seq}-${ref.stroke_id}`;
         if (prev.some((r) => `${r.user_name}-${r.seq}-${r.stroke_id}` === key)) return prev;
         return [...prev, ref];
       });
-      // textarea 가 모드 전환 후 마운트되도록 두 번째 rAF 사용 (단일 rAF 보다 안전)
-      requestAnimationFrame(() => requestAnimationFrame(() => textareaRef.current?.focus()));
+      requestAnimationFrame(() => textareaRef.current?.focus());
     };
     window.addEventListener('meetflow:drawing-tag', handler);
     return () => window.removeEventListener('meetflow:drawing-tag', handler);
-  }, []);
+  }, [voiceMode]);
 
   // STT 설정 읽기 (state로 관리하여 설정 변경 즉시 반영)
   const [sttProvider] = useState(() => {
@@ -103,7 +116,18 @@ export default function ChatArea({
     provider: sttProvider,
     language: 'ko-KR',
     onTranscript: (text) => {
-      if (text.trim()) onSend?.(text.trim());
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      // 음성 모드 대기 컨텍스트 — 드로잉 마커/멘션 클릭으로 stage 된 태그 + 메타데이터 자동 첨부
+      const ctx = pendingVoiceCtxRef.current;
+      if (ctx) {
+        const composed = `${ctx.tag} ${trimmed}`;
+        const metadata = ctx.refs?.length > 0 ? { drawing_annotations: ctx.refs } : null;
+        onSend?.(composed, metadata ? { metadata } : undefined);
+        setPendingVoiceCtx(null);
+      } else {
+        onSend?.(trimmed);
+      }
     },
     onInterim: () => {},
     externalStream: (voiceConnected && sttProvider === 'google') ? voiceLocalStream : null,
@@ -196,18 +220,25 @@ export default function ChatArea({
     textareaRef.current?.focus();
   };
 
-  // 채팅 버블 아바타 클릭 → 입력창에 @멘션 삽입 (커서 위치 무관, 끝에 추가)
-  // 음성 입력 모드면 텍스트 모드로 자동 전환 (LiveKit 통화는 유지)
+  // 채팅 버블 아바타 클릭 → 멘션 (음성 모드면 대기 컨텍스트 stage, 아니면 입력창에 삽입)
   const handleMention = (name) => {
     if (!name) return;
-    setVoiceMode(false);
+    if (voiceMode) {
+      // 음성 모드: 텍스트 전환 없이 대기 컨텍스트만 추가 → 다음 STT 발언에 자동 첨부
+      setPendingVoiceCtx({
+        tag: `@${name}`,
+        label: name,
+        refs: null, // 채팅 멘션은 drawing_annotations 메타데이터 없음
+      });
+      return;
+    }
     const tag = `@${name} `;
     setInput((prev) => {
       if (prev.includes(tag.trim())) return prev;
       const sep = prev && !prev.endsWith(' ') ? ' ' : '';
       return prev + sep + tag;
     });
-    requestAnimationFrame(() => requestAnimationFrame(() => textareaRef.current?.focus()));
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   return (
@@ -556,6 +587,23 @@ export default function ChatArea({
             </> ) : (
             /* ── 음성 모드 ── */
             <div className="flex flex-col items-center gap-3 transition-all duration-500 ease-out">
+              {/* 음성 모드 대기 컨텍스트 — 드로잉 마커/멘션 클릭 시 표시
+                  말풍선 안에 태그 + 라벨, 다음 발언이 자동으로 이 태그와 함께 전송됨 */}
+              {pendingVoiceCtx && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-purple/10 border border-brand-purple/30 text-[11px] text-txt-primary shadow-sm">
+                  <span className="font-semibold text-brand-purple-deep">{pendingVoiceCtx.label}</span>
+                  <span className="text-txt-muted">에 답하기</span>
+                  <button
+                    onClick={() => setPendingVoiceCtx(null)}
+                    className="-mr-0.5 ml-1 w-4 h-4 rounded-full flex items-center justify-center text-txt-muted hover:text-status-error hover:bg-status-error/10"
+                    aria-label="태그 취소"
+                    title="태그 취소"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              )}
+
               {/* 인식 텍스트 */}
               {(interim || isListening) && (
                 <div className="px-5 py-2 rounded-full bg-bg-tertiary/80 border border-border-subtle text-sm text-txt-primary text-center max-w-[80%]">
