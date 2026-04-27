@@ -237,6 +237,23 @@ export function useRealtimeMessages(meetingId) {
         }
       );
 
+      // ─── ② postgres_changes 수신 (DB DELETE 감지) — 메시지 삭제 시 로컬 state 에서 제거 ───
+      ch.on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `meeting_id=eq.${meetingId}`,
+        },
+        (payload) => {
+          const oldId = payload?.old?.id;
+          if (!oldId) return;
+          console.log('[useRealtimeMessages] ② Realtime DELETE 수신:', oldId);
+          setMessages((prev) => prev.filter((m) => m.id !== oldId));
+        }
+      );
+
       // ─── ① Broadcast 수신 (즉시성 최상 경로) ───
       ch.on('broadcast', { event: 'new_message' }, (payload) => {
         const msg = payload?.payload;

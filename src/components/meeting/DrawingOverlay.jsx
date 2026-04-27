@@ -125,17 +125,32 @@ export default function DrawingOverlay({
   }, []);
 
   // 본인 메모 삭제 — confirm 후 messages 테이블에서 제거 → Realtime 으로 모두 반영
+  // RLS 가 본인 user_id 만 허용하므로 다른 사람 메시지는 영향 0 (data 빈 배열로 반환됨)
   const handleDeleteAnnotation = useCallback(async (msgId) => {
     if (!msgId) return;
     if (!window.confirm('이 메모를 삭제하시겠습니까?\n채팅에서도 같이 사라집니다.')) return;
     try {
-      const { error } = await supabase.from('messages').delete().eq('id', msgId);
+      // .select() 추가 — 실제 삭제된 행을 반환받아 RLS 차단 여부 확인 가능
+      const { data, error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', msgId)
+        .select();
       if (error) {
-        console.error('[DrawingOverlay] 메모 삭제 실패:', error.message);
-        alert('삭제 실패: ' + error.message);
+        console.error('[DrawingOverlay] 메모 삭제 실패:', error);
+        alert('삭제 실패: ' + (error.message || '알 수 없는 오류'));
+        return;
       }
+      if (!data || data.length === 0) {
+        // RLS 가 차단했거나 이미 삭제됨
+        console.warn('[DrawingOverlay] 메모 삭제 — 영향받은 행 없음 (권한/이미 삭제)');
+        alert('삭제할 권한이 없거나 이미 삭제된 메모입니다.');
+        return;
+      }
+      console.log('[DrawingOverlay] 메모 삭제 성공:', msgId);
     } catch (e) {
       console.error('[DrawingOverlay] 메모 삭제 예외:', e);
+      alert('삭제 중 오류가 발생했습니다.');
     }
   }, []);
   // 지우개 OFF 시 hover 해제
