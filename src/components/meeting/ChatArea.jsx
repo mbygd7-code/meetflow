@@ -253,38 +253,33 @@ export default function ChatArea({
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
-  // ── 모바일 시스템 키보드 추적 ──
-  // visualViewport API 로 키보드가 차지하는 높이를 계산해 입력창을 키보드 바로 위로 올림.
-  // iOS Safari/Android Chrome 모두 지원. 데스크톱은 keyboardHeight=0 으로 영향 없음.
-  //   keyboardHeight = window.innerHeight - visualViewport.height (- offsetTop)
-  //   너무 작은 값(<50px) 은 노이즈로 무시 (주소창 토글 등)
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // 키보드 위치 보정은 main.jsx 의 --app-h (visualViewport.height) 로 이미 처리됨.
+  //   visualViewport 가 줄어들면 Layout 루트 높이(var(--app-h)) 도 줄어들어
+  //   내부 flex-col 레이아웃이 자동으로 입력창을 키보드 바로 위에 위치시킴.
+  //
+  // 추가로 textarea 포커스 시 iOS 가 input 을 viewport 상단으로 스크롤하려는 동작을
+  // 차단 — 메시지 리스트가 항상 하단(최신 메시지) 에 머물도록 보정.
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-    const vv = window.visualViewport;
-    const update = () => {
-      const overlap = window.innerHeight - vv.height - vv.offsetTop;
-      setKeyboardHeight(overlap > 50 ? Math.round(overlap) : 0);
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const onFocus = () => {
+      // 포커스 시 iOS 가 textarea 를 viewport 상단으로 자동 스크롤하는 것을 막기 위해
+      // 다음 프레임에 메시지 리스트 스크롤을 다시 하단으로 복원
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+        // window 스크롤이 발생했다면 0 으로 되돌림 — body 는 overflow:hidden 이지만
+        // iOS 가 일시적으로 layout viewport 를 스크롤하는 케이스 방어
+        window.scrollTo(0, 0);
+      });
     };
-    update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-    };
+    ta.addEventListener('focus', onFocus);
+    return () => ta.removeEventListener('focus', onFocus);
   }, []);
 
   return (
-    <div
-      className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden"
-      style={{
-        // 키보드 높이만큼 컨테이너를 줄여 → 내부 플렉스 레이아웃이 자동으로 입력창을 키보드 위로 올림.
-        // 메시지 리스트는 flex-1 이라 줄어든 공간에 맞춰 스크롤 영역도 자동 축소.
-        paddingBottom: keyboardHeight ? `${keyboardHeight}px` : undefined,
-        transition: 'padding-bottom 0.15s ease-out',
-      }}
-    >
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-x-hidden">
       {/* 메시지 리스트 */}
       <div
         ref={scrollRef}
