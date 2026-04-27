@@ -251,19 +251,27 @@ export function useRealtimeMessages(meetingId) {
       );
 
       // ─── ② postgres_changes 수신 (DB DELETE 감지) — 메시지 삭제 시 로컬 state 에서 제거 ───
+      // 주의: REPLICA IDENTITY DEFAULT 면 payload.old 에 PK(id) 만 들어있고
+      //       meeting_id 컬럼은 없음. filter: meeting_id=eq.X 로 필터링하면
+      //       DELETE 이벤트가 매칭 실패로 dropped 됨 → filter 제거.
+      //       대신 setMessages 안에서 id 가 우리 state 에 있는지로 자연 필터링.
       ch.on(
         'postgres_changes',
         {
           event: 'DELETE',
           schema: 'public',
           table: 'messages',
-          filter: `meeting_id=eq.${meetingId}`,
         },
         (payload) => {
           const oldId = payload?.old?.id;
           if (!oldId) return;
-          console.log('[useRealtimeMessages] ② Realtime DELETE 수신:', oldId);
-          setMessages((prev) => prev.filter((m) => m.id !== oldId));
+          // 우리 state 에 있는 메시지면 제거 (다른 회의의 DELETE 는 자연 무시됨)
+          setMessages((prev) => {
+            const exists = prev.some((m) => m.id === oldId);
+            if (!exists) return prev;
+            console.log('[useRealtimeMessages] ② Realtime DELETE 수신:', oldId);
+            return prev.filter((m) => m.id !== oldId);
+          });
         }
       );
 
