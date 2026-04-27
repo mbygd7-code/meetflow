@@ -84,7 +84,10 @@ import './index.css';
 // (StrictMode는 useEffect를 의도적으로 2번 실행하여 사이드이펙트 문제를 찾는데,
 // Supabase Realtime과 충돌하여 메시지 중복 렌더링 유발)
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>
+  // future flag 옵트인 — v7 동작 미리 적용해 경고 제거 + v7 마이그레이션 부담 감소
+  //   v7_startTransition: 상태 업데이트를 React.startTransition 으로 래핑 (UI 블로킹 ↓)
+  //   v7_relativeSplatPath: Splat 라우트 안 상대 경로 해석을 v7 방식으로
+  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
     <App />
   </BrowserRouter>
 );
