@@ -28,8 +28,8 @@ export default function VoiceJoinIntroModal({ onConfirm, onCancel }) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
-      <div className="bg-bg-content rounded-2xl shadow-2xl border border-border-default max-w-md w-full overflow-hidden">
+    <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4">
+      <div className="bg-bg-secondary rounded-2xl shadow-2xl border border-border-default max-w-md w-full overflow-hidden">
         {/* 헤더 */}
         <div className="px-6 pt-6 pb-4 border-b border-border-subtle">
           <div className="flex items-start gap-3">
@@ -99,7 +99,7 @@ export default function VoiceJoinIntroModal({ onConfirm, onCancel }) {
         </div>
 
         {/* 푸터 */}
-        <div className="px-6 py-4 border-t border-border-subtle bg-bg-secondary/40 flex items-center justify-between gap-3">
+        <div className="px-6 py-4 border-t border-border-subtle bg-bg-tertiary flex items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-xs text-txt-secondary cursor-pointer select-none">
             <input
               type="checkbox"
