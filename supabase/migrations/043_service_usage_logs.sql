@@ -29,9 +29,11 @@ CREATE INDEX IF NOT EXISTS idx_service_usage_meeting ON service_usage_logs (meet
 
 -- RLS: authenticated 사용자는 읽기, service role 만 쓰기 (Edge Function 에서 INSERT)
 ALTER TABLE service_usage_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "authenticated_read_service_usage" ON service_usage_logs;
 CREATE POLICY "authenticated_read_service_usage" ON service_usage_logs
   FOR SELECT USING (auth.role() = 'authenticated');
 -- 클라이언트(useLiveKitVoice 등)에서 직접 INSERT — 본인 user_id 일치 시에만 허용
+DROP POLICY IF EXISTS "authenticated_insert_own_service_usage" ON service_usage_logs;
 CREATE POLICY "authenticated_insert_own_service_usage" ON service_usage_logs
   FOR INSERT WITH CHECK (
     auth.role() = 'authenticated'
@@ -60,9 +62,12 @@ CREATE TABLE IF NOT EXISTS service_usage_billing (
 CREATE INDEX IF NOT EXISTS idx_billing_period ON service_usage_billing (period_start, period_end);
 
 ALTER TABLE service_usage_billing ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "authenticated_read_billing" ON service_usage_billing;
 CREATE POLICY "authenticated_read_billing" ON service_usage_billing
   FOR SELECT USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "service_insert_billing" ON service_usage_billing;
 CREATE POLICY "service_insert_billing" ON service_usage_billing
   FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "service_update_billing" ON service_usage_billing;
 CREATE POLICY "service_update_billing" ON service_usage_billing
   FOR UPDATE USING (true);

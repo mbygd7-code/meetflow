@@ -9,7 +9,8 @@
 //
 // 환경 변수 (Supabase Secrets):
 //   LIVEKIT_API_KEY, LIVEKIT_API_SECRET (이미 설정됨, livekit-token 함수와 공유)
-//   SUPABASE_MANAGEMENT_TOKEN  (선택 — Supabase 프로젝트 사용량 조회용)
+//   SB_MGMT_TOKEN              (선택 — Supabase Management API. SUPABASE_ prefix 는 Supabase 가 예약)
+//   SB_PROJECT_REF             (선택 — Supabase 프로젝트 ref)
 //   GCP_BILLING_ACCOUNT_ID + GOOGLE_SERVICE_ACCOUNT_JSON (선택 — GCP Billing 조회용)
 //
 // 실패해도 다른 서비스 동기화는 계속 진행. 각 서비스별 결과를 응답에 포함.
@@ -68,8 +69,8 @@ async function syncLiveKit(periodStart: string, periodEnd: string): Promise<{ am
 // ── Supabase 자체 사용량 (DB / Storage / Edge / Realtime / Egress) ──
 //   Supabase Management API: GET /v1/projects/{ref}/usage
 async function syncSupabase(periodStart: string, periodEnd: string): Promise<{ amount: number; raw: any } | { error: string }> {
-  const token = Deno.env.get('SUPABASE_MANAGEMENT_TOKEN');
-  const projectRef = Deno.env.get('SUPABASE_PROJECT_REF');
+  const token = Deno.env.get('SB_MGMT_TOKEN');
+  const projectRef = Deno.env.get('SB_PROJECT_REF');
   if (!token || !projectRef) return { error: 'supabase_mgmt_credentials_missing' };
 
   try {
