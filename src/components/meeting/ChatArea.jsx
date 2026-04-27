@@ -104,6 +104,23 @@ export default function ChatArea({
     onInterim: () => {},
     externalStream: (voiceConnected && sttProvider === 'google') ? voiceLocalStream : null,
   });
+
+  // LiveKit 활성 시 muted 상태 변화에 따라 STT 자동 시작/중지 (자막 효과)
+  //   - Space 키 (PTT 또는 toggle 모드) 로 mute 변경 → 즉시 STT 따라가기
+  //   - 큰 마이크 버튼 클릭으로 mute 변경 → 동일하게 동기화
+  // 단일 source of truth = voiceMuted state. 클릭/Space 어느 쪽으로 변해도 STT 일관 동작.
+  useEffect(() => {
+    if (!voiceConnected) return;
+    if (!sttSupported) return;
+    if (!voiceMuted && !isListening) {
+      // unmute → STT 시작 (자막)
+      startSTT();
+    } else if (voiceMuted && isListening) {
+      // mute → STT 중지
+      stopSTT();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceMuted, voiceConnected, sttSupported]);
   const { user } = useAuthStore();
 
   const handleReact = (messageId, key) => {
@@ -537,16 +554,8 @@ export default function ChatArea({
                 <button
                   onClick={() => {
                     if (voiceConnected) {
-                      // LiveKit mute 토글 — STT 도 함께 토글 (unmute 시 시작, mute 시 중지)
-                      const willUnmute = voiceMuted;
+                      // LiveKit mute 토글만 호출 — STT 는 voiceMuted 변화에 따라 useEffect 가 자동 동기화
                       onVoiceToggleMute?.();
-                      if (willUnmute) {
-                        // 음소거 해제 → STT 시작 (자막)
-                        if (!isListening && sttSupported) startSTT();
-                      } else {
-                        // 음소거 → STT 중지
-                        if (isListening) stopSTT();
-                      }
                     } else {
                       // 기존 STT-only 동작
                       if (isListening) stopSTT();

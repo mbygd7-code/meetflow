@@ -2308,17 +2308,15 @@ export default function MeetingRoom() {
       {/* 어젠다 바 */}
       <AgendaBar agendas={meeting.agendas || []} activeId={currentAgenda?.id} onSelect={setActiveAgendaId} />
 
-      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 음소거/나가기 패널 */}
+      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 모드 라디오 패널 */}
       {lk.connected && (
         <VoicePanel
           participants={lk.participants}
           activeSpeakers={lk.activeSpeakers}
           muted={lk.muted}
-          onToggleMute={lk.toggleMute}
-          onLeave={lk.leave}
           currentUserId={user?.id}
-          pttMode={lk.pttMode}
-          onTogglePttMode={() => lk.setPttMode((v) => !v)}
+          voiceMode={lk.voiceMode}
+          onChangeVoiceMode={lk.setVoiceMode}
           pttPressed={lk.pttPressed}
         />
       )}

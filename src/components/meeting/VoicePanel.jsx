@@ -3,19 +3,17 @@
 // - 본인: 마이크 토글 / 나가기 버튼
 // - 위치: ChatArea 위에 슬라이드형 (참여 중일 때만 표시)
 
-import { Mic, MicOff, PhoneOff, Headphones, ChevronUp, ChevronDown, Radio } from 'lucide-react';
+import { Mic, MicOff, Headphones, ChevronUp, ChevronDown, Radio, Repeat } from 'lucide-react';
 import { useState } from 'react';
 
 export default function VoicePanel({
   participants = [],     // [{ identity, name, isLocal, avatar_color, isMuted }]
   activeSpeakers,         // Set<string> identity
   muted,                  // 본인 음소거 여부
-  onToggleMute,
-  onLeave,
   currentUserId,
-  // Push-to-Talk
-  pttMode = false,
-  onTogglePttMode,
+  // 음성 입력 모드 — 'toggle' | 'ptt'
+  voiceMode = 'toggle',
+  onChangeVoiceMode,
   pttPressed = false,
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -49,46 +47,58 @@ export default function VoicePanel({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Push-to-Talk 토글 — 같은 방에서 다중 참여 시 하울링 방지 */}
-          <button
-            onClick={onTogglePttMode}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-              pttMode
-                ? 'bg-brand-orange/20 text-brand-orange ring-1 ring-brand-orange/40'
-                : 'bg-bg-tertiary text-txt-muted hover:text-txt-primary'
-            }`}
-            title={pttMode ? 'PTT 모드 ON — Space 누르고 있을 때만 발언. 클릭으로 끄기' : 'Push-to-Talk 모드 — 같은 방 다중 참여 시 권장 (Space 누름 = 발언)'}
-          >
-            <Radio size={12} />
-            PTT
-          </button>
+          {/* 음성 입력 모드 — 토글/PTT 라디오 (둘 중 하나 선택, Space 동작 결정) */}
+          <div className="inline-flex items-center bg-bg-tertiary/60 rounded-md p-0.5 border border-border-subtle">
+            <button
+              onClick={() => onChangeVoiceMode?.('toggle')}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold transition-colors ${
+                voiceMode === 'toggle'
+                  ? 'bg-brand-purple text-white shadow-sm'
+                  : 'text-txt-muted hover:text-txt-primary'
+              }`}
+              title="토글 모드 — Space 한 번에 음소거 ↔ 발언 전환"
+              aria-pressed={voiceMode === 'toggle'}
+            >
+              <Repeat size={11} />
+              토글
+            </button>
+            <button
+              onClick={() => onChangeVoiceMode?.('ptt')}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold transition-colors ${
+                voiceMode === 'ptt'
+                  ? 'bg-brand-orange text-white shadow-sm'
+                  : 'text-txt-muted hover:text-txt-primary'
+              }`}
+              title="PTT 모드 — Space 누르고 있을 때만 발언 (같은 방 다중 참여 시 권장)"
+              aria-pressed={voiceMode === 'ptt'}
+            >
+              <Radio size={11} />
+              PTT
+            </button>
+          </div>
 
-          <button
-            onClick={onToggleMute}
-            disabled={pttMode}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-              pttMode
+          {/* 현재 마이크 상태 인디케이터 (선택지가 아니라 표시 — 큰 마이크 버튼이 진짜 컨트롤) */}
+          <div
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold ${
+              voiceMode === 'ptt'
                 ? pttPressed
-                  ? 'bg-status-error/15 text-status-error animate-pulse cursor-not-allowed'
-                  : 'bg-bg-tertiary text-txt-muted/60 cursor-not-allowed'
+                  ? 'bg-status-error/15 text-status-error animate-pulse'
+                  : 'bg-bg-tertiary text-txt-muted'
                 : muted
-                  ? 'bg-bg-tertiary text-txt-muted hover:text-txt-primary'
-                  : 'bg-status-success/15 text-status-success'
+                  ? 'bg-bg-tertiary text-txt-muted'
+                  : 'bg-status-success/15 text-status-success animate-pulse'
             }`}
-            title={pttMode ? 'PTT 모드 — Space 누르고 있을 때만 발언' : (muted ? '음소거 해제 (말하기)' : '음소거 (지금 말하는 중)')}
+            title={
+              voiceMode === 'ptt'
+                ? (pttPressed ? 'Space 누르는 중 — 발언 중' : 'Space 떼는 중 — 음소거')
+                : (muted ? '음소거 (Space 또는 아래 버튼으로 말하기)' : '발언 중 (Space 또는 아래 버튼으로 음소거)')
+            }
           >
-            {pttMode
-              ? (pttPressed ? <><Mic size={12} />Space ↓</> : <><MicOff size={12} />Space ↑</>)
-              : (muted ? <><MicOff size={12} />음소거</> : <><Mic size={12} />발언 중</>)}
-          </button>
-          <button
-            onClick={onLeave}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-status-error/10 text-status-error hover:bg-status-error/20 transition-colors"
-            title="음성 회의 나가기"
-          >
-            <PhoneOff size={12} />
-            나가기
-          </button>
+            {voiceMode === 'ptt'
+              ? (pttPressed ? <><Mic size={11} />발언</> : <><MicOff size={11} />대기</>)
+              : (muted ? <><MicOff size={11} />음소거</> : <><Mic size={11} />발언 중</>)}
+          </div>
+
           <button
             onClick={() => setCollapsed((c) => !c)}
             className="p-1 text-txt-muted hover:text-txt-primary transition-colors"

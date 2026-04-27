@@ -58,10 +58,10 @@ export function useLiveKitVoice(meetingId) {
   const [activeSpeakers, setActiveSpeakers] = useState(new Set()); // identity 집합
   const [muted, setMuted] = useState(true); // 초기는 mute (안전 — join 즉시 들리지 않게)
   const [localStream, setLocalStream] = useState(null);
-  // Push-to-Talk 모드 — true 면 평상시 mute, 스페이스바 누르고 있을 때만 unmute
-  //   같은 방에서 2명 이상 참여 시 하울링 방지에 유용
-  const [pttMode, setPttMode] = useState(false);
-  const [pttPressed, setPttPressed] = useState(false); // PTT 키 누르고 있는 중
+  // 음성 입력 모드 — 'toggle' 기본 (Space 한 번 = 음소거 토글, latch O)
+  //                  'ptt' (Space hold = 발언, 떼면 음소거. 같은 방 다중 참여 시 하울링 방지)
+  const [voiceMode, setVoiceMode] = useState('toggle');
+  const [pttPressed, setPttPressed] = useState(false); // PTT 키 누르고 있는 중 (시각 피드백용)
 
   const roomRef = useRef(null);
   // 원격 오디오 트랙별 <audio> 엘리먼트 — Map<`${identity}:${trackSid}`, HTMLAudioElement>
@@ -267,23 +267,24 @@ export function useLiveKitVoice(meetingId) {
     }
   }, []);
 
-  // === Push-to-Talk: 키보드 이벤트 처리 ===
-  // - Space 누르면 unmute, 떼면 mute
-  // - input/textarea/contentEditable 포커스 시엔 무시 (텍스트 입력 방해 X)
-  // - PTT mode ON 일 때만 활성
+  // === Space 키보드 핸들러 — voiceMode 에 따라 동작 분기 ===
+  //   'ptt' : Space 누름 = unmute, 떼면 mute (latch X)
+  //   'toggle' : Space 한 번 = mute ↔ unmute 토글 (latch O)
+  //   둘 다 input/textarea/contentEditable 포커스 시엔 무시 (텍스트 입력 방해 X)
+  //   PTT 모드로 전환 시 즉시 mute (안전)
   useEffect(() => {
-    if (!pttMode || !connected) return;
+    if (!connected) return;
 
-    // PTT mode 진입 시 즉시 mute
-    const room = roomRef.current;
-    const initialMute = async () => {
-      try {
-        const pub = room?.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
-        if (pub && !pub.isMuted) await pub.mute();
-        setMuted(true);
-      } catch {}
-    };
-    initialMute();
+    // PTT 모드로 들어오면 일단 mute (안전)
+    if (voiceMode === 'ptt') {
+      (async () => {
+        try {
+          const pub = roomRef.current?.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+          if (pub && !pub.isMuted) await pub.mute();
+          setMuted(true);
+        } catch {}
+      })();
+    }
 
     const isTypingTarget = (el) => {
       if (!el) return false;
@@ -293,28 +294,42 @@ export function useLiveKitVoice(meetingId) {
       return false;
     };
 
+    const getMicPub = () => {
+      const r = roomRef.current;
+      return r?.localParticipant?.getTrackPublication?.(Track.Source.Microphone) || null;
+    };
+
     const onKeyDown = async (e) => {
       if (e.code !== 'Space') return;
-      if (e.repeat) return; // 길게 누름 — 첫 이벤트만 사용
+      if (e.repeat) return;
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
-      const r = roomRef.current;
-      if (!r) return;
-      const pub = r.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+      const pub = getMicPub();
       if (!pub) return;
       try {
-        if (pub.isMuted) await pub.unmute();
-        setMuted(false);
-        setPttPressed(true);
+        if (voiceMode === 'ptt') {
+          // PTT: 누름 = unmute (떼면 mute)
+          if (pub.isMuted) await pub.unmute();
+          setMuted(false);
+          setPttPressed(true);
+        } else {
+          // toggle: Space 한 번 = 상태 반전 (latch)
+          if (pub.isMuted) {
+            await pub.unmute();
+            setMuted(false);
+          } else {
+            await pub.mute();
+            setMuted(true);
+          }
+        }
       } catch {}
     };
 
     const onKeyUp = async (e) => {
       if (e.code !== 'Space') return;
+      if (voiceMode !== 'ptt') return; // toggle 모드는 keyup 무시
       if (isTypingTarget(e.target)) return;
-      const r = roomRef.current;
-      if (!r) return;
-      const pub = r.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+      const pub = getMicPub();
       if (!pub) return;
       try {
         if (!pub.isMuted) await pub.mute();
@@ -330,7 +345,7 @@ export function useLiveKitVoice(meetingId) {
       window.removeEventListener('keyup', onKeyUp);
       setPttPressed(false);
     };
-  }, [pttMode, connected]);
+  }, [voiceMode, connected]);
 
   // === 회의방 언마운트 시 자동 leave ===
   useEffect(() => {
@@ -360,9 +375,9 @@ export function useLiveKitVoice(meetingId) {
     join,
     leave,
     toggleMute,
-    // Push-to-Talk
-    pttMode,
-    setPttMode,
-    pttPressed,
+    // 음성 입력 모드 — 'toggle' (기본) | 'ptt'
+    voiceMode,
+    setVoiceMode,
+    pttPressed, // PTT 모드에서 Space 누르고 있는 상태 시각 피드백
   };
 }
