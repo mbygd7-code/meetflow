@@ -868,8 +868,9 @@ function DocumentZoomOverlay({
           <div className="absolute top-1.5 left-0 right-0 z-20 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 pointer-events-none">
             {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
             <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto pointer-events-auto" />
-            {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
-            <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-x-auto scrollbar-hide pointer-events-auto" />
+            {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움)
+                overflow-visible: pill 의 shadow 가 부모 박스 경계에 잘려 회색 사각으로 보이는 현상 방지 */}
+            <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-visible pointer-events-auto" />
           </div>
         )}
         {isPdf && url ? (
