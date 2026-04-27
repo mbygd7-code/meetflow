@@ -23,6 +23,20 @@ import './index.css';
   window.addEventListener('load', setVh);
 })();
 
+// iOS Safari layout viewport 강제 스크롤 차단
+//   input 포커스 시 iOS 가 layout viewport(html) 를 위로 스크롤해서 focused 요소를
+//   상단으로 끌어올리는 동작이 있음. body{overflow:hidden} 만으로는 못 막아
+//   document 스크롤이 발생하면 즉시 0 으로 되돌림.
+(function preventDocumentScroll() {
+  const reset = () => {
+    if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+    if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+    if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+  };
+  window.addEventListener('scroll', reset, { passive: true });
+  document.addEventListener('scroll', reset, { passive: true });
+})();
+
 // 모든 줌(핀치줌, input 포커스 확대 등) 감지 → 액션 없으면 2초 후 부드럽게 리셋
 (function initZoomReset() {
   if (!window.visualViewport) return;
