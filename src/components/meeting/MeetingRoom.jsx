@@ -2323,7 +2323,7 @@ export default function MeetingRoom() {
         </div>
 
         {/* 우측 액션: 모바일 = 아이콘 전용 32px, 데스크톱 = 라벨 동반 */}
-        <div className="flex items-center gap-1 md:gap-3 shrink-0">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
           {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출
               모바일은 아이콘 전용, 데스크톱은 라벨 포함 */}
           {meeting.status === 'active' && (
