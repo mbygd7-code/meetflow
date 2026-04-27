@@ -288,7 +288,7 @@ export default function ChatArea({
       {/* 메시지 리스트 */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-6 py-5 space-y-5"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-6 py-5 space-y-5 [overscroll-behavior:contain] [-webkit-overflow-scrolling:touch]"
       >
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-txt-muted text-sm">

@@ -10,6 +10,24 @@
 }
 
 /* ════════════════════════════════════════
+   iOS Safari rubber-band / 첫 진입 viewport 보정
+   ──────────────────────────────────────────
+   - html/body 자체 스크롤 차단 — 페이지가 통째로 위아래 흔들리는 현상 방지
+   - position: fixed 로 viewport 에 고정 (iOS Safari 의 100vh 펄싱 회피)
+   - overscroll-behavior: none — bounce 효과 차단
+   ════════════════════════════════════════ */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+/* ════════════════════════════════════════
    DARK MODE (기본값)
    ════════════════════════════════════════ */
 :root {
