@@ -138,7 +138,7 @@ export default function Layout() {
           )}
 
           <main className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto content-gradient-bg scrollbar-hide pb-[72px] md:pb-0">
+            <div className={`flex-1 overflow-y-auto content-gradient-bg scrollbar-hide md:pb-0 ${hideTopBar ? '' : 'pb-[72px]'}`}>
               {/* 온보딩 배너 — 회의방 내부에선 숨김 (몰입 방해) */}
               {!hideTopBar && <SlackNotifyBanner />}
               <Outlet context={{ pageTitle }} />
