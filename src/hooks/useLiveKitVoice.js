@@ -76,10 +76,18 @@ export function useLiveKitVoice(meetingId) {
   }, []);
 
   // === LiveKit 토큰 발급 ===
+  // 인증된 세션 JWT 를 명시적으로 Authorization 헤더에 첨부 — supabase-js 의 자동 첨부가
+  //   --no-verify-jwt 로 배포된 함수에선 누락되는 케이스가 있어 발생하는 401 회피.
   const fetchToken = useCallback(async () => {
     if (!SUPABASE_ENABLED) throw new Error('SUPABASE_DISABLED');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
+      throw new Error('not_signed_in');
+    }
     const { data, error: fnError } = await supabase.functions.invoke('livekit-token', {
       body: { meetingId },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (fnError) throw new Error(fnError.message || 'token_failed');
     if (!data?.token || !data?.url) throw new Error('invalid_token_response');
