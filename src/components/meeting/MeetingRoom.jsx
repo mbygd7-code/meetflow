@@ -22,8 +22,13 @@ import PollPanel from './PollPanel';
 import PdfViewer from './PdfViewer';
 import DrawingOverlay from './DrawingOverlay';
 import RemoteCursorsLayer from './RemoteCursorsLayer';
+import IframeOverlay from './IframeOverlay';
+import VoiceJoinButton from './VoiceJoinButton';
+import VoicePanel from './VoicePanel';
+import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 import { getSourceMeta } from '@/lib/googleDocsUrl';
+import { embeddableUrl, getHostnameForDisplay } from '@/lib/embeddableUrl';
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
 // canDelete=true 이면 우상단에 삭제(X) 버튼 노출 — onDelete 콜백은 confirm 후 호출됨.
@@ -677,6 +682,8 @@ function DocumentZoomOverlay({
   initialPage = null,
   initialPageFileId = null,
   onInitialPageApplied,
+  // PDF 안 링크 클릭 → 부모(DocumentPanel)가 iframe 오픈 + broadcast 처리
+  onPdfLinkClick,
 }) {
   const [drawingActive, setDrawingActive] = useState(false);
   const [toolbarHost, setToolbarHost] = useState(null);
@@ -713,10 +720,12 @@ function DocumentZoomOverlay({
     });
   }, [fileId, file?.name, myCurrentPage, setMyViewerState]);
 
-  // 언마운트 시에만 상태 클리어
+  // 언마운트 시 file 정보만 클리어 (iframe 은 별도 효과에서 관리되므로 보존)
   useEffect(() => {
     return () => {
-      if (typeof setMyViewerState === 'function') setMyViewerState(null);
+      if (typeof setMyViewerState === 'function') {
+        setMyViewerState({ fileId: null, fileName: null, page: null });
+      }
     };
   }, [setMyViewerState]);
 
@@ -860,6 +869,7 @@ function DocumentZoomOverlay({
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
             following={following}
+            onLinkClick={onPdfLinkClick}
           />
         ) : isImageType && url ? (
           <div className="relative w-full h-full">
@@ -1218,6 +1228,9 @@ function DocumentPanel({
   const [docFile, setDocFile] = useState(null);       // 플로팅 윈도우에 띄울 문서
   const [docUrl, setDocUrl] = useState(null);
   const [widthBeforeZoom, setWidthBeforeZoom] = useState(null); // 확대 전 원래 폭 기억
+  // PDF 안 링크 → 인앱 iframe 풀스크린 뷰어 (라이브 동기화 가능)
+  //   { url, original, embedSafe, title, openerName? } | null
+  const [iframeOpen, setIframeOpen] = useState(null);
   const resizerRef = useRef(null);
 
   // ── 라이브 동기화: 다른 참가자와 같은 자료/페이지/커서 보기 ──
@@ -1292,6 +1305,43 @@ function DocumentPanel({
     });
   };
 
+  // PDF 안 하이퍼링크 클릭 → 인앱 iframe 풀스크린 뷰어로 오픈 + 라이브 broadcast
+  //   embeddableUrl() 로 알려진 호스트는 변환(/edit→/preview 등). 모르는 곳은 시도.
+  //   라이브 ON 참가자 모두에게 viewer:link-open 으로 동시 표시.
+  const handlePdfLinkClick = useCallback((href) => {
+    const conv = embeddableUrl(href);
+    const payload = {
+      url: conv.url,
+      original: conv.original,
+      embedSafe: conv.embedSafe,
+      title: getHostnameForDisplay(conv.url),
+    };
+    setIframeOpen(payload);
+    vbroadcast('viewer:link-open', payload);
+  }, [vbroadcast]);
+
+  // iframe 닫기 — 본인 화면 닫고 라이브 ON 모두에게 닫기 broadcast
+  const handleIframeClose = useCallback(() => {
+    setIframeOpen(null);
+    vbroadcast('viewer:link-close', {});
+  }, [vbroadcast]);
+
+  // iframe state 를 useViewerSync 에 동기화 — 라이브 OFF→ON 전환자에게 응답할 때 포함됨
+  //   파일 state 와 독립적으로 partial-merge (useViewerSync.setMyViewerState 참조)
+  useEffect(() => {
+    if (typeof setMyViewerState !== 'function') return;
+    setMyViewerState({
+      iframe: iframeOpen
+        ? {
+            url: iframeOpen.url,
+            original: iframeOpen.original,
+            embedSafe: iframeOpen.embedSafe,
+            title: iframeOpen.title,
+          }
+        : null,
+    });
+  }, [iframeOpen, setMyViewerState]);
+
   // 이미지 확대 닫기 → 원래 폭으로 복귀 + broadcast
   const closeZoom = () => {
     const closingId = zoomFile?.id || zoomFile?.name;
@@ -1357,22 +1407,40 @@ function DocumentPanel({
       }));
     });
     // 동기화 응답 수신 (내가 라이브 OFF→ON 전환했을 때 다른 라이브 사용자가 보냄)
-    // → 자료 자동 오픈 + 해당 페이지로 점프
+    // → 자료 자동 오픈 + 해당 페이지로 점프 + iframe 도 동일하게 표시
     setViewerHandler('onState', async (payload) => {
-      if (!payload?.fileId) return;
-      // 이미 같은 파일을 보고 있으면 페이지만 점프
-      const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
-      if (currentId !== payload.fileId) {
-        const target = files.find((f) => (f.id || f.name) === payload.fileId);
-        if (!target) return;
-        await openFileLocal(target);
+      // 자료 동기화 (있는 경우)
+      if (payload?.fileId) {
+        const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
+        if (currentId !== payload.fileId) {
+          const target = files.find((f) => (f.id || f.name) === payload.fileId);
+          if (target) await openFileLocal(target);
+        }
+        if (typeof payload.page === 'number' && payload.page > 0) {
+          setPendingInitialPage(payload.page);
+          setPendingInitialPageFileId(payload.fileId);
+        }
       }
-      // 페이지 정보가 있으면 해당 페이지로 점프 신호 전달 (PDF만 의미 있음)
-      // fileId도 함께 기록 → 새 파일이 열린 후 매칭될 때만 적용되어 다른 파일로 점프 방지.
-      if (typeof payload.page === 'number' && payload.page > 0) {
-        setPendingInitialPage(payload.page);
-        setPendingInitialPageFileId(payload.fileId);
+      // iframe 동기화 — 라이브 사용자가 PDF 안 링크 열어둔 상태였다면 같이 표시
+      if (payload?.iframe?.url) {
+        setIframeOpen({
+          ...payload.iframe,
+          openerName: payload._user?.name,
+        });
       }
+    });
+    // PDF 안 링크 → 인앱 iframe 오픈 (라이브 ON 만 적용 — 다른 사람이 의도치 않게 화면 끌리는 거 방지)
+    setViewerHandler('onLinkOpen', (payload, isFollowing) => {
+      if (!isFollowing) return;
+      if (!payload?.url) return;
+      setIframeOpen({
+        ...payload,
+        openerName: payload._user?.name,
+      });
+    });
+    setViewerHandler('onLinkClose', (_payload, isFollowing) => {
+      if (!isFollowing) return;
+      setIframeOpen(null);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, zoomFile, docFile, widthBeforeZoom]);
@@ -1594,6 +1662,20 @@ function DocumentPanel({
             initialPage={pendingInitialPage}
             initialPageFileId={pendingInitialPageFileId}
             onInitialPageApplied={() => { setPendingInitialPage(null); setPendingInitialPageFileId(null); }}
+            onPdfLinkClick={handlePdfLinkClick}
+          />
+        )}
+
+        {/* PDF 링크 클릭 → 인앱 풀스크린 iframe 뷰어 (라이브 동기화)
+            z-[100] 으로 DocumentZoomOverlay(z-20) 와 메시지 영역까지 모두 덮음 */}
+        {iframeOpen && (
+          <IframeOverlay
+            url={iframeOpen.url}
+            original={iframeOpen.original}
+            embedSafe={iframeOpen.embedSafe}
+            title={iframeOpen.title}
+            openerName={iframeOpen.openerName}
+            onClose={handleIframeClose}
           />
         )}
 
@@ -1694,6 +1776,10 @@ export default function MeetingRoom() {
     deleteFile: deleteMeetingFile,
   } = useMeetingFiles(id);
   const { messages, sendMessage } = useRealtimeMessages(id);
+
+  // ── LiveKit 음성 회의 ──
+  // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
+  const lk = useLiveKitVoice(id);
 
   // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
   const loadMyFeedbacks = useFeedbackStore((s) => s.loadMyFeedbacks);
@@ -2097,8 +2183,21 @@ export default function MeetingRoom() {
           )}
         </div>
 
-        {/* 우측 액션: 자동개입 토글 + 회의 종료 */}
+        {/* 우측 액션: 음성참여 + 자동개입 토글 + 회의 종료 */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출 */}
+          {meeting.status === 'active' && (
+            <VoiceJoinButton
+              connected={lk.connected}
+              connecting={lk.connecting}
+              error={lk.error}
+              participantCount={lk.participants.length}
+              onJoin={lk.join}
+              onLeave={lk.leave}
+              size="sm"
+            />
+          )}
+
           {/* 자동개입 토글 — 회의 요청자/관리자만 제어 가능 */}
           <div className="hidden md:flex items-center gap-2">
             <span className={`text-[10px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>자동개입</span>
@@ -2176,6 +2275,18 @@ export default function MeetingRoom() {
       {/* 어젠다 바 */}
       <AgendaBar agendas={meeting.agendas || []} activeId={currentAgenda?.id} onSelect={setActiveAgendaId} />
 
+      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 음소거/나가기 패널 */}
+      {lk.connected && (
+        <VoicePanel
+          participants={lk.participants}
+          activeSpeakers={lk.activeSpeakers}
+          muted={lk.muted}
+          onToggleMute={lk.toggleMute}
+          onLeave={lk.leave}
+          currentUserId={user?.id}
+        />
+      )}
+
       {/* ═══ 메인: 자료 패널 + 채팅 ═══ */}
       <div className="flex flex-1 overflow-hidden">
         {/* 자료 패널 (데스크톱) */}
@@ -2203,6 +2314,11 @@ export default function MeetingRoom() {
           onImportUrl={handleImportUrl}
           autoIntervene={aiAutoIntervene}
           aiError={aiError}
+          // LiveKit 음성 회의 통합 — 참여 중일 때 큰 마이크 버튼이 mute 토글로 동작
+          voiceConnected={lk.connected}
+          voiceMuted={lk.muted}
+          onVoiceToggleMute={lk.toggleMute}
+          voiceLocalStream={lk.localStream}
         />
       </div>
     </div>

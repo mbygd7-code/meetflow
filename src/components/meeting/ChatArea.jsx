@@ -7,7 +7,16 @@ import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { parseGoogleDocsUrl } from '@/lib/googleDocsUrl';
 
-export default function ChatArea({ messages, onSend, disabled, aiThinking, onFileUpload, onImportUrl, autoIntervene = true, aiError = null }) {
+export default function ChatArea({
+  messages, onSend, disabled, aiThinking, onFileUpload, onImportUrl, autoIntervene = true, aiError = null,
+  // LiveKit 음성 회의 통합 — voiceConnected=true 면 큰 마이크 버튼이 LiveKit mute 토글로 동작.
+  //   기본값(false): 기존 STT 시작/중지 동작 유지 — 회의 외부에서도 사용 가능.
+  voiceConnected = false,
+  voiceMuted = false,
+  onVoiceToggleMute,
+  // LiveKit MediaStream — 주입되면 STT 가 자체 getUserMedia 안 하고 이 스트림 그대로 분기 사용
+  voiceLocalStream = null,
+}) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
   const [reactions, setReactions] = useState({});
@@ -82,13 +91,18 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
     try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
   });
 
+  // LiveKit 음성 회의 참여 중일 때는 Google STT 경로로 강제 (LiveKit 의 MediaStream 을 분기 사용 가능).
+  // 외부 회의 미참여 시엔 기존 사용자 설정(web-speech 기본) 유지.
+  const effectiveSttProvider = voiceConnected ? 'google' : sttProvider;
   const { isListening, start: startSTT, stop: stopSTT, interim, error: sttError, supported: sttSupported } = useVoiceInput({
-    provider: sttProvider,
+    provider: effectiveSttProvider,
     language: 'ko-KR',
     onTranscript: (text) => {
       if (text.trim()) onSend?.(text.trim());
     },
     onInterim: () => {},
+    // LiveKit 활성 + Google STT 경로일 때만 외부 스트림 주입 (web-speech 는 자체 마이크 사용)
+    externalStream: (voiceConnected && effectiveSttProvider === 'google') ? voiceLocalStream : null,
   });
   const { user } = useAuthStore();
 
@@ -519,20 +533,47 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
                   <Plus size={15} />
                 </button>
 
-                {/* 마이크 */}
+                {/* 마이크 — LiveKit 음성 회의 참여 중이면 mute 토글, 아니면 STT 시작/중지 */}
                 <button
-                  onClick={isListening ? stopSTT : startSTT}
-                  disabled={disabled || !sttSupported}
+                  onClick={() => {
+                    if (voiceConnected) {
+                      // LiveKit mute 토글 — STT 도 함께 토글 (unmute 시 시작, mute 시 중지)
+                      const willUnmute = voiceMuted;
+                      onVoiceToggleMute?.();
+                      if (willUnmute) {
+                        // 음소거 해제 → STT 시작 (자막)
+                        if (!isListening && sttSupported) startSTT();
+                      } else {
+                        // 음소거 → STT 중지
+                        if (isListening) stopSTT();
+                      }
+                    } else {
+                      // 기존 STT-only 동작
+                      if (isListening) stopSTT();
+                      else startSTT();
+                    }
+                  }}
+                  disabled={disabled || (!voiceConnected && !sttSupported)}
                   className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg hover:scale-110 ${
-                    isListening
-                      ? 'bg-status-error text-white shadow-status-error/40'
-                      : 'bg-brand-purple text-white hover:shadow-brand-purple/40'
+                    voiceConnected
+                      ? voiceMuted
+                        ? 'bg-bg-tertiary text-txt-muted shadow-md'
+                        : 'bg-status-error text-white shadow-status-error/40'
+                      : isListening
+                        ? 'bg-status-error text-white shadow-status-error/40'
+                        : 'bg-brand-purple text-white hover:shadow-brand-purple/40'
                   } disabled:opacity-40`}
+                  title={
+                    voiceConnected
+                      ? (voiceMuted ? '음소거 해제 (말하기 + 자막)' : '음소거')
+                      : (isListening ? '발언 종료' : '발언 시작')
+                  }
                 >
-                  {isListening && (
+                  {/* 활성 발언 펄스 — STT-only 또는 LiveKit unmute 시 */}
+                  {((!voiceConnected && isListening) || (voiceConnected && !voiceMuted)) && (
                     <span className="absolute inset-0 rounded-full bg-status-error/30 animate-ping" />
                   )}
-                  {isListening ? <MicOff size={26} /> : <Mic size={26} />}
+                  {(voiceConnected ? voiceMuted : !isListening) ? <Mic size={26} /> : <MicOff size={26} />}
                 </button>
 
                 {/* 텍스트 모드 */}
@@ -546,10 +587,14 @@ export default function ChatArea({ messages, onSend, disabled, aiThinking, onFil
               </div>
 
               <p className="text-[10px] text-txt-muted">
-                {isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언'}
+                {voiceConnected
+                  ? (voiceMuted ? '음소거 중 · 클릭하면 발언 + 자막' : '발언 중 · 클릭하여 음소거')
+                  : (isListening ? '발언 중 · 클릭하여 종료' : '클릭하여 발언')}
               </p>
               {sttError && <p className="text-xs text-status-error">{sttError}</p>}
-              {!sttSupported && <p className="text-xs text-status-error">이 브라우저에서 음성 인식이 지원되지 않습니다</p>}
+              {!voiceConnected && !sttSupported && (
+                <p className="text-xs text-status-error">이 브라우저에서 음성 인식이 지원되지 않습니다</p>
+              )}
             </div>
           )}
         </div>

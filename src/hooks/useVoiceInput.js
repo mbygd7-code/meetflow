@@ -11,9 +11,11 @@ const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
  * @param {string} options.language - 인식 언어 (기본: 'ko-KR')
  * @param {function} options.onTranscript - 최종 텍스트 콜백
  * @param {function} options.onInterim - 중간 결과 콜백 (실시간 표시용)
+ * @param {MediaStream|null} options.externalStream - LiveKit 등에서 이미 잡은 마이크 스트림
+ *   주입 시 자체 getUserMedia 호출 스킵 → 마이크 권한 모달 1회만, 자원도 절약 (Google STT 경로에서만 의미)
  * @returns {{ isListening, start, stop, interim, error, supported }}
  */
-export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTranscript, onInterim } = {}) {
+export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTranscript, onInterim, externalStream = null } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [interim, setInterim] = useState('');
   const [error, setError] = useState(null);
@@ -93,9 +95,15 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
   }, []);
 
   // ── Google Cloud STT (Edge Function 경유) ──
+  // externalStream 주입 시 (LiveKit 사용 중) → 자체 getUserMedia 안 하고 그 스트림 그대로 사용.
+  //   즉 마이크는 LiveKit 이 관리, MediaRecorder 만 거기서 분기하여 STT 텍스트화.
+  //   onstop 시 외부 스트림은 정리하지 않음 (LiveKit 이 소유).
   const startGoogleSTT = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const useExternal = !!externalStream;
+      const stream = useExternal
+        ? externalStream
+        : await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
 
@@ -107,8 +115,10 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
       };
 
       mediaRecorder.onstop = async () => {
-        // 스트림 정리
-        stream.getTracks().forEach((t) => t.stop());
+        // 스트림 정리 — 외부 주입이면 소유권이 외부에 있으니 우리는 stop 안 함
+        if (!useExternal) {
+          stream.getTracks().forEach((t) => t.stop());
+        }
         streamRef.current = null;
 
         if (chunksRef.current.length === 0) return;
@@ -155,16 +165,19 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
     } catch (e) {
       setError('마이크 접근이 거부되었습니다');
     }
-  }, [language, onTranscript]);
+  }, [language, onTranscript, externalStream]);
 
   const stopGoogleSTT = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    // 외부 주입 스트림은 우리가 stop 하지 않음 — 소유권은 외부에
+    if (!externalStream) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    }
     streamRef.current = null;
     setIsListening(false);
-  }, []);
+  }, [externalStream]);
 
   // ── 통합 start/stop ──
   const start = useCallback(() => {
@@ -182,10 +195,13 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
-      mediaRecorderRef.current?.stop();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      try { mediaRecorderRef.current?.stop(); } catch {}
+      // 외부 주입 스트림은 정리 X — 소유권은 외부에
+      if (!externalStream) {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+      }
     };
-  }, []);
+  }, [externalStream]);
 
   return { isListening, start, stop, interim, error, supported };
 }
