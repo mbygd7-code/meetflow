@@ -125,48 +125,13 @@ export default function DrawingOverlay({
   }, []);
 
   // 본인 메모 삭제 — confirm 후 messages 테이블에서 제거 → Realtime 으로 모두 반영
-  // RLS 가 본인 user_id 만 허용하므로 다른 사람 메시지는 영향 0 (data 빈 배열로 반환됨)
+  // RLS 가 user_id = auth.uid() 검증하므로 본인 메시지만 통과.
+  // 사전 SELECT 검증은 RLS 차단 케이스에서 오히려 차단을 일으키므로 제거.
+  // 직접 DELETE 시도 → RLS 가 0 rows 반환 시 실패 안내.
   const handleDeleteAnnotation = useCallback(async (msgId) => {
     if (!msgId) return;
     if (!window.confirm('이 메모를 삭제하시겠습니까?\n채팅에서도 같이 사라집니다.')) return;
     try {
-      // 1) DB 의 실제 user_id 확인 (RLS 의 본인 매칭 기준)
-      const { data: row } = await supabase
-        .from('messages')
-        .select('id, user_id')
-        .eq('id', msgId)
-        .maybeSingle();
-
-      // 2) 현재 세션의 auth.uid() 확인
-      const { data: sessionData } = await supabase.auth.getSession();
-      const authUid = sessionData?.session?.user?.id || null;
-
-      console.log('[DrawingOverlay] 삭제 진단:', {
-        msgId,
-        msg_user_id: row?.user_id,
-        auth_uid: authUid,
-        store_user_id: user?.id,
-        match_msg_vs_auth: row?.user_id === authUid,
-        match_store_vs_auth: user?.id === authUid,
-      });
-
-      if (!row) {
-        alert('이미 삭제된 메모입니다.');
-        return;
-      }
-      if (!authUid) {
-        alert('로그인 세션이 만료되었습니다. 다시 로그인하세요.');
-        return;
-      }
-      if (row.user_id !== authUid) {
-        alert(
-          `이 메모는 본인이 작성한 게 아니라 삭제할 수 없어요.\n\n` +
-          `메시지 작성자: ${row.user_id?.slice(0, 8)}\n현재 로그인: ${authUid.slice(0, 8)}`
-        );
-        return;
-      }
-
-      // 3) 실제 삭제 — RLS user_id 일치 보장된 후 호출
       const { data, error } = await supabase
         .from('messages')
         .delete()
@@ -178,8 +143,15 @@ export default function DrawingOverlay({
         return;
       }
       if (!data || data.length === 0) {
-        console.warn('[DrawingOverlay] 메모 삭제 — 영향받은 행 없음 (RLS 추가 정책 또는 race)');
-        alert('삭제 권한이 없거나 메시지가 이미 사라졌습니다.');
+        // RLS 가 차단 — 메시지의 user_id 가 현재 auth.uid() 와 다르거나 NULL
+        const { data: sessionData } = await supabase.auth.getSession();
+        console.warn('[DrawingOverlay] 메모 삭제 영향받은 행 0:', {
+          msgId,
+          auth_uid: sessionData?.session?.user?.id,
+          store_user_id: user?.id,
+          hint: '메시지의 user_id 가 NULL 또는 다른 사용자일 가능성. SQL 로 확인 필요.',
+        });
+        alert('이 메모는 삭제 권한이 없습니다. 시스템 메시지이거나 다른 사용자의 메모일 수 있어요.');
         return;
       }
       console.log('[DrawingOverlay] 메모 삭제 성공:', msgId);
