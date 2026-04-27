@@ -1056,9 +1056,10 @@ export default function DrawingOverlay({
 
           {m.annotations.length > 0 && (
             <div
-              className={`absolute top-[calc(100%+4px)] flex flex-col gap-1 max-w-[320px] ${
-                // 사각형: 아바타 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
-                // 펜: 기존대로 아바타 중심 정렬
+              className={`absolute top-[calc(100%+6px)] flex flex-col gap-1.5 w-[260px] ${
+                // 사각형: 마커 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
+                // 펜: 마커 중심 기준 살짝 왼쪽 시작 (메모 폭이 마커보다 훨씬 넓으므로
+                //     translate-x 로 마커 중앙 위치를 기준 잡고 약간 왼쪽 오프셋)
                 isRect ? 'left-0' : 'left-1/2 -translate-x-1/2'
               }`}
               onMouseDown={(e) => e.stopPropagation()}
@@ -1067,21 +1068,29 @@ export default function DrawingOverlay({
               {m.annotations.slice(-3).map((a, i) => (
                 <div
                   key={a.msgId || i}
-                  className="rounded-md bg-white/95 border text-[11px] text-[#222] px-2 py-1.5 shadow-md backdrop-blur-sm w-fit max-w-full"
+                  className="rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 shadow-md backdrop-blur-sm w-full"
                   style={{ borderColor: m.strokeColor }}
                   title={`${a.authorName} · ${a.text}`}
                 >
-                  <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5 whitespace-nowrap" style={{ color: m.strokeColor }}>
+                  {/* 헤더: 아바타 + 이름 — 폭 제약(w-full) 안에서 자연스럽게 정렬 */}
+                  <div className="flex items-center gap-1.5 mb-1">
                     <span
-                      className="w-3 h-3 rounded-full text-white flex items-center justify-center text-[8px] font-bold"
+                      className="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold shrink-0"
                       style={{ backgroundColor: a.authorColor }}
                     >
                       {(a.authorName || '?')[0]}
                     </span>
-                    {a.authorName}
+                    <span
+                      className="text-[10px] font-semibold truncate"
+                      style={{ color: m.strokeColor }}
+                    >
+                      {a.authorName}
+                    </span>
                   </div>
-                  {/* 메모 본문 — 텍스트 길이에 따라 자연스럽게 wrap, 잘림 없음 */}
-                  <p className="leading-snug break-words whitespace-pre-wrap">{a.text}</p>
+                  {/* 메모 본문 — 260px 내 자연스러운 줄바꿈, 잘림 없음 */}
+                  <p className="leading-relaxed break-words whitespace-pre-wrap text-[12px]">
+                    {a.text}
+                  </p>
                 </div>
               ))}
               {m.annotations.length > 3 && (
