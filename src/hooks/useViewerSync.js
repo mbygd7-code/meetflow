@@ -6,10 +6,13 @@
 //   viewer:close        — { fileId }                       : 자료 닫음
 //   viewer:page         — { fileId, page }                 : PDF 페이지 변경
 //   viewer:cursor       — { fileId, page, x, y }           : 마우스 좌표 (0~1, 콘텐츠 박스 기준)
+//   viewer:link-open    — { url, original, embedSafe, title } : PDF 안 링크를 인앱 iframe 으로 오픈
+//   viewer:link-close   — { }                              : iframe 뷰어 닫음
 //   viewer:request-sync — { }                              : "현재 라이브 상태 알려줘" 요청
 //                                                            (라이브 OFF→ON 전환 시 자동 broadcast)
-//   viewer:state        — { fileId, fileName, page }       : "내 현재 상태" 응답
+//   viewer:state        — { fileId, fileName, page, iframe? } : "내 현재 상태" 응답
 //                                                            (request-sync 받은 라이브 사용자가 broadcast)
+//                                                            iframe = { url, original, embedSafe, title } | null
 //
 // 페이로드에 자동 첨부: _user = { id, name, color }
 //
@@ -44,10 +47,20 @@ export function useViewerSync(meetingId) {
   const userRef = useRef(user);
   userRef.current = user;
   // 내 현재 뷰어 상태 — request-sync 응답에 사용
-  //   { fileId, fileName, page } | null
+  //   { fileId, fileName, page, iframe } | null
+  //   iframe = { url, original, embedSafe, title } | null
   const myStateRef = useRef(null);
+  // 호출자별로 부분 필드를 갱신할 수 있도록 partial-merge.
+  //   - DocumentZoomOverlay → { fileId, fileName, page } 갱신 (file 정보)
+  //   - DocumentPanel iframe 효과 → { iframe } 갱신 (iframe 정보)
+  //   둘이 독립적으로 호출되어도 서로의 필드를 덮어쓰지 않음.
+  //   state === null 만 전체 클리어로 취급.
   const setMyViewerState = useCallback((state) => {
-    myStateRef.current = state || null;
+    if (state === null) {
+      myStateRef.current = null;
+      return;
+    }
+    myStateRef.current = { ...(myStateRef.current || {}), ...state };
   }, []);
 
   useEffect(() => {
@@ -69,21 +82,29 @@ export function useViewerSync(meetingId) {
       if (!followingRef.current) return;
       handlersRef.current.onCursor?.(payload);
     });
-    // 누군가가 "현재 상태 알려줘" 요청 → 내가 라이브 ON 이고 자료 보고 있으면 응답
+    // PDF 안 링크 → 인앱 iframe 오픈/닫기 동기화
+    ch.on('broadcast', { event: 'viewer:link-open' }, ({ payload }) => {
+      handlersRef.current.onLinkOpen?.(payload, followingRef.current);
+    });
+    ch.on('broadcast', { event: 'viewer:link-close' }, ({ payload }) => {
+      handlersRef.current.onLinkClose?.(payload, followingRef.current);
+    });
+    // 누군가가 "현재 상태 알려줘" 요청 → 내가 라이브 ON 이고 자료/iframe 을 보고 있으면 응답
+    //   자료를 안 보고 있어도 iframe 만 열려 있으면 응답함 (iframe 단독 동기화도 지원)
     ch.on('broadcast', { event: 'viewer:request-sync' }, () => {
       if (!followingRef.current) return;
       const s = myStateRef.current;
-      if (!s?.fileId) return;
+      if (!s?.fileId && !s?.iframe) return;
       const u = userRef.current;
-      // 응답 — broadcast() 가 따로 following 게이트 체크하지만 이미 위에서 통과했으니 OK
       try {
         ch.send({
           type: 'broadcast',
           event: 'viewer:state',
           payload: {
-            fileId: s.fileId,
-            fileName: s.fileName,
-            page: s.page,
+            fileId: s.fileId || null,
+            fileName: s.fileName || null,
+            page: s.page || null,
+            iframe: s.iframe || null,
             _user: {
               id: u?.id,
               name: u?.name || '참가자',

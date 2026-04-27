@@ -104,11 +104,15 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
                 file={url}
                 loading={<div className="text-xs text-txt-muted py-8">PDF 로딩 중...</div>}
                 error={<div className="text-xs text-status-error py-8">PDF 로드 실패</div>}
+                // PDF 내 외부 링크는 새 탭으로 (회의록 뷰에서도 일관 동작)
+                externalLinkTarget="_blank"
+                externalLinkRel="noopener noreferrer"
               >
                 <PdfPage
                   pageNumber={1}
                   width={Math.min(bodySize.w - 32, 800)}
-                  renderAnnotationLayer={false}
+                  // 첫 페이지에 목차/링크가 있는 경우 클릭 가능하도록
+                  renderAnnotationLayer={true}
                   renderTextLayer={false}
                 />
               </PdfDocument>

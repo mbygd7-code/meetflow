@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2 } from 'lucide-react';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -22,10 +22,18 @@ import PollPanel from './PollPanel';
 import PdfViewer from './PdfViewer';
 import DrawingOverlay from './DrawingOverlay';
 import RemoteCursorsLayer from './RemoteCursorsLayer';
+import IframeOverlay from './IframeOverlay';
+import VoiceJoinButton from './VoiceJoinButton';
+import VoicePanel from './VoicePanel';
+import VoiceJoinIntroModal, { shouldShowVoiceIntro } from './VoiceJoinIntroModal';
+import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
+import { getSourceMeta } from '@/lib/googleDocsUrl';
+import { embeddableUrl, getHostnameForDisplay } from '@/lib/embeddableUrl';
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
-function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
+// canDelete=true 이면 우상단에 삭제(X) 버튼 노출 — onDelete 콜백은 confirm 후 호출됨.
+function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDelete = false, onDelete }) {
   const [thumbUrl, setThumbUrl] = useState(null);
   const isPdf = file.type === 'application/pdf';
   const thumbContainerRef = useRef(null);
@@ -65,15 +73,59 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
       : `${(file.size / 1024).toFixed(0)}KB`
     : '';
 
+  // 외부 출처(Google Docs 등) 메타 — 썸네일에 작은 뱃지 노출
+  const sourceMeta = getSourceMeta(file.source_kind);
+  const SourceBadge = sourceMeta ? (
+    <div
+      className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold text-white shadow-sm pointer-events-none"
+      style={{ backgroundColor: sourceMeta.color }}
+      title={`${sourceMeta.label}에서 가져온 PDF`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-white/90" />
+      {sourceMeta.label}
+    </div>
+  ) : null;
+
+  // 삭제 버튼 — 권한자(업로더/회의 생성자/관리자)에게만 노출. 호버 시 표시.
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (typeof onDelete === 'function') onDelete(file);
+  };
+  const DeleteBtn = canDelete ? (
+    <button
+      type="button"
+      onClick={handleDeleteClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-black/55 hover:bg-status-error/90 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm z-10"
+      title="자료 삭제"
+      aria-label="자료 삭제"
+    >
+      <Trash2 size={12} strokeWidth={2.2} />
+    </button>
+  ) : null;
+
+  // 카드 클릭 — 키보드 접근성 (button 시멘틱 대체) — Enter/Space 로 클릭 트리거
+  const cardKeyHandler = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick?.();
+    }
+  };
+
   // 이미지: 섹션 폭에 맞춰 adaptive 크기 (갤러리)
+  // 카드를 div(role=button) 로 둠 — 내부에 삭제 button 중첩되어도 DOM 검증 위반 X
   if (isImage) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        onKeyDown={cardKeyHandler}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
         title={file.name}
       >
-        <div className="w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
+        <div className="relative w-full aspect-video bg-bg-tertiary flex items-center justify-center overflow-hidden">
           {thumbUrl ? (
             <img
               src={thumbUrl}
@@ -84,6 +136,8 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
           ) : (
             <div className="text-txt-muted text-[10px]">로딩…</div>
           )}
+          {SourceBadge}
+          {DeleteBtn}
         </div>
         {!compact && (
           <div className="px-2 py-1.5">
@@ -93,21 +147,24 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
             {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
           </div>
         )}
-      </button>
+      </div>
     );
   }
 
   // PDF: 첫 페이지를 썸네일로 렌더 (이미지와 유사한 adaptive 레이아웃, aspect A4)
   if (isPdf) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+        onKeyDown={cardKeyHandler}
+        className="w-full rounded-lg overflow-hidden transition-all group text-left border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
         title={file.name}
       >
         <div
           ref={thumbContainerRef}
-          className="w-full aspect-[1/1.414] bg-white flex items-center justify-center overflow-hidden"
+          className="relative w-full aspect-[1/1.414] bg-white flex items-center justify-center overflow-hidden"
         >
           {thumbUrl ? (
             <PdfDocument
@@ -127,6 +184,8 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
           ) : (
             <div className="text-txt-muted text-[10px]">로딩…</div>
           )}
+          {SourceBadge}
+          {DeleteBtn}
         </div>
         {!compact && (
           <div className="px-2 py-1.5">
@@ -136,26 +195,31 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
             {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
           </div>
         )}
-      </button>
+      </div>
     );
   }
 
   // 일반 문서: compact 모드에서는 작게, 아니면 140px 중앙 정렬 (섹션 폭에 영향 안 받음)
   const docWidth = compact ? '100%' : 140;
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md"
+      onKeyDown={cardKeyHandler}
+      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
       style={{ width: docWidth }}
       title={file.name}
     >
-      <div className={`w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
+      <div className={`relative w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
         <FileText size={compact ? 20 : 32} strokeWidth={1.4} />
         {!compact && (
           <span className="text-[9px] uppercase tracking-wider">
             {(file.name?.split('.').pop() || 'FILE').slice(0, 6)}
           </span>
         )}
+        {SourceBadge}
+        {DeleteBtn}
       </div>
       {!compact && (
         <div className="px-2 py-1.5">
@@ -165,7 +229,7 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false }) {
           {sizeLabel && <p className="text-[9px] text-txt-muted">{sizeLabel}</p>}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -202,7 +266,38 @@ function ImageZoomOverlay({
   const sliderContainerRef = useRef(null);
   const imageRef = useRef(null);
   const cursorThrottleRef = useRef(0);
+  // 슬라이더/줌 컨트롤과 상호작용 중 — pan 차단용 (이벤트 race 방지)
+  const sliderInteractingRef = useRef(false);
+  // 줌 변경 시 visible center 보존을 위한 prev zoom 추적
+  const prevZoomRef = useRef(100);
   const isZoomed = zoomScale > 100;
+
+  // ── 줌 변경 시 화면 중심 고정 ──
+  // zoomScale 변경 → 이미지 크기가 % 단위로 변함 → safe-center 정렬로 인해
+  // 이미지 콘텐츠가 시각적으로 "드래그되는 것처럼" 보이는 현상 방지.
+  // 보이는 영역의 중심이 zoom 전후 동일한 이미지 좌표를 가리키도록 scrollLeft/Top 재계산.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prev = prevZoomRef.current;
+    if (!el || prev === zoomScale) {
+      prevZoomRef.current = zoomScale;
+      return;
+    }
+    const factor = zoomScale / prev;
+    // zoom 적용 직전 중심 좌표 (콘텐츠 기준)
+    const centerX = el.scrollLeft + el.clientWidth / 2;
+    const centerY = el.scrollTop + el.clientHeight / 2;
+    const targetCenterX = centerX * factor;
+    const targetCenterY = centerY * factor;
+    prevZoomRef.current = zoomScale;
+    // 이미지 width % 적용으로 scrollWidth/Height 가 업데이트된 후 scroll 위치 조정
+    requestAnimationFrame(() => {
+      const cur = scrollRef.current;
+      if (!cur) return;
+      cur.scrollLeft = Math.max(0, targetCenterX - cur.clientWidth / 2);
+      cur.scrollTop = Math.max(0, targetCenterY - cur.clientHeight / 2);
+    });
+  }, [zoomScale]);
 
   // 이미지 리사이즈 감지 — 줌/뷰포트/폭 변화 모두 캔버스에 즉시 반영
   // (img의 clientWidth/Height가 바뀌면 DrawingOverlay width/height prop이 새 값으로 갱신됨)
@@ -293,6 +388,8 @@ function ImageZoomOverlay({
   // 드래그 이동 (pan) — 확대 상태에서만 활성화
   const onPanStart = (e) => {
     if (!isZoomed) return;
+    // 슬라이더와 상호작용 중이면 pan 절대 시작 금지 (이벤트 race 방지)
+    if (sliderInteractingRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     // 슬라이더 컨테이너/버튼/input/링크 영역 클릭은 무시
@@ -483,13 +580,31 @@ function ImageZoomOverlay({
 
         </div>
 
-        {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임) */}
+        {/* 오른쪽 세로 중앙 — 돋보기 버튼 + 세로 슬라이더 (밝고 진한 그림자로 어두운 배경에서도 잘 보임)
+            슬라이더 드래그 중 pan 이 절대 트리거되지 않도록 sliderInteractingRef 플래그 사용 */}
         <div
           ref={sliderContainerRef}
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            sliderInteractingRef.current = true;
+            const release = () => {
+              sliderInteractingRef.current = false;
+              document.removeEventListener('mouseup', release);
+              document.removeEventListener('pointerup', release);
+              document.removeEventListener('touchend', release);
+              document.removeEventListener('touchcancel', release);
+            };
+            document.addEventListener('mouseup', release);
+            document.addEventListener('pointerup', release);
+            document.addEventListener('touchend', release);
+            document.addEventListener('touchcancel', release);
+          }}
           onMouseMove={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            sliderInteractingRef.current = true;
+          }}
           onTouchMove={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-2"
@@ -584,7 +699,12 @@ function DocumentZoomOverlay({
   // 라이브 OFF→ON 동기화: 내 상태를 hook 에 알림 + 외부에서 받은 초기 페이지 적용
   setMyViewerState,
   initialPage = null,
+  initialPageFileId = null,
   onInitialPageApplied,
+  // PDF 안 링크 클릭 → 부모(DocumentPanel)가 iframe 오픈 + broadcast 처리
+  onPdfLinkClick,
+  // PDF 줌 시 자료 섹션 확장 — 부모(DocumentPanel) 가 폭 floor 갱신
+  onContentWidthChange,
 }) {
   const [drawingActive, setDrawingActive] = useState(false);
   const [toolbarHost, setToolbarHost] = useState(null);
@@ -621,20 +741,29 @@ function DocumentZoomOverlay({
     });
   }, [fileId, file?.name, myCurrentPage, setMyViewerState]);
 
-  // 언마운트 시에만 상태 클리어
+  // 언마운트 시 file 정보만 클리어 (iframe 은 별도 효과에서 관리되므로 보존)
   useEffect(() => {
     return () => {
-      if (typeof setMyViewerState === 'function') setMyViewerState(null);
+      if (typeof setMyViewerState === 'function') {
+        setMyViewerState({ fileId: null, fileName: null, page: null });
+      }
     };
   }, [setMyViewerState]);
 
-  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답) — 값이 들어올 때마다 적용
+  // 외부에서 받은 초기 페이지 (라이브 OFF→ON 동기화 응답)
+  // — 같은 파일에 대한 응답일 때만 적용. 다른 파일(이전에 열었던 자료)의 페이지가
+  //   잘못 적용되어 페이지가 점프하는 사고 방지.
   useEffect(() => {
     if (initialPage == null || initialPage <= 0) return;
+    // 응답에 fileId가 명시돼 있고 현재 파일과 다르면 무시 + reset
+    if (initialPageFileId && initialPageFileId !== fileId) {
+      onInitialPageApplied?.();
+      return;
+    }
     setPresenterPage(initialPage);
     onInitialPageApplied?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPage]);
+  }, [initialPage, initialPageFileId, fileId]);
 
   // viewer:page 수신 → following=true 일 때만 페이지 변경 적용
   // 언마운트 시 핸들러 청소 (stale 클로저로 setPresenterPage 호출 방지)
@@ -727,23 +856,25 @@ function DocumentZoomOverlay({
         </div>
       </div>
 
-      {/* 통합 툴바 — PDF 컨트롤 + 드로잉 툴바
-          데스크톱: 한 줄 (높이 55px) / 모바일: 두 줄 wrap (PDF 위, 드로잉 아래) */}
-      {(isPdf || drawingActive) && (
-        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 py-1 md:py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60 h-auto md:h-[55px] w-full min-w-0 max-w-full">
-          {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
-          <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto" />
-          {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
-          <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-x-auto scrollbar-hide" />
-        </div>
-      )}
-
-      {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드 */}
+      {/* 바디 — PDF는 PdfViewer, 그 외는 안내 + 다운로드
+          통합 툴바는 본문 위에 absolute 떠있는 형태로 들어감 (회색 빈 공간 제거)
+          툴바 활성 시 상단 padding 으로 콘텐츠가 가려지지 않게 공간 확보 */}
       <div
         ref={bodyRef}
         onMouseMove={handleFallbackMouseMove}
-        className="flex-1 relative bg-bg-tertiary/30 overflow-hidden"
+        className={`flex-1 relative bg-bg-tertiary/30 overflow-hidden ${(isPdf || drawingActive) ? 'pt-12 md:pt-12' : ''}`}
       >
+        {/* 통합 툴바 (absolute 떠있는 오버레이) — PDF 컨트롤 + 드로잉 툴바
+            본문 콘텐츠 위에 떠 있어 흰색 라운드 pill 만 보이고 회색 박스 시각 잡음 0 */}
+        {(isPdf || drawingActive) && (
+          <div className="absolute top-1.5 left-0 right-0 z-20 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 pointer-events-none">
+            {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
+            <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto pointer-events-auto" />
+            {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움)
+                overflow-visible: pill 의 shadow 가 부모 박스 경계에 잘려 회색 사각으로 보이는 현상 방지 */}
+            <div ref={setToolbarHost} className="flex items-center gap-2 shrink-0 w-full md:w-auto md:justify-end justify-center overflow-visible pointer-events-auto" />
+          </div>
+        )}
         {isPdf && url ? (
           <PdfViewer
             url={url}
@@ -761,6 +892,8 @@ function DocumentZoomOverlay({
             vbroadcast={vbroadcast}
             remoteCursors={remoteCursors}
             following={following}
+            onLinkClick={onPdfLinkClick}
+            onContentWidthChange={onContentWidthChange}
           />
         ) : isImageType && url ? (
           <div className="relative w-full h-full">
@@ -1104,19 +1237,36 @@ function DocumentPanel({
   files = [], getUrl, meetingId, messages = [], onViewerChange,
   mobileOpen = false,    // 모바일에서 풀스크린 드로어로 표시
   onMobileClose,
+  // 자료 삭제 권한 체크용
+  currentUserId, isAdmin, meetingCreatedBy, onDeleteFile,
 }) {
-  // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 420px: 갤러리 2열 기본 보기)
+  // 채팅 최소 가로폭 — 모바일 화면 사이즈. 자료 패널 최대 확장은 항상 (winW - CHAT_MIN_WIDTH) 로 제한
+  const CHAT_MIN_WIDTH = 400;
+  // 윈도우 폭 추적 — 창 크기 변경 시에도 채팅 최소폭 보장
+  const [winW, setWinW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280));
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  // PDF 줌 시 자료 섹션 확장 — PdfViewer 가 보고한 페이지폭 이상으로 패널을 키워 콘텐츠가 잘리지 않게.
+  //   zoom<=1 이면 0 (확장 비활성). 채팅 최소폭 (CHAT_MIN_WIDTH) 으로 클램프됨.
+  const [zoomedContentW, setZoomedContentW] = useState(0);
+  // 패널 폭 — localStorage에 저장하여 세션 간 유지 (기본 200px: 1열 컴팩트 썸네일 보기)
   const [width, setWidth] = useState(() => {
     try {
-      const v = parseInt(localStorage.getItem('meetflow_doc_panel_width') || '420', 10);
-      return Number.isFinite(v) ? Math.max(80, v) : 420;
-    } catch { return 420; }
+      const v = parseInt(localStorage.getItem('meetflow_doc_panel_width') || '200', 10);
+      return Number.isFinite(v) ? Math.max(80, v) : 200;
+    } catch { return 200; }
   });
   const [zoomFile, setZoomFile] = useState(null);     // 패널 내 확대할 이미지 파일
   const [zoomUrl, setZoomUrl] = useState(null);
   const [docFile, setDocFile] = useState(null);       // 플로팅 윈도우에 띄울 문서
   const [docUrl, setDocUrl] = useState(null);
   const [widthBeforeZoom, setWidthBeforeZoom] = useState(null); // 확대 전 원래 폭 기억
+  // PDF 안 링크 → 인앱 iframe 풀스크린 뷰어 (라이브 동기화 가능)
+  //   { url, original, embedSafe, title, openerName? } | null
+  const [iframeOpen, setIframeOpen] = useState(null);
   const resizerRef = useRef(null);
 
   // ── 라이브 동기화: 다른 참가자와 같은 자료/페이지/커서 보기 ──
@@ -1125,15 +1275,20 @@ function DocumentPanel({
   const { broadcast: vbroadcast, setHandler: setViewerHandler, following, setFollowing, setMyViewerState } = useViewerSync(meetingId);
   // 라이브 OFF→ON 전환 시 다른 라이브 사용자가 보낸 viewer:state 를 받아 적용할 때 사용
   // PdfViewer 의 presenterPage 로 흘러갈 "초기 페이지 점프 신호"
+  // pendingInitialPageFileId — 이 페이지가 어느 파일을 위한 것인지. 다른 파일이 열리면 무시됨.
   const [pendingInitialPage, setPendingInitialPage] = useState(null);
+  const [pendingInitialPageFileId, setPendingInitialPageFileId] = useState(null);
   // 다른 참가자 커서 — { userId: { x, y, name, color, fileId, page, ts } }
   const [remoteCursors, setRemoteCursors] = useState({});
 
-  // 폭 변경 시 localStorage 저장 — 단, 이미지 확대 중에는 저장하지 않음 (원래 폭 유지)
+  // 폭 변경 시 localStorage 저장 — 자료(이미지/문서) 뷰 활성 중에는 저장하지 않음.
+  // 이유: 자료를 열면 패널이 자동 확장되는데(이미지 480px / 문서 820px), 그 값이
+  // localStorage에 저장되면 다음 회의 진입 시에도 확장된 상태로 시작 → 사용자가 원하지 않음.
+  // 자료 닫으면 widthBeforeZoom으로 복원되므로 그 시점의 폭이 정상적으로 저장됨.
   useEffect(() => {
-    if (zoomFile) return;
+    if (zoomFile || docFile) return;
     try { localStorage.setItem('meetflow_doc_panel_width', String(width)); } catch {}
-  }, [width, zoomFile]);
+  }, [width, zoomFile, docFile]);
 
   // 풀사이즈 뷰어(이미지 확대 or 문서 윈도우) 활성 여부를 부모에 전달 →
   // 활성 중에는 AI 자동 개입 중단 (호출한 경우에만 응답).
@@ -1185,6 +1340,43 @@ function DocumentPanel({
       fileType: file.type,
     });
   };
+
+  // PDF 안 하이퍼링크 클릭 → 인앱 iframe 풀스크린 뷰어로 오픈 + 라이브 broadcast
+  //   embeddableUrl() 로 알려진 호스트는 변환(/edit→/preview 등). 모르는 곳은 시도.
+  //   라이브 ON 참가자 모두에게 viewer:link-open 으로 동시 표시.
+  const handlePdfLinkClick = useCallback((href) => {
+    const conv = embeddableUrl(href);
+    const payload = {
+      url: conv.url,
+      original: conv.original,
+      embedSafe: conv.embedSafe,
+      title: getHostnameForDisplay(conv.url),
+    };
+    setIframeOpen(payload);
+    vbroadcast('viewer:link-open', payload);
+  }, [vbroadcast]);
+
+  // iframe 닫기 — 본인 화면 닫고 라이브 ON 모두에게 닫기 broadcast
+  const handleIframeClose = useCallback(() => {
+    setIframeOpen(null);
+    vbroadcast('viewer:link-close', {});
+  }, [vbroadcast]);
+
+  // iframe state 를 useViewerSync 에 동기화 — 라이브 OFF→ON 전환자에게 응답할 때 포함됨
+  //   파일 state 와 독립적으로 partial-merge (useViewerSync.setMyViewerState 참조)
+  useEffect(() => {
+    if (typeof setMyViewerState !== 'function') return;
+    setMyViewerState({
+      iframe: iframeOpen
+        ? {
+            url: iframeOpen.url,
+            original: iframeOpen.original,
+            embedSafe: iframeOpen.embedSafe,
+            title: iframeOpen.title,
+          }
+        : null,
+    });
+  }, [iframeOpen, setMyViewerState]);
 
   // 이미지 확대 닫기 → 원래 폭으로 복귀 + broadcast
   const closeZoom = () => {
@@ -1251,20 +1443,40 @@ function DocumentPanel({
       }));
     });
     // 동기화 응답 수신 (내가 라이브 OFF→ON 전환했을 때 다른 라이브 사용자가 보냄)
-    // → 자료 자동 오픈 + 해당 페이지로 점프
+    // → 자료 자동 오픈 + 해당 페이지로 점프 + iframe 도 동일하게 표시
     setViewerHandler('onState', async (payload) => {
-      if (!payload?.fileId) return;
-      // 이미 같은 파일을 보고 있으면 페이지만 점프
-      const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
-      if (currentId !== payload.fileId) {
-        const target = files.find((f) => (f.id || f.name) === payload.fileId);
-        if (!target) return;
-        await openFileLocal(target);
+      // 자료 동기화 (있는 경우)
+      if (payload?.fileId) {
+        const currentId = (zoomFile?.id || zoomFile?.name) || (docFile?.id || docFile?.name);
+        if (currentId !== payload.fileId) {
+          const target = files.find((f) => (f.id || f.name) === payload.fileId);
+          if (target) await openFileLocal(target);
+        }
+        if (typeof payload.page === 'number' && payload.page > 0) {
+          setPendingInitialPage(payload.page);
+          setPendingInitialPageFileId(payload.fileId);
+        }
       }
-      // 페이지 정보가 있으면 해당 페이지로 점프 신호 전달 (PDF만 의미 있음)
-      if (typeof payload.page === 'number' && payload.page > 0) {
-        setPendingInitialPage(payload.page);
+      // iframe 동기화 — 라이브 사용자가 PDF 안 링크 열어둔 상태였다면 같이 표시
+      if (payload?.iframe?.url) {
+        setIframeOpen({
+          ...payload.iframe,
+          openerName: payload._user?.name,
+        });
       }
+    });
+    // PDF 안 링크 → 인앱 iframe 오픈 (라이브 ON 만 적용 — 다른 사람이 의도치 않게 화면 끌리는 거 방지)
+    setViewerHandler('onLinkOpen', (payload, isFollowing) => {
+      if (!isFollowing) return;
+      if (!payload?.url) return;
+      setIframeOpen({
+        ...payload,
+        openerName: payload._user?.name,
+      });
+    });
+    setViewerHandler('onLinkClose', (_payload, isFollowing) => {
+      if (!isFollowing) return;
+      setIframeOpen(null);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, zoomFile, docFile, widthBeforeZoom]);
@@ -1318,16 +1530,31 @@ function DocumentPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, zoomFile, docFile]);
 
-  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-340px (채팅창 최소 340px 보장)
+  // 어떤 자료도 열려있지 않으면 stale pendingInitialPage 정리
+  // (자료를 닫은 후 다른 파일을 열 때 이전 동기화 응답이 잘못 적용되는 것 방지)
+  useEffect(() => {
+    if (!docFile && !zoomFile && (pendingInitialPage !== null || pendingInitialPageFileId !== null)) {
+      setPendingInitialPage(null);
+      setPendingInitialPageFileId(null);
+    }
+  }, [docFile, zoomFile, pendingInitialPage, pendingInitialPageFileId]);
+
+  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-CHAT_MIN_WIDTH (채팅창 모바일 최소 가로폭 보장)
   // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
   const onResizerDown = (e) => {
     e.preventDefault();
+    // 사용자가 의도적으로 드래그하면 collapsed 상태 해제 — drag 결과가 즉시 반영됨
+    if (userCollapsed) setUserCollapsed(false);
     const startX = e.clientX;
-    const startW = width;
+    // 화면에 실제로 그려진 폭부터 드래그 시작 — collapsed/clamp 상태에서 점프 방지
+    //   userCollapsed=true 면 baseWidth=MIN_WIDTH 였으므로 그 값에서, 아니면 effectiveWidth 그대로
+    const startW = userCollapsed ? MIN_WIDTH : effectiveWidth;
     const minWForDrag = (zoomFile || docFile) ? 480 : 80;
     const onMove = (ev) => {
       const dx = ev.clientX - startX;
-      const next = Math.max(minWForDrag, Math.min(window.innerWidth - 340, startW + dx));
+      // 우측 한계 — 화면 폭에서 채팅 최소폭(400)을 뺀 값까지만 자료 패널 확장 허용
+      const maxW = Math.max(minWForDrag, window.innerWidth - CHAT_MIN_WIDTH);
+      const next = Math.max(minWForDrag, Math.min(maxW, startW + dx));
       setWidth(next);
     };
     const onUp = () => {
@@ -1348,8 +1575,19 @@ function DocumentPanel({
   const isEmpty = files.length === 0;
   // 풀사이즈 뷰어(zoom/doc) 열려 있으면 state값이 작아도 480px 이상 보장
   const viewerActive = !!(zoomFile || docFile);
-  const baseWidth = isEmpty ? MIN_WIDTH : width;
-  const effectiveWidth = viewerActive ? Math.max(480, baseWidth) : baseWidth;
+  // 사용자가 헤더를 클릭하여 의도적으로 접은 상태 — width 보존, 렌더만 MIN_WIDTH 로 강제
+  // 다시 헤더(컴팩트 모드)를 클릭하면 false 로 돌아가 저장된 width 로 복원됨
+  const [userCollapsed, setUserCollapsed] = useState(false);
+  const baseWidth = (isEmpty || userCollapsed) ? MIN_WIDTH : width;
+  // 채팅 최소폭(400px) 보장을 위해 자료 패널 최대폭을 (윈도우 폭 - 400) 으로 클램프
+  // — 저장된 width 가 너무 크거나 창이 좁아진 경우에도 채팅이 잘리지 않음
+  const maxAllowed = Math.max(MIN_WIDTH, winW - CHAT_MIN_WIDTH);
+  // PDF 줌 시 콘텐츠 폭 + 좌우 여백/툴바 padding (~48px) 만큼 floor 로 추가 — 잘림 방지
+  const ZOOM_CHROME_PAD = 48;
+  const zoomFloor = zoomedContentW > 0 ? zoomedContentW + ZOOM_CHROME_PAD : 0;
+  const desiredBase = Math.max(baseWidth, zoomFloor);
+  const clampedBase = Math.min(desiredBase, maxAllowed);
+  const effectiveWidth = viewerActive ? Math.max(480, clampedBase) : clampedBase;
 
   // 항상 1열 유지 — 패널 폭이 커질수록 썸네일도 같이 커짐 (세로 리스트)
   const isCompact = effectiveWidth < 180; // 매우 좁을 때: 헤더/파일명 숨김
@@ -1371,24 +1609,52 @@ function DocumentPanel({
           '--panel-w': `${effectiveWidth}px`,
         }}
       >
-        {/* 헤더 — 컴팩트 모드에서는 심플하게. 모바일에서는 닫기 버튼 통합 */}
-        <div className={`border-b border-border-divider shrink-0 ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}>
+        {/* 헤더 — 컴팩트 모드에서는 심플하게. 모바일에서는 닫기 버튼 통합
+            확장 상태(헤더 배경 클릭) → 컴팩트로 접힘. 컴팩트 상태(헤더 배경 클릭) → 확장 복원.
+            단 풀사이즈 뷰어(zoom/doc) 활성 시에는 토글 비활성화 (의도치 않은 너비 변경 방지). */}
+        <div
+          onClick={() => {
+            if (viewerActive || isEmpty) return; // 풀스크린 / 빈 패널은 토글 무효
+            setUserCollapsed((c) => !c);
+          }}
+          className={`border-b border-border-divider shrink-0 select-none ${
+            (!viewerActive && !isEmpty) ? 'cursor-pointer hover:bg-bg-tertiary/30 transition-colors' : ''
+          } ${isCompact ? 'flex flex-col items-center py-3 gap-1' : 'flex items-center gap-2 px-3 py-3'}`}
+          title={viewerActive ? undefined : (isCompact ? '클릭하여 자료 패널 펼치기' : '클릭하여 자료 패널 접기')}
+        >
           <FolderOpen size={isCompact ? 14 : 14} className="text-brand-purple shrink-0" />
           {!isCompact && (
             <>
               <span className="text-sm font-semibold text-txt-primary">자료</span>
               <span className="text-[10px] text-txt-muted">{files.length}개</span>
-              {/* 모바일 드로어 닫기 — 헤더 우측 */}
-              {mobileOpen && (
-                <button
-                  onClick={onMobileClose}
-                  className="md:hidden ml-auto p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
-                  aria-label="자료 패널 닫기"
-                  title="닫기"
-                >
-                  <X size={18} />
-                </button>
-              )}
+              {/* 우측 액션 영역 — ml-auto 로 우측 정렬 */}
+              <div className="ml-auto flex items-center gap-1">
+                {/* 데스크톱 접기 버튼 — 풀스크린 뷰어 미활성 + 빈 패널 아님 */}
+                {!viewerActive && !isEmpty && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // 헤더 onClick 중복 호출 방지 — 자체 처리
+                      setUserCollapsed(true);
+                    }}
+                    className="hidden md:inline-flex p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                    aria-label="자료 패널 접기"
+                    title="자료 패널 접기"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                {/* 모바일 드로어 닫기 */}
+                {mobileOpen && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMobileClose?.(); }}
+                    className="md:hidden p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+                    aria-label="자료 패널 닫기"
+                    title="닫기"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
             </>
           )}
           {isCompact && files.length > 0 && (
@@ -1412,23 +1678,36 @@ function DocumentPanel({
             </div>
           ) : (
             <div className={`flex flex-col ${isCompact ? 'gap-1.5' : 'gap-2.5'}`}>
-              {files.map((f) => (
-                <FileThumbCard
-                  key={f.id || f.name}
-                  file={f}
-                  getUrl={getUrl}
-                  onClick={() => handleFileClick(f)}
-                  isImage={isImageFile(f)}
-                  compact={isCompact}
-                />
-              ))}
+              {files.map((f) => {
+                // 삭제 권한: 업로더 본인 / 회의 생성자 / 관리자
+                const canDelete = !!currentUserId && (
+                  f.uploaded_by === currentUserId ||
+                  meetingCreatedBy === currentUserId ||
+                  !!isAdmin
+                );
+                return (
+                  <FileThumbCard
+                    key={f.id || f.name}
+                    file={f}
+                    getUrl={getUrl}
+                    onClick={() => handleFileClick(f)}
+                    isImage={isImageFile(f)}
+                    compact={isCompact}
+                    canDelete={canDelete}
+                    onDelete={onDeleteFile}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* 이미지 확대 오버레이 — 패널 내부를 덮음. 패널은 자동으로 최대 폭까지 확장 */}
+        {/* 이미지 확대 오버레이 — 패널 내부를 덮음. 패널은 자동으로 최대 폭까지 확장.
+            key 에 fileId 부착 → 다른 파일로 전환 시 컴포넌트가 완전히 remount되어
+            이전 파일의 페이지/뷰어 상태가 새 파일에 영향을 주지 않음. */}
         {zoomFile && (
           <ImageZoomOverlay
+            key={`img:${zoomFile.id || zoomFile.name}`}
             file={zoomFile}
             url={zoomUrl}
             onClose={closeZoom}
@@ -1443,9 +1722,13 @@ function DocumentPanel({
           />
         )}
 
-        {/* 문서 확대 오버레이 — 이미지와 동일한 패턴으로 패널 내부를 덮음 (포털/모달 X) */}
+        {/* 문서 확대 오버레이 — 이미지와 동일한 패턴으로 패널 내부를 덮음 (포털/모달 X)
+            key 에 fileId 부착 → 다른 PDF로 전환 시 완전 remount.
+            initialPage(=pendingInitialPage) 는 onState 응답 직후 자동 reset 되지만,
+            방금 도착한 값이 새 파일과 매칭되지 않으면 적용되지 않도록 expectedFileId 도 함께 전달. */}
         {docFile && (
           <DocumentZoomOverlay
+            key={`doc:${docFile.id || docFile.name}`}
             file={docFile}
             url={docUrl}
             onClose={closeDoc}
@@ -1458,7 +1741,23 @@ function DocumentPanel({
             setViewerHandler={setViewerHandler}
             setMyViewerState={setMyViewerState}
             initialPage={pendingInitialPage}
-            onInitialPageApplied={() => setPendingInitialPage(null)}
+            initialPageFileId={pendingInitialPageFileId}
+            onInitialPageApplied={() => { setPendingInitialPage(null); setPendingInitialPageFileId(null); }}
+            onPdfLinkClick={handlePdfLinkClick}
+            onContentWidthChange={setZoomedContentW}
+          />
+        )}
+
+        {/* PDF 링크 클릭 → 인앱 풀스크린 iframe 뷰어 (라이브 동기화)
+            z-[100] 으로 DocumentZoomOverlay(z-20) 와 메시지 영역까지 모두 덮음 */}
+        {iframeOpen && (
+          <IframeOverlay
+            url={iframeOpen.url}
+            original={iframeOpen.original}
+            embedSafe={iframeOpen.embedSafe}
+            title={iframeOpen.title}
+            openerName={iframeOpen.openerName}
+            onClose={handleIframeClose}
           />
         )}
 
@@ -1551,8 +1850,43 @@ export default function MeetingRoom() {
   }, [materialViewerActive, setSidebarForceMinimized]);
   // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
   // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
-  const { files: meetingFiles, uploadFile: uploadMeetingFile, getDownloadUrl: getMeetingFileUrl } = useMeetingFiles(id);
+  const {
+    files: meetingFiles,
+    uploadFile: uploadMeetingFile,
+    getDownloadUrl: getMeetingFileUrl,
+    importFromGoogleDocs: importGoogleDocsFile,
+    deleteFile: deleteMeetingFile,
+  } = useMeetingFiles(id);
   const { messages, sendMessage } = useRealtimeMessages(id);
+
+  // ── LiveKit 음성 회의 ──
+  // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
+  const lk = useLiveKitVoice(id);
+
+  // ── milo-analyze warmup ping ──
+  // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
+  // 실패하며 브라우저에 CORS 에러로 보임. 회의방 진입 즉시 ping 보내 함수 깨움.
+  // 응답 기다리지 않음 (fire-and-forget). 실패해도 무시 (실제 AI 호출 시 retry 함).
+  useEffect(() => {
+    if (!id) return;
+    if (!import.meta.env.VITE_SUPABASE_URL) return;
+    supabase.functions.invoke('milo-analyze', { body: { ping: true } })
+      .catch(() => { /* 무시 */ });
+  }, [id]);
+
+  // 음성 참여 안내 모달 — 첫 참여 시 1회 (다시 안 보기 옵션)
+  const [voiceIntroOpen, setVoiceIntroOpen] = useState(false);
+  const handleVoiceJoinClick = useCallback(() => {
+    if (shouldShowVoiceIntro()) {
+      setVoiceIntroOpen(true);
+    } else {
+      lk.join();
+    }
+  }, [lk]);
+  const handleVoiceIntroConfirm = useCallback(() => {
+    setVoiceIntroOpen(false);
+    lk.join();
+  }, [lk]);
 
   // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
   const loadMyFeedbacks = useFeedbackStore((s) => s.loadMyFeedbacks);
@@ -1734,6 +2068,27 @@ export default function MeetingRoom() {
     }
   }, [uploadMeetingFile]);
 
+  // URL → PDF 변환 핸들러 (ChatArea의 "URL로 자료 추가" 폼에서 호출)
+  // Google Docs/Sheets/Slides URL을 서버측에서 PDF로 변환 후 Storage에 저장 → 일반 PDF처럼 동작.
+  const handleImportUrl = useCallback(async (url, options = {}) => {
+    return await importGoogleDocsFile({ url, ...options });
+  }, [importGoogleDocsFile]);
+
+  // 자료 삭제 핸들러 (DocumentPanel에서 X 버튼 클릭 시 호출)
+  // 권한: 업로더 / 회의 생성자 / 관리자만 — UI에서 이미 게이트하지만 DB RLS로 한 번 더 확인됨.
+  const handleDeleteFile = useCallback(async (file) => {
+    if (!file?.id) return;
+    const ok = window.confirm(`"${file.name}" 자료를 정말 삭제할까요?\n삭제하면 복구할 수 없어요.`);
+    if (!ok) return;
+    try {
+      await deleteMeetingFile(file);
+      addToast(`"${file.name}" 삭제되었습니다`, 'success', 2500);
+    } catch (err) {
+      console.error('[handleDeleteFile] 실패:', err);
+      addToast(err?.message || '자료 삭제에 실패했습니다', 'error', 4000);
+    }
+  }, [deleteMeetingFile, addToast]);
+
   // 참가자 재입장 공지 — 이전에 나간 적이 있다면 자동으로 "다시 입장" 시스템 메시지 전송.
   //   - 요청자는 제외 (요청자는 "나가기" 개념이 없음)
   //   - 메시지 히스토리에서 leave/rejoin 카운트 비교로 판단
@@ -1909,37 +2264,47 @@ export default function MeetingRoom() {
         document.body
       )}
 
-      {/* ═══ 헤더 ═══ */}
-      <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {/* 모바일 햄버거 — 사이드바 드로어 토글 (다른 페이지로 이동) */}
+      {/* ═══ 헤더 ═══ — 한 줄. 모바일은 모든 액션을 32px 아이콘 버튼으로 통일해 컴팩트하게 */}
+      <div className="flex items-center justify-between px-2.5 md:px-6 py-2 md:py-4 gap-2 md:gap-3 border-b border-border-divider">
+        {/* 좌측: 메뉴/닫기 + 제목 + 상태 dot */}
+        <div className="flex items-center gap-1.5 md:gap-3 min-w-0 flex-1">
+          {/* 모바일 햄버거 — 사이드바 드로어 토글 */}
           <button
             onClick={() => setSidebarOpen?.(true)}
-            className="md:hidden p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
+            className="md:hidden inline-flex items-center justify-center w-8 h-8 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
             aria-label="메뉴 열기"
             title="메뉴"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
-          <button onClick={() => safeNavigate('/meetings')} className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0">
+          <button
+            onClick={() => safeNavigate('/meetings')}
+            className="hidden md:inline-flex p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
+            aria-label="회의 목록으로"
+            title="회의 목록"
+          >
             <X size={18} />
           </button>
-          <h1 className="text-base md:text-[22px] font-medium text-txt-primary tracking-tight truncate">
+          <h1 className="text-[14px] md:text-[22px] font-medium text-txt-primary tracking-tight truncate min-w-0">
             {meeting.title}
           </h1>
           {meeting.status === 'active' && (
-            <Badge variant="success">
-              <span className="w-3 h-3 rounded-full bg-status-error pulse-dot mr-1" />
-              <span className="hidden md:inline">진행 중</span>
-            </Badge>
+            <>
+              {/* 모바일: 작은 dot 만 */}
+              <span
+                className="md:hidden shrink-0 w-2 h-2 rounded-full bg-status-error pulse-dot"
+                title="진행 중"
+              />
+              {/* 데스크톱: dot + "진행 중" 텍스트 — 제목과 충분히 떨어뜨려 가독성 ↑ */}
+              <span className="hidden md:inline-flex items-center gap-1.5 shrink-0 md:ml-4">
+                <span className="w-2.5 h-2.5 rounded-full bg-status-error pulse-dot" />
+                <span className="text-[11px] font-semibold text-status-success">진행 중</span>
+              </span>
+            </>
           )}
-        </div>
-
-        {/* 우측 액션: 자동개입 토글 + 회의 종료 */}
-        <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          {/* 자동개입 토글 — 회의 요청자/관리자만 제어 가능 */}
-          <div className="hidden md:flex items-center gap-2">
-            <span className={`text-[10px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>자동개입</span>
+          {/* AI 자동 개입 토글 (데스크톱) — 진행중 우측에 충분한 간격 */}
+          <div className="hidden md:flex items-center gap-2 ml-6 shrink-0">
+            <span className={`text-[11px] font-medium ${canToggleAutoIntervene ? 'text-txt-muted' : 'text-txt-muted/60'}`}>AI 자동 개입</span>
             <button
               onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
               disabled={!canToggleAutoIntervene}
@@ -1955,57 +2320,90 @@ export default function MeetingRoom() {
               <span className={`absolute top-1/2 -translate-y-1/2 ${aiAutoIntervene ? 'left-[18px]' : 'left-[3px]'} w-3.5 h-3.5 rounded-full bg-white transition-all shadow-sm`} />
             </button>
           </div>
+        </div>
 
-          {/* 모바일 자료 버튼 — 자료 패널 드로어 열기 */}
+        {/* 우측 액션: 모바일 = 아이콘 전용 32px, 데스크톱 = 라벨 동반 */}
+        <div className="flex items-center gap-1 md:gap-3 shrink-0">
+          {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출
+              모바일은 아이콘 전용, 데스크톱은 라벨 포함 */}
+          {meeting.status === 'active' && (
+            <>
+              <div className="md:hidden">
+                <VoiceJoinButton
+                  connected={lk.connected}
+                  connecting={lk.connecting}
+                  error={lk.error}
+                  participantCount={lk.participants.length}
+                  onJoin={handleVoiceJoinClick}
+                  onLeave={lk.leave}
+                  iconOnly
+                />
+              </div>
+              <div className="hidden md:block">
+                <VoiceJoinButton
+                  connected={lk.connected}
+                  connecting={lk.connecting}
+                  error={lk.error}
+                  participantCount={lk.participants.length}
+                  onJoin={handleVoiceJoinClick}
+                  onLeave={lk.leave}
+                  size="sm"
+                />
+              </div>
+            </>
+          )}
+
+          {/* 모바일 자료 버튼 — 32×32 아이콘 + 카운트 뱃지 */}
           <button
             onClick={() => setMobileDocOpen(true)}
-            className="md:hidden relative p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            className="md:hidden inline-flex items-center justify-center w-8 h-8 relative rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
             aria-label="자료 보기"
             title="자료"
           >
-            <FolderOpen size={18} />
+            <FolderOpen size={16} />
             {meetingFiles.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-brand-purple leading-none">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-brand-purple leading-none">
                 {meetingFiles.length}
               </span>
             )}
           </button>
 
-          {/* 모바일 자동개입 — 회의 요청자/관리자만 제어 가능 */}
+          {/* 모바일 자동개입 — 32×32 아이콘 (Zap/ZapOff) */}
           <button
             onClick={() => canToggleAutoIntervene && setAiAutoIntervene((v) => !v)}
             disabled={!canToggleAutoIntervene}
-            className={`md:hidden p-1.5 rounded-md transition-colors ${aiAutoIntervene ? 'text-brand-purple bg-brand-purple/10' : 'text-txt-muted'} ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
+            className={`md:hidden inline-flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+              aiAutoIntervene
+                ? 'text-brand-purple bg-brand-purple/10 hover:bg-brand-purple/15'
+                : 'text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary'
+            } ${canToggleAutoIntervene ? '' : 'opacity-50 cursor-not-allowed'}`}
             title={
               canToggleAutoIntervene
                 ? (aiAutoIntervene ? 'AI 자동 개입 ON' : 'AI 직접 호출만')
                 : '회의 요청자 또는 관리자만 변경할 수 있습니다'
             }
           >
-            {aiAutoIntervene ? <Zap size={18} /> : <ZapOff size={18} />}
+            {aiAutoIntervene ? <Zap size={16} /> : <ZapOff size={16} />}
           </button>
 
-          {/* 요청자 → "회의 종료" (전체 종료 + 회의록 작성 안내) /
-              참가자 → "나가기" (즉시 퇴장, 확인창 없음) */}
+          {/* 회의 종료 / 나가기 — 모바일 아이콘 전용, 데스크톱 라벨 포함 */}
           {isCreator ? (
             <button
               onClick={handleEndClick}
-              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs md:text-sm font-medium hover:bg-status-error/20 transition-colors"
+              className="inline-flex items-center justify-center md:gap-2 w-8 h-8 md:w-auto md:h-auto md:px-4 md:py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-sm font-medium hover:bg-status-error/20 transition-colors"
               title="회의를 종료하고 회의록을 생성합니다"
             >
               <Square size={16} strokeWidth={2.4} />
               <span className="hidden md:inline">회의 종료</span>
-              <span className="md:hidden">종료</span>
             </button>
           ) : (
             <button
               onClick={handleLeaveMeeting}
-              className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-md bg-bg-tertiary border border-border-default text-txt-secondary text-xs md:text-sm font-medium hover:text-txt-primary hover:border-border-focus transition-colors"
+              className="inline-flex items-center justify-center md:gap-2 w-8 h-8 md:w-auto md:h-auto md:px-4 md:py-2 rounded-md bg-bg-tertiary border border-border-default text-txt-secondary text-sm font-medium hover:text-txt-primary hover:border-border-focus transition-colors"
               title="회의에서 나갑니다 (회의는 계속 진행)"
             >
               <LogOut size={16} strokeWidth={2.4} />
               <span className="hidden md:inline">나가기</span>
-              <span className="md:hidden">나가기</span>
             </button>
           )}
         </div>
@@ -2013,6 +2411,27 @@ export default function MeetingRoom() {
 
       {/* 어젠다 바 */}
       <AgendaBar agendas={meeting.agendas || []} activeId={currentAgenda?.id} onSelect={setActiveAgendaId} />
+
+      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 모드 라디오 패널 */}
+      {lk.connected && (
+        <VoicePanel
+          participants={lk.participants}
+          activeSpeakers={lk.activeSpeakers}
+          muted={lk.muted}
+          currentUserId={user?.id}
+          voiceMode={lk.voiceMode}
+          onChangeVoiceMode={lk.setVoiceMode}
+          pttPressed={lk.pttPressed}
+        />
+      )}
+
+      {/* 음성 참여 첫 클릭 시 안내 모달 */}
+      {voiceIntroOpen && (
+        <VoiceJoinIntroModal
+          onConfirm={handleVoiceIntroConfirm}
+          onCancel={() => setVoiceIntroOpen(false)}
+        />
+      )}
 
       {/* ═══ 메인: 자료 패널 + 채팅 ═══ */}
       <div className="flex flex-1 overflow-hidden">
@@ -2025,6 +2444,10 @@ export default function MeetingRoom() {
           onViewerChange={setMaterialViewerActive}
           mobileOpen={mobileDocOpen}
           onMobileClose={() => setMobileDocOpen(false)}
+          currentUserId={user?.id}
+          isAdmin={user?.role === 'admin'}
+          meetingCreatedBy={meeting?.created_by}
+          onDeleteFile={handleDeleteFile}
         />
 
         {/* 채팅 영역 */}
@@ -2034,8 +2457,14 @@ export default function MeetingRoom() {
           disabled={meeting.status === 'completed'}
           aiThinking={aiThinking}
           onFileUpload={handleFileUpload}
+          onImportUrl={handleImportUrl}
           autoIntervene={aiAutoIntervene}
           aiError={aiError}
+          // LiveKit 음성 회의 통합 — 참여 중일 때 큰 마이크 버튼이 mute 토글로 동작
+          voiceConnected={lk.connected}
+          voiceMuted={lk.muted}
+          onVoiceToggleMute={lk.toggleMute}
+          voiceLocalStream={lk.localStream}
         />
       </div>
     </div>

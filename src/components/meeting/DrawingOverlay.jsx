@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand, Minus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -111,7 +111,56 @@ export default function DrawingOverlay({
   const [redoStack, setRedoStack] = useState([]);
   const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
   const [eraserHoverId, setEraserHoverId] = useState(null);  // 지우개 모드 hover — 해당 stroke 하이라이트
-  const [tool, setTool] = useState('pen');  // 'pen' | 'rect' | null — 그리기 도구 (null이면 비활성, pan 가능)
+  const [tool, setTool] = useState('rect');  // 'pen' | 'rect' | null — 그리기 도구 (기본 'rect' 사각형, null이면 비활성/pan 가능)
+  // 자료 위 메모 카드 최소화 상태 — Set<key> (key = msgId 또는 strokeId-i)
+  //   최소화 시 카드 숨기고 작은 프로필 아바타만 표시. 클릭으로 다시 펼침.
+  const [minimizedAnns, setMinimizedAnns] = useState(() => new Set());
+  const toggleMinAnn = useCallback((key) => {
+    setMinimizedAnns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // 본인 메모 삭제 — confirm 후 messages 테이블에서 제거 → Realtime 으로 모두 반영
+  // RLS 가 user_id = auth.uid() 검증하므로 본인 메시지만 통과.
+  // 사전 SELECT 검증은 RLS 차단 케이스에서 오히려 차단을 일으키므로 제거.
+  // 직접 DELETE 시도 → RLS 가 0 rows 반환 시 실패 안내.
+  const handleDeleteAnnotation = useCallback(async (msgId) => {
+    if (!msgId) return;
+    if (!window.confirm('이 메모를 삭제하시겠습니까?\n채팅에서도 같이 사라집니다.')) return;
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', msgId)
+        .select();
+      if (error) {
+        console.error('[DrawingOverlay] 메모 삭제 실패:', error);
+        alert('삭제 실패: ' + (error.message || '알 수 없는 오류'));
+        return;
+      }
+      if (!data || data.length === 0) {
+        // 0 rows 케이스 — 두 시나리오:
+        //   (a) RLS 가 차단 (다른 사용자/관리자만 가능 메시지)
+        //   (b) DB 에 행이 없음 (ghost — broadcast/optimistic 로 로컬에만 존재)
+        // 어느 쪽이든 사용자 입장에선 "메모 사라지게" 가 자연스러운 동작 →
+        // 로컬 state 에서 강제 제거. 서버 이벤트로 다른 참가자 화면엔 영향 없음
+        // (그들의 화면엔 DB 기준 메시지가 있다면 여전히 보임).
+        console.warn('[DrawingOverlay] 메모 삭제 영향받은 행 0 — 로컬 정리:', msgId);
+        try {
+          window.dispatchEvent(new CustomEvent('meetflow:remove-message', { detail: { id: msgId } }));
+        } catch {}
+        return;
+      }
+      console.log('[DrawingOverlay] 메모 삭제 성공:', msgId);
+    } catch (e) {
+      console.error('[DrawingOverlay] 메모 삭제 예외:', e);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  }, [user?.id]);
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
     if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
@@ -803,6 +852,7 @@ export default function DrawingOverlay({
           text: stripped,
           authorName: m.user?.name || '사용자',
           authorColor: m.user?.avatar_color || m.user?.color || '#723CEB',
+          authorId: m.user_id || m.user?.id || null,
           createdAt: m.created_at,
           msgId: m.id,
         });
@@ -1056,33 +1106,94 @@ export default function DrawingOverlay({
 
           {m.annotations.length > 0 && (
             <div
-              className={`absolute top-[calc(100%+4px)] flex flex-col gap-1 max-w-[220px] ${
-                // 사각형: 아바타 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
-                // 펜: 기존대로 아바타 중심 정렬
+              className={`absolute top-[calc(100%+6px)] flex flex-col items-start gap-1.5 max-w-[260px] ${
+                // 사각형: 마커 왼쪽 모서리 정렬 / 펜: 마커 중심 정렬
                 isRect ? 'left-0' : 'left-1/2 -translate-x-1/2'
               }`}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              {m.annotations.slice(-3).map((a, i) => (
-                <div
-                  key={a.msgId || i}
-                  className="rounded-md bg-white/95 border text-[11px] text-[#222] px-2 py-1 shadow-md backdrop-blur-sm w-fit max-w-full"
-                  style={{ borderColor: m.strokeColor }}
-                  title={`${a.authorName} · ${a.text}`}
-                >
-                  <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5 whitespace-nowrap" style={{ color: m.strokeColor }}>
-                    <span
-                      className="w-3 h-3 rounded-full text-white flex items-center justify-center text-[8px] font-bold"
-                      style={{ backgroundColor: a.authorColor }}
+              {m.annotations.slice(-3).map((a, i) => {
+                const annKey = a.msgId || `${m.strokes?.[0]?.id || 'm'}-${i}`;
+                const isMin = minimizedAnns.has(annKey);
+
+                // 최소화 상태 — 작은 프로필 아바타만. 클릭으로 펼침.
+                if (isMin) {
+                  return (
+                    <button
+                      key={annKey}
+                      type="button"
+                      onClick={() => toggleMinAnn(annKey)}
+                      className="w-7 h-7 rounded-full text-white flex items-center justify-center text-[11px] font-bold shadow-md hover:scale-110 transition-transform"
+                      style={{
+                        backgroundColor: a.authorColor,
+                        boxShadow: `0 0 0 2px white, 0 0 0 3px ${m.strokeColor}, 0 2px 4px rgba(0,0,0,0.3)`,
+                      }}
+                      title={`${a.authorName} · ${a.text} (클릭으로 펼치기)`}
+                      aria-label="메모 펼치기"
                     >
                       {(a.authorName || '?')[0]}
-                    </span>
-                    {a.authorName}
+                    </button>
+                  );
+                }
+
+                // 펼친 상태 — 풀 카드 (w-max: 텍스트 자연 폭, max-w-[260px] 로 캡 → wrap)
+                //   본인 메시지면 우상단 [삭제] [최소화] 두 버튼, 아니면 [최소화] 만
+                const isMine = a.authorId && user?.id && a.authorId === user.id;
+                return (
+                  <div
+                    key={annKey}
+                    className={`relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 shadow-md backdrop-blur-sm w-max max-w-[260px] ${
+                      isMine ? 'pr-12' : 'pr-7'
+                    }`}
+                    style={{ borderColor: m.strokeColor }}
+                    title={`${a.authorName} · ${a.text}`}
+                  >
+                    {/* 헤더: 아바타 + 이름 */}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span
+                        className="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold shrink-0"
+                        style={{ backgroundColor: a.authorColor }}
+                      >
+                        {(a.authorName || '?')[0]}
+                      </span>
+                      <span
+                        className="text-[10px] font-semibold truncate"
+                        style={{ color: m.strokeColor }}
+                      >
+                        {a.authorName}
+                      </span>
+                    </div>
+                    {/* 본문 */}
+                    <p className="leading-relaxed break-words whitespace-pre-wrap text-[12px]">
+                      {a.text}
+                    </p>
+                    {/* 우상단 컨트롤 — [삭제(본인만)] [최소화] */}
+                    <div className="absolute top-1 right-1 flex items-center gap-0.5">
+                      {isMine && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAnnotation(a.msgId)}
+                          className="w-4 h-4 rounded flex items-center justify-center text-[#999] hover:text-status-error hover:bg-status-error/10 transition-colors"
+                          aria-label="메모 삭제"
+                          title="메모 삭제 (채팅에서도 사라짐)"
+                        >
+                          <Trash2 size={10} strokeWidth={2.4} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleMinAnn(annKey)}
+                        className="w-4 h-4 rounded flex items-center justify-center text-[#666] hover:text-[#222] hover:bg-black/5 transition-colors"
+                        aria-label="최소화"
+                        title="최소화"
+                      >
+                        <Minus size={11} strokeWidth={2.4} />
+                      </button>
+                    </div>
                   </div>
-                  <p className="leading-snug break-words line-clamp-3">{a.text}</p>
-                </div>
-              ))}
+                );
+              })}
               {m.annotations.length > 3 && (
                 <span className="text-[9px] text-center text-white bg-black/60 rounded px-1">
                   외 {m.annotations.length - 3}개
@@ -1100,8 +1211,8 @@ export default function DrawingOverlay({
           <div
             className={
               toolbarContainer
-                ? "inline-flex items-center gap-0.5 md:gap-1 px-1 md:px-2 py-1 md:py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
-                : "absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+                ? "inline-flex items-center gap-0.5 md:gap-1 px-1 md:px-2 py-1 md:py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-md"
+                : "absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur-sm border border-[#d0d0d0] shadow-md"
             }
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
@@ -1146,9 +1257,9 @@ export default function DrawingOverlay({
             {/* 도구 비활성(pan 모드) → 손 아이콘 1개. 도구 활성 → 컬러 3개 */}
             {tool === null && !eraserMode ? (
               <button
-                onClick={() => setTool('pen')}
+                onClick={() => setTool('rect')}
                 className={`${toolbarCommonCls} text-white bg-brand-purple hover:bg-brand-purple/90`}
-                title="이동 모드 (드래그로 자료 이동) — 클릭하면 연필 도구로 복귀"
+                title="이동 모드 (드래그로 자료 이동) — 클릭하면 사각형 도구로 복귀"
                 aria-label="이동 모드"
                 aria-pressed="true"
               >
@@ -1161,8 +1272,8 @@ export default function DrawingOverlay({
                   onClick={() => {
                     setColor(c.value);
                     if (eraserMode) setEraserMode(false);
-                    // 도구가 비활성(pan)일 때 컬러 클릭 → 연필 활성화 (Hand로 안 빠지게)
-                    if (tool === null) setTool('pen');
+                    // 도구가 비활성(pan)일 때 컬러 클릭 → 사각형 활성화 (기본 도구 일관성)
+                    if (tool === null) setTool('rect');
                   }}
                   className={`${toolbarCommonCls} border-2 ${
                     color === c.value && !eraserMode ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'

@@ -79,7 +79,7 @@ function extractActionItems(content) {
   return items;
 }
 
-export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, reactions = {}, readonly = false }) {
+export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, onMention, reactions = {}, readonly = false }) {
   const [copied, setCopied] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
   const [quoteExpanded, setQuoteExpanded] = useState(false);
@@ -157,22 +157,39 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
   const msgReactions = reactions[message.id] || {};
   const hasReactions = Object.values(msgReactions).some((v) => v?.count > 0);
 
+  // 아바타 엘리먼트 (헤더 인라인용) — AI 는 MiloAvatar, 사람은 클릭 가능한 Avatar
+  const avatarEl = isAi ? (
+    <MiloAvatar employeeId={employeeId} size="sm" showTooltip />
+  ) : (
+    <button
+      type="button"
+      onClick={() => {
+        if (isMine || readonly) return;
+        onMention?.(senderName);
+      }}
+      disabled={isMine || readonly}
+      className={`shrink-0 rounded-full transition-transform ${
+        isMine || readonly
+          ? 'cursor-default'
+          : 'hover:scale-110 cursor-pointer'
+      }`}
+      title={isMine ? '나' : `@${senderName} 멘션하기`}
+      aria-label={isMine ? '내 아바타' : `${senderName}님 멘션`}
+    >
+      <Avatar name={senderName} color={senderColor} size="sm" />
+    </button>
+  );
+
   return (
     <div
-      className={`group/bubble flex gap-3 fade-in ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`group/bubble flex flex-col fade-in ${isMine ? 'items-end' : 'items-start'}`}
       onMouseLeave={() => setReactOpen(false)}
     >
-      {/* 아바타 */}
-      {isAi ? (
-        <MiloAvatar employeeId={employeeId} size="md" showTooltip />
-      ) : (
-        <Avatar name={senderName} color={senderColor} size="md" />
-      )}
-
-      {/* 메시지 컨테이너 */}
-      <div className={`flex flex-col max-w-[75%] ${isMine ? 'items-end' : 'items-start'}`}>
-        {/* 발신자 정보 — (사람) 리액션 있으면 리액션 행에 통합되므로 숨김. AI는 리액션 비활성. */}
+      {/* 메시지 컨테이너 — 아바타가 이름 옆 인라인으로 배치됨 */}
+      <div className={`flex flex-col max-w-[85%] ${isMine ? 'items-end' : 'items-start'}`}>
+        {/* 헤더: [아바타] [이름] [AI 배지] [시간] — 사람 리액션 있으면 리액션 행에 통합되므로 숨김 */}
         <div className={`flex items-center gap-2 mb-1 text-xs ${isMine ? 'flex-row-reverse' : 'flex-row'} ${(hasReactions && !isAi) ? 'hidden' : ''}`}>
+          {avatarEl}
           <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
             {senderName}
           </span>
@@ -189,9 +206,10 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
         {/* 말풍선 */}
         <div className="relative">
-          {/* 리액션 표시 — 이름+AI+시간 + 리액션 한 줄 (AI 메시지는 리액션 비활성) */}
+          {/* 리액션 표시 — 아바타+이름+시간 + 리액션 한 줄 (AI 메시지는 리액션 비활성) */}
           {hasReactions && !isAi && (
             <div className={`flex items-center gap-2 mb-1.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+              {avatarEl}
               <span className={`font-semibold text-[13px] ${isAi ? 'text-brand-purple-deep' : 'text-txt-secondary'}`}>
                 {senderName}
               </span>
@@ -224,7 +242,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
 
           <div
             onClick={readonly ? undefined : handleQuote}
-            className={`relative px-4 py-3 text-sm leading-relaxed ${readonly ? '' : 'cursor-pointer'} ${
+            className={`relative px-4 py-3 text-sm leading-relaxed break-words [overflow-wrap:anywhere] ${readonly ? '' : 'cursor-pointer'} ${
               isQuestion
                 ? 'text-txt-primary bg-brand-orange/10 border border-brand-orange/25 rounded-xl rounded-tl-sm hover:border-brand-orange/40'
                 : isAi

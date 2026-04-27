@@ -3,7 +3,15 @@ import { Slack, Globe } from 'lucide-react';
 import MiloAvatar from '@/components/milo/MiloAvatar';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 
-export default function ParticipantList({ participants = [], activeAiEmployees = [], autoIntervene = true, onToggleAutoIntervene }) {
+export default function ParticipantList({
+  participants = [],
+  activeAiEmployees = [],
+  autoIntervene = true,
+  onToggleAutoIntervene,
+  // LiveKit 음성 회의 활성 화자 — Set<string> identity (=user.id)
+  // 일치 시 아바타 외곽에 보라 펄스 ring 표시
+  activeSpeakerIds = null,
+}) {
   // Milo는 항상 표시, 나머지 AI는 응답한 것만
   const aiIds = ['milo', ...activeAiEmployees.filter((id) => id !== 'milo')];
   const uniqueAiIds = [...new Set(aiIds)];
@@ -66,18 +74,28 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
         })}
 
         {/* 인간 참여자 */}
-        {participants.map((p) => (
+        {participants.map((p) => {
+          const isSpeaking = activeSpeakerIds?.has?.(p.id);
+          return (
           <div
             key={p.id}
             className="group relative flex items-center gap-3 p-1.5 lg:p-2 rounded-md hover:bg-bg-tertiary transition-colors justify-center lg:justify-start"
-            title={p.name}
+            title={p.name + (isSpeaking ? ' · 발언 중' : '')}
           >
-            <Avatar
-              name={p.name}
-              color={p.color}
-              size="sm"
-              online={p.online !== false}
-            />
+            <div className="relative shrink-0">
+              <Avatar
+                name={p.name}
+                color={p.color}
+                size="sm"
+                online={p.online !== false}
+              />
+              {isSpeaking && (
+                <span
+                  className="absolute inset-0 rounded-full ring-2 ring-brand-purple animate-pulse pointer-events-none"
+                  aria-hidden
+                />
+              )}
+            </div>
             <div className="flex-1 min-w-0 hidden lg:block">
               <p className="text-sm font-medium text-txt-primary truncate">
                 {p.name}
@@ -104,7 +122,8 @@ export default function ParticipantList({ participants = [], activeAiEmployees =
               {p.name}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </aside>
   );

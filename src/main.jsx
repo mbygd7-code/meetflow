@@ -80,11 +80,38 @@ import './index.css';
   });
 })();
 
+// 브라우저 전역 줌 차단 — Ctrl/Cmd + 휠/+/-/0 로 페이지 자체가 확대되는 현상 방지.
+//   PDF 뷰어 내부([data-allow-zoom-wheel]) 에서는 자체 PDF 줌으로 동작해야 하므로 통과시킴.
+//   (PdfViewer 내부 wheel 리스너가 자체적으로 stopPropagation + preventDefault 처리)
+(function initGlobalZoomBlock() {
+  const isInsideAllowZoom = (target) => {
+    try { return target?.closest?.('[data-allow-zoom-wheel]'); } catch { return false; }
+  };
+  // Ctrl/Cmd + 휠 → 브라우저 줌 차단 (PDF 영역만 통과)
+  window.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (isInsideAllowZoom(e.target)) return; // PDF 자체 줌 허용
+    e.preventDefault();
+  }, { passive: false, capture: true });
+  // Ctrl/Cmd + +/-/0 키보드 줌 차단 (전역 — PDF 도 키보드 줌은 사용 안 함)
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key;
+    if (k === '+' || k === '-' || k === '=' || k === '0') {
+      // 입력창에서 텍스트 편집 단축키와 충돌 안 함 (해당 키들은 편집용 단축키 아님)
+      e.preventDefault();
+    }
+  }, { capture: true });
+})();
+
 // StrictMode 비활성화 — Realtime 구독 + useMilo 이중 실행 방지
 // (StrictMode는 useEffect를 의도적으로 2번 실행하여 사이드이펙트 문제를 찾는데,
 // Supabase Realtime과 충돌하여 메시지 중복 렌더링 유발)
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>
+  // future flag 옵트인 — v7 동작 미리 적용해 경고 제거 + v7 마이그레이션 부담 감소
+  //   v7_startTransition: 상태 업데이트를 React.startTransition 으로 래핑 (UI 블로킹 ↓)
+  //   v7_relativeSplatPath: Splat 라우트 안 상대 경로 해석을 v7 방식으로
+  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
     <App />
   </BrowserRouter>
 );

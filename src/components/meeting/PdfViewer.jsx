@@ -37,6 +37,11 @@ export default function PdfViewer({
   // 라이브 따라가기 ON 시 — 드로잉 오버레이를 readOnly 로 자동 마운트하여 다른 참가자 스트로크 표시
   // (연필 버튼은 별도로 drawingActive 를 켜야 툴바 + 편집 가능)
   following = false,
+  // PDF 안 하이퍼링크 클릭 시 호출 — 부모가 인앱 iframe 오픈/broadcast 처리.
+  //   미지정 시 기본 동작(새 탭) 유지.
+  onLinkClick,
+  // 줌/페이지 폭 변경 시 호출 — 부모가 자료 섹션을 함께 키울 수 있도록 (확대 시 잘림 방지)
+  onContentWidthChange,
 }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -50,6 +55,60 @@ export default function PdfViewer({
   const pageWrapRef = useRef(null);
   const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
   const cursorThrottleRef = useRef(0);
+
+  // onLinkClick stale closure 방지 — ref 로 최신 콜백 보관
+  const onLinkClickRef = useRef(onLinkClick);
+  onLinkClickRef.current = onLinkClick;
+
+  // PDF annotation 링크 — 클릭 인터셉트(인앱 iframe 오픈) + 폴백 target 설정.
+  //   부모가 onLinkClick 을 제공하면: 클릭 시 preventDefault 후 콜백 호출 (인앱 iframe).
+  //   미제공 시: 기본 새 탭 동작 (URL별 안정된 target 이름으로 재사용 동탭).
+  // react-pdf 가 매 페이지 렌더 시 annotation 을 새로 그리므로 매 렌더 후
+  // 직접 anchor 속성을 갱신해 줘야 함. MutationObserver 로 annotation layer 변화 감지.
+  useEffect(() => {
+    const el = pageWrapRef.current;
+    if (!el) return;
+
+    // 클릭 인터셉트 핸들러 (캡처 단계로 등록해 react-pdf 내부 핸들러보다 먼저 실행)
+    const handleAnchorClick = (e) => {
+      const a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      // 본 PDF annotation layer 안인지 재확인
+      if (!el.contains(a)) return;
+      const href = a.getAttribute('href') || '';
+      if (!/^https?:/i.test(href)) return;
+      const cb = onLinkClickRef.current;
+      if (typeof cb !== 'function') return; // 콜백 미제공 → 기본 새 탭 동작 그대로
+      e.preventDefault();
+      e.stopPropagation();
+      cb(href);
+    };
+
+    const updateLinkTargets = () => {
+      const anchors = el.querySelectorAll('.react-pdf__Page__annotations a, .annotationLayer a');
+      anchors.forEach((a) => {
+        const href = a.getAttribute('href') || '';
+        if (!/^https?:/i.test(href)) return;
+        // 폴백용: URL별 안정된 target 이름 (콜백 없을 때만 의미)
+        const targetName = `meetflow_pdflink_${href.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 100)}`;
+        if (a.target !== targetName) a.target = targetName;
+        a.rel = 'noopener noreferrer';
+      });
+    };
+    updateLinkTargets();
+
+    // 클릭 인터셉터 — 캡처 단계로 등록 (annotation 이 매 렌더 새로 생성되어도
+    //   부모 컨테이너에서 위임으로 잡으므로 한 번만 부착하면 됨)
+    el.addEventListener('click', handleAnchorClick, true);
+
+    // annotation 노드는 페이지 변경/리사이즈 시 react-pdf 가 재생성 → target 갱신 위해 감시
+    const mo = new MutationObserver(updateLinkTargets);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => {
+      mo.disconnect();
+      el.removeEventListener('click', handleAnchorClick, true);
+    };
+  }, [pageNumber, fitWidth, zoom]);
 
   useEffect(() => {
     const el = pageWrapRef.current;
@@ -210,24 +269,28 @@ export default function PdfViewer({
   }, []);
 
   // ResizeObserver로 컨테이너 크기 변화 감지 → fit width 계산
-  // 최적화: rAF 디바운스 + 10px 단위 스냅으로 PDF canvas 재렌더 최소화
+  //   문제: 모바일에서 100% (zoom=1) 일 때 page 가 세로로 넘쳐 vertical scrollbar 가 나타나면
+  //         clientWidth 가 줄어 fitWidth 가 작아짐 → page 도 작아져 scrollbar 사라짐 → 반복.
+  //         또 height-based fit (ch * pageAspect) 이 vertical scroll 등장/사라짐과 함께 진동.
+  //   해결: ① height-based fit 제거 (세로 넘치면 정상적으로 스크롤). ② 히스테리시스: 새 폭이
+  //         현재 폭과 30px 이상 차이날 때만 갱신 (스크롤바 폭 ~15px 진동 흡수). ③ 20px 스냅.
   useEffect(() => {
     if (!scrollContainerRef.current) return;
     const el = scrollContainerRef.current;
     let rafId = null;
     const computeFit = () => {
-      if (rafId) return; // 이미 예약됨
+      if (rafId) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const cw = el.clientWidth - 16;
-        const ch = el.clientHeight - 16;
-        if (cw <= 0 || ch <= 0) return;
-        const byHeight = ch * pageAspect;
-        const byWidth = cw;
-        const fit = Math.max(80, Math.min(byWidth, byHeight));
-        // 20px 단위 스냅 — 스크롤바 폭(~15px) 변화는 흡수, 의미 있는 폭 변화만 반영
+        if (cw <= 0) return;
+        const fit = Math.max(80, cw); // 세로 fit 제외 — width 기준만 (수직 스크롤은 자연스러운 동작)
         const snapped = Math.round(fit / 20) * 20;
-        setFitWidth((prev) => (prev === snapped ? prev : snapped));
+        setFitWidth((prev) => {
+          // 히스테리시스 — 30px 이상 변화만 반영. 스크롤바 등장/사라짐(±15px) 진동 차단
+          if (Math.abs(prev - snapped) < 30) return prev;
+          return snapped;
+        });
       });
     };
     computeFit();
@@ -291,6 +354,27 @@ export default function PdfViewer({
 
   // 최종 페이지 width: fit × zoom
   const pageWidth = Math.max(80, fitWidth * zoom);
+
+  // 줌이 1 초과이고 페이지폭이 변할 때마다 부모에게 알림
+  // — 부모(DocumentPanel) 가 자료 섹션을 함께 확장하여 콘텐츠가 잘리지 않게 함.
+  // zoom <= 1 이면 0 을 보고 → 부모는 baseWidth 로 복귀.
+  const lastReportedRef = useRef(0);
+  useEffect(() => {
+    if (typeof onContentWidthChange !== 'function') return;
+    const reported = zoom > 1 ? Math.ceil(pageWidth) : 0;
+    if (reported === lastReportedRef.current) return;
+    lastReportedRef.current = reported;
+    onContentWidthChange(reported);
+  }, [pageWidth, zoom, onContentWidthChange]);
+
+  // 언마운트 시 부모 보고치 0 으로 리셋 — 다른 파일로 전환해도 잔존 폭이 남지 않게
+  useEffect(() => {
+    return () => {
+      if (typeof onContentWidthChange === 'function' && lastReportedRef.current !== 0) {
+        onContentWidthChange(0);
+      }
+    };
+  }, [onContentWidthChange]);
 
   // 컨트롤(페이지 네비/줌) — controlsContainer 가 있으면 포털, 없으면 인라인
   // 모바일에서는 패딩/아이콘 사이즈/min-width 압축으로 한 줄에 들어가게
@@ -362,6 +446,7 @@ export default function PdfViewer({
       {/* PDF 렌더링 영역 — ResizeObserver로 컨테이너 크기 따라감, 오버플로우 시 드래그 스크롤 */}
       <div
         ref={scrollContainerRef}
+        data-allow-zoom-wheel="true"
         onMouseDown={onPanStart}
         onDoubleClick={(e) => {
           // 드로잉 활성 시 무시 — 드로잉 캔버스가 위에 있어 의도치 않은 줌 리셋 방지
@@ -373,15 +458,16 @@ export default function PdfViewer({
           if (t.tagName === 'CANVAS' && !t.classList.contains('react-pdf__Page__canvas')) return;
           setZoom(1);
         }}
-        className={`flex-1 min-h-0 overflow-auto bg-bg-tertiary/30 flex p-2 ${
+        className={`flex-1 min-h-0 overflow-x-auto overflow-y-scroll bg-bg-tertiary/30 flex p-2 ${
           zoom !== 1 ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
         style={{
           justifyContent: 'safe center',
           alignItems: 'safe start',
           overflowAnchor: 'none',
-          // 스크롤바 등장/사라짐으로 clientWidth가 펄싱되어 fitWidth/pageWidth 가
-          // 진동하는 루프 차단. modern 브라우저에서 스크롤바 공간 항상 예약.
+          // overflow-y: scroll 로 항상 세로 스크롤바 공간 확보 — 등장/사라짐으로
+          // clientWidth 가 진동하면서 fitWidth → pageWidth → 다시 진동하는 루프 차단.
+          // (스크롤바-gutter 만으로는 일부 모바일 브라우저에서 동작 안 함 → overflow-y:scroll 강제)
           scrollbarGutter: 'stable',
         }}
         title={zoom !== 1 ? '더블클릭으로 100%, 드래그로 이동' : '더블클릭으로 100%'}
@@ -390,6 +476,10 @@ export default function PdfViewer({
           file={url}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
+          // PDF 내 외부 링크는 새 탭으로 열기 + 보안 옵션 명시
+          // (회의방을 떠나지 않도록 + window.opener 노출 방지)
+          externalLinkTarget="_blank"
+          externalLinkRel="noopener noreferrer"
           loading={
             <div className="flex items-center gap-2 text-txt-muted py-8">
               <Loader2 size={18} className="animate-spin" />
@@ -422,7 +512,9 @@ export default function PdfViewer({
             <Page
               pageNumber={pageNumber}
               width={pageWidth}
-              renderAnnotationLayer={false}
+              // PDF 내 하이퍼링크(파란 텍스트)를 클릭 가능하게 — annotation layer가 그려져야 함.
+              // textLayer는 false 유지: 텍스트 선택은 별개 기능이고 활성화 시 비용 큼.
+              renderAnnotationLayer={true}
               renderTextLayer={false}
               className="shadow-lg"
             />

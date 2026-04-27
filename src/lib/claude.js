@@ -58,7 +58,10 @@ export async function analyzeMilo({ messages, agenda, preset = 'default', contex
           }
           return data;
         },
-        { maxRetries: 1, baseMs: 1500, signal }
+        // maxRetries 2: cold start/일시 503 회복 위해 최대 2회 재시도
+        //   1차 실패(즉시) → 1.5s 대기 → 2차 → 3s 대기 → 3차 = 마지막
+        //   대부분 503/cold start 는 2차 또는 3차에 회복
+        { maxRetries: 2, baseMs: 1500, signal }
       )
     );
 

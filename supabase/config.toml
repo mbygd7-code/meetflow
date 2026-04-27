@@ -72,3 +72,7 @@ verify_jwt = false
 # Milo 분석 도구 모음
 [functions.milo-analyze-tools]
 verify_jwt = false
+
+# Google Docs/Sheets/Slides URL → PDF 자동 변환 (서버측에서 사용자 JWT 직접 검증)
+[functions.import-google-doc]
+verify_jwt = false
