@@ -25,6 +25,7 @@ import RemoteCursorsLayer from './RemoteCursorsLayer';
 import IframeOverlay from './IframeOverlay';
 import VoiceJoinButton from './VoiceJoinButton';
 import VoicePanel from './VoicePanel';
+import VoiceJoinIntroModal, { shouldShowVoiceIntro } from './VoiceJoinIntroModal';
 import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 import { getSourceMeta } from '@/lib/googleDocsUrl';
@@ -1799,6 +1800,20 @@ export default function MeetingRoom() {
   // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
   const lk = useLiveKitVoice(id);
 
+  // 음성 참여 안내 모달 — 첫 참여 시 1회 (다시 안 보기 옵션)
+  const [voiceIntroOpen, setVoiceIntroOpen] = useState(false);
+  const handleVoiceJoinClick = useCallback(() => {
+    if (shouldShowVoiceIntro()) {
+      setVoiceIntroOpen(true);
+    } else {
+      lk.join();
+    }
+  }, [lk]);
+  const handleVoiceIntroConfirm = useCallback(() => {
+    setVoiceIntroOpen(false);
+    lk.join();
+  }, [lk]);
+
   // Phase 3: 회의방의 AI 메시지에 대한 내 피드백 + 팀 집계 로드 (렌더에 사용)
   const loadMyFeedbacks = useFeedbackStore((s) => s.loadMyFeedbacks);
   const loadAggregates = useFeedbackStore((s) => s.loadAggregates);
@@ -2210,7 +2225,7 @@ export default function MeetingRoom() {
               connecting={lk.connecting}
               error={lk.error}
               participantCount={lk.participants.length}
-              onJoin={lk.join}
+              onJoin={handleVoiceJoinClick}
               onLeave={lk.leave}
               size="sm"
             />
@@ -2302,6 +2317,17 @@ export default function MeetingRoom() {
           onToggleMute={lk.toggleMute}
           onLeave={lk.leave}
           currentUserId={user?.id}
+          pttMode={lk.pttMode}
+          onTogglePttMode={() => lk.setPttMode((v) => !v)}
+          pttPressed={lk.pttPressed}
+        />
+      )}
+
+      {/* 음성 참여 첫 클릭 시 안내 모달 */}
+      {voiceIntroOpen && (
+        <VoiceJoinIntroModal
+          onConfirm={handleVoiceIntroConfirm}
+          onCancel={() => setVoiceIntroOpen(false)}
         />
       )}
 

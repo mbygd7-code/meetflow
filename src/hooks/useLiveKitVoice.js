@@ -58,6 +58,10 @@ export function useLiveKitVoice(meetingId) {
   const [activeSpeakers, setActiveSpeakers] = useState(new Set()); // identity 집합
   const [muted, setMuted] = useState(true); // 초기는 mute (안전 — join 즉시 들리지 않게)
   const [localStream, setLocalStream] = useState(null);
+  // Push-to-Talk 모드 — true 면 평상시 mute, 스페이스바 누르고 있을 때만 unmute
+  //   같은 방에서 2명 이상 참여 시 하울링 방지에 유용
+  const [pttMode, setPttMode] = useState(false);
+  const [pttPressed, setPttPressed] = useState(false); // PTT 키 누르고 있는 중
 
   const roomRef = useRef(null);
   // 원격 오디오 트랙별 <audio> 엘리먼트 — Map<`${identity}:${trackSid}`, HTMLAudioElement>
@@ -263,6 +267,71 @@ export function useLiveKitVoice(meetingId) {
     }
   }, []);
 
+  // === Push-to-Talk: 키보드 이벤트 처리 ===
+  // - Space 누르면 unmute, 떼면 mute
+  // - input/textarea/contentEditable 포커스 시엔 무시 (텍스트 입력 방해 X)
+  // - PTT mode ON 일 때만 활성
+  useEffect(() => {
+    if (!pttMode || !connected) return;
+
+    // PTT mode 진입 시 즉시 mute
+    const room = roomRef.current;
+    const initialMute = async () => {
+      try {
+        const pub = room?.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+        if (pub && !pub.isMuted) await pub.mute();
+        setMuted(true);
+      } catch {}
+    };
+    initialMute();
+
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+
+    const onKeyDown = async (e) => {
+      if (e.code !== 'Space') return;
+      if (e.repeat) return; // 길게 누름 — 첫 이벤트만 사용
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      const r = roomRef.current;
+      if (!r) return;
+      const pub = r.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+      if (!pub) return;
+      try {
+        if (pub.isMuted) await pub.unmute();
+        setMuted(false);
+        setPttPressed(true);
+      } catch {}
+    };
+
+    const onKeyUp = async (e) => {
+      if (e.code !== 'Space') return;
+      if (isTypingTarget(e.target)) return;
+      const r = roomRef.current;
+      if (!r) return;
+      const pub = r.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+      if (!pub) return;
+      try {
+        if (!pub.isMuted) await pub.mute();
+        setMuted(true);
+        setPttPressed(false);
+      } catch {}
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      setPttPressed(false);
+    };
+  }, [pttMode, connected]);
+
   // === 회의방 언마운트 시 자동 leave ===
   useEffect(() => {
     return () => {
@@ -291,5 +360,9 @@ export function useLiveKitVoice(meetingId) {
     join,
     leave,
     toggleMute,
+    // Push-to-Talk
+    pttMode,
+    setPttMode,
+    pttPressed,
   };
 }
