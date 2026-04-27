@@ -37,6 +37,9 @@ export default function PdfViewer({
   // 라이브 따라가기 ON 시 — 드로잉 오버레이를 readOnly 로 자동 마운트하여 다른 참가자 스트로크 표시
   // (연필 버튼은 별도로 drawingActive 를 켜야 툴바 + 편집 가능)
   following = false,
+  // PDF 안 하이퍼링크 클릭 시 호출 — 부모가 인앱 iframe 오픈/broadcast 처리.
+  //   미지정 시 기본 동작(새 탭) 유지.
+  onLinkClick,
 }) {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -51,31 +54,58 @@ export default function PdfViewer({
   const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
   const cursorThrottleRef = useRef(0);
 
-  // PDF annotation 링크 — URL별 안정된 target 이름으로 재설정.
-  //   - 같은 URL 다시 클릭 → 브라우저가 기존 탭(같은 name)을 재사용하여 포커스/네비게이션
-  //   - 다른 URL → 새 탭 (다른 name) 생성
+  // onLinkClick stale closure 방지 — ref 로 최신 콜백 보관
+  const onLinkClickRef = useRef(onLinkClick);
+  onLinkClickRef.current = onLinkClick;
+
+  // PDF annotation 링크 — 클릭 인터셉트(인앱 iframe 오픈) + 폴백 target 설정.
+  //   부모가 onLinkClick 을 제공하면: 클릭 시 preventDefault 후 콜백 호출 (인앱 iframe).
+  //   미제공 시: 기본 새 탭 동작 (URL별 안정된 target 이름으로 재사용 동탭).
   // react-pdf 가 매 페이지 렌더 시 annotation 을 새로 그리므로 매 렌더 후
-  // 직접 anchor의 target/rel 속성을 갱신해 줘야 함. (click 위임 보다 안정)
-  // MutationObserver 로 annotation layer 변화도 감지.
+  // 직접 anchor 속성을 갱신해 줘야 함. MutationObserver 로 annotation layer 변화 감지.
   useEffect(() => {
     const el = pageWrapRef.current;
     if (!el) return;
+
+    // 클릭 인터셉트 핸들러 (캡처 단계로 등록해 react-pdf 내부 핸들러보다 먼저 실행)
+    const handleAnchorClick = (e) => {
+      const a = e.target.closest && e.target.closest('a[href]');
+      if (!a) return;
+      // 본 PDF annotation layer 안인지 재확인
+      if (!el.contains(a)) return;
+      const href = a.getAttribute('href') || '';
+      if (!/^https?:/i.test(href)) return;
+      const cb = onLinkClickRef.current;
+      if (typeof cb !== 'function') return; // 콜백 미제공 → 기본 새 탭 동작 그대로
+      e.preventDefault();
+      e.stopPropagation();
+      cb(href);
+    };
+
     const updateLinkTargets = () => {
       const anchors = el.querySelectorAll('.react-pdf__Page__annotations a, .annotationLayer a');
       anchors.forEach((a) => {
         const href = a.getAttribute('href') || '';
         if (!/^https?:/i.test(href)) return;
+        // 폴백용: URL별 안정된 target 이름 (콜백 없을 때만 의미)
         const targetName = `meetflow_pdflink_${href.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 100)}`;
         if (a.target !== targetName) a.target = targetName;
-        // rel 도 안전하게
         a.rel = 'noopener noreferrer';
       });
     };
     updateLinkTargets();
-    // annotation 노드는 페이지 변경/리사이즈 시 react-pdf 가 재생성 → DOM 변화 감시
+
+    // 클릭 인터셉터 — 캡처 단계로 등록 (annotation 이 매 렌더 새로 생성되어도
+    //   부모 컨테이너에서 위임으로 잡으므로 한 번만 부착하면 됨)
+    el.addEventListener('click', handleAnchorClick, true);
+
+    // annotation 노드는 페이지 변경/리사이즈 시 react-pdf 가 재생성 → target 갱신 위해 감시
     const mo = new MutationObserver(updateLinkTargets);
     mo.observe(el, { childList: true, subtree: true });
-    return () => mo.disconnect();
+    return () => {
+      mo.disconnect();
+      el.removeEventListener('click', handleAnchorClick, true);
+    };
   }, [pageNumber, fitWidth, zoom]);
 
   useEffect(() => {
