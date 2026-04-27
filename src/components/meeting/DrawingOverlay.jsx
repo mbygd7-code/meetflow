@@ -1146,9 +1146,9 @@ export default function DrawingOverlay({
             {/* 도구 비활성(pan 모드) → 손 아이콘 1개. 도구 활성 → 컬러 3개 */}
             {tool === null && !eraserMode ? (
               <button
-                onClick={() => setTool('pen')}
+                onClick={() => setTool('rect')}
                 className={`${toolbarCommonCls} text-white bg-brand-purple hover:bg-brand-purple/90`}
-                title="이동 모드 (드래그로 자료 이동) — 클릭하면 연필 도구로 복귀"
+                title="이동 모드 (드래그로 자료 이동) — 클릭하면 사각형 도구로 복귀"
                 aria-label="이동 모드"
                 aria-pressed="true"
               >
@@ -1161,8 +1161,8 @@ export default function DrawingOverlay({
                   onClick={() => {
                     setColor(c.value);
                     if (eraserMode) setEraserMode(false);
-                    // 도구가 비활성(pan)일 때 컬러 클릭 → 연필 활성화 (Hand로 안 빠지게)
-                    if (tool === null) setTool('pen');
+                    // 도구가 비활성(pan)일 때 컬러 클릭 → 사각형 활성화 (기본 도구 일관성)
+                    if (tool === null) setTool('rect');
                   }}
                   className={`${toolbarCommonCls} border-2 ${
                     color === c.value && !eraserMode ? 'border-[#333]' : 'border-transparent hover:border-[#bbb]'
