@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand, Minus } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand, Minus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -122,6 +122,21 @@ export default function DrawingOverlay({
       else next.add(key);
       return next;
     });
+  }, []);
+
+  // 본인 메모 삭제 — confirm 후 messages 테이블에서 제거 → Realtime 으로 모두 반영
+  const handleDeleteAnnotation = useCallback(async (msgId) => {
+    if (!msgId) return;
+    if (!window.confirm('이 메모를 삭제하시겠습니까?\n채팅에서도 같이 사라집니다.')) return;
+    try {
+      const { error } = await supabase.from('messages').delete().eq('id', msgId);
+      if (error) {
+        console.error('[DrawingOverlay] 메모 삭제 실패:', error.message);
+        alert('삭제 실패: ' + error.message);
+      }
+    } catch (e) {
+      console.error('[DrawingOverlay] 메모 삭제 예외:', e);
+    }
   }, []);
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
@@ -814,6 +829,7 @@ export default function DrawingOverlay({
           text: stripped,
           authorName: m.user?.name || '사용자',
           authorColor: m.user?.avatar_color || m.user?.color || '#723CEB',
+          authorId: m.user_id || m.user?.id || null,
           createdAt: m.created_at,
           msgId: m.id,
         });
@@ -1099,11 +1115,14 @@ export default function DrawingOverlay({
                 }
 
                 // 펼친 상태 — 풀 카드 (w-max: 텍스트 자연 폭, max-w-[260px] 로 캡 → wrap)
-                //   w-fit 은 부모 가용 공간에 끌려 좁아지는 케이스가 있어 w-max 사용
+                //   본인 메시지면 우상단 [삭제] [최소화] 두 버튼, 아니면 [최소화] 만
+                const isMine = a.authorId && user?.id && a.authorId === user.id;
                 return (
                   <div
                     key={annKey}
-                    className="relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 pr-7 shadow-md backdrop-blur-sm w-max max-w-[260px]"
+                    className={`relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 shadow-md backdrop-blur-sm w-max max-w-[260px] ${
+                      isMine ? 'pr-12' : 'pr-7'
+                    }`}
                     style={{ borderColor: m.strokeColor }}
                     title={`${a.authorName} · ${a.text}`}
                   >
@@ -1126,16 +1145,29 @@ export default function DrawingOverlay({
                     <p className="leading-relaxed break-words whitespace-pre-wrap text-[12px]">
                       {a.text}
                     </p>
-                    {/* 최소화 버튼 — 우상단 */}
-                    <button
-                      type="button"
-                      onClick={() => toggleMinAnn(annKey)}
-                      className="absolute top-1 right-1 w-4 h-4 rounded flex items-center justify-center text-[#666] hover:text-[#222] hover:bg-black/5 transition-colors"
-                      aria-label="최소화"
-                      title="최소화"
-                    >
-                      <Minus size={11} strokeWidth={2.4} />
-                    </button>
+                    {/* 우상단 컨트롤 — [삭제(본인만)] [최소화] */}
+                    <div className="absolute top-1 right-1 flex items-center gap-0.5">
+                      {isMine && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAnnotation(a.msgId)}
+                          className="w-4 h-4 rounded flex items-center justify-center text-[#999] hover:text-status-error hover:bg-status-error/10 transition-colors"
+                          aria-label="메모 삭제"
+                          title="메모 삭제 (채팅에서도 사라짐)"
+                        >
+                          <Trash2 size={10} strokeWidth={2.4} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleMinAnn(annKey)}
+                        className="w-4 h-4 rounded flex items-center justify-center text-[#666] hover:text-[#222] hover:bg-black/5 transition-colors"
+                        aria-label="최소화"
+                        title="최소화"
+                      >
+                        <Minus size={11} strokeWidth={2.4} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
