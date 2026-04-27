@@ -855,9 +855,10 @@ function DocumentZoomOverlay({
       </div>
 
       {/* 통합 툴바 — PDF 컨트롤 + 드로잉 툴바
-          데스크톱: 한 줄 (높이 55px) / 모바일: 두 줄 wrap (PDF 위, 드로잉 아래) */}
+          데스크톱: 한 줄 (높이 55px) / 모바일: 두 줄 wrap (PDF 위, 드로잉 아래)
+          배경: 투명 — 흰색 라운드 툴바만 떠보이게 (회색 박스 시각적 잡음 제거) */}
       {(isPdf || drawingActive) && (
-        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 py-1 md:py-1.5 border-b border-border-divider shrink-0 bg-bg-secondary/60 h-auto md:h-[55px] w-full min-w-0 max-w-full">
+        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1 px-2 md:px-3 py-1 md:py-1.5 shrink-0 h-auto md:h-[55px] w-full min-w-0 max-w-full">
           {/* PDF 페이지 네비 + 줌 (PdfViewer가 포털로 채움) */}
           <div ref={setPdfControlsHost} className="flex items-center justify-between gap-2 flex-1 min-w-0 w-full md:w-auto" />
           {/* 드로잉 툴바 (DrawingOverlay가 포털로 채움) */}
