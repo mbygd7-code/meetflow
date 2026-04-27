@@ -91,18 +91,18 @@ export default function ChatArea({
     try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
   });
 
-  // LiveKit 음성 회의 참여 중일 때는 Google STT 경로로 강제 (LiveKit 의 MediaStream 을 분기 사용 가능).
-  // 외부 회의 미참여 시엔 기존 사용자 설정(web-speech 기본) 유지.
-  const effectiveSttProvider = voiceConnected ? 'google' : sttProvider;
+  // STT provider 는 사용자 설정 그대로 유지 — LiveKit 활성이어도 강제 변환 X.
+  //   web-speech: Chrome 무료 STT, 자체 마이크 사용 (LiveKit publish 와 동시 캡처 OK)
+  //   google: Cloud Speech-to-Text Edge Function — GCP 프로젝트에 API enable 필요
+  // LiveKit 활성 + google 모드일 때만 LiveKit MediaStream 분기 사용해 마이크 1회 절약
   const { isListening, start: startSTT, stop: stopSTT, interim, error: sttError, supported: sttSupported } = useVoiceInput({
-    provider: effectiveSttProvider,
+    provider: sttProvider,
     language: 'ko-KR',
     onTranscript: (text) => {
       if (text.trim()) onSend?.(text.trim());
     },
     onInterim: () => {},
-    // LiveKit 활성 + Google STT 경로일 때만 외부 스트림 주입 (web-speech 는 자체 마이크 사용)
-    externalStream: (voiceConnected && effectiveSttProvider === 'google') ? voiceLocalStream : null,
+    externalStream: (voiceConnected && sttProvider === 'google') ? voiceLocalStream : null,
   });
   const { user } = useAuthStore();
 
