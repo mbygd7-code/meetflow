@@ -111,7 +111,7 @@ export default function DrawingOverlay({
   const [redoStack, setRedoStack] = useState([]);
   const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
   const [eraserHoverId, setEraserHoverId] = useState(null);  // 지우개 모드 hover — 해당 stroke 하이라이트
-  const [tool, setTool] = useState('pen');  // 'pen' | 'rect' | null — 그리기 도구 (null이면 비활성, pan 가능)
+  const [tool, setTool] = useState('rect');  // 'pen' | 'rect' | null — 그리기 도구 (기본 'rect' 사각형, null이면 비활성/pan 가능)
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
     if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
