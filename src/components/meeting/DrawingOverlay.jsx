@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand } from 'lucide-react';
+import { Pen, Undo2, Redo2, Eraser, X, Pencil, Eye, EyeOff, Save, Check, Loader2, Square, Hand, Minus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -112,6 +112,17 @@ export default function DrawingOverlay({
   const [eraserMode, setEraserMode] = useState(false);  // 지우개 모드: 클릭한 스트로크만 삭제
   const [eraserHoverId, setEraserHoverId] = useState(null);  // 지우개 모드 hover — 해당 stroke 하이라이트
   const [tool, setTool] = useState('rect');  // 'pen' | 'rect' | null — 그리기 도구 (기본 'rect' 사각형, null이면 비활성/pan 가능)
+  // 자료 위 메모 카드 최소화 상태 — Set<key> (key = msgId 또는 strokeId-i)
+  //   최소화 시 카드 숨기고 작은 프로필 아바타만 표시. 클릭으로 다시 펼침.
+  const [minimizedAnns, setMinimizedAnns] = useState(() => new Set());
+  const toggleMinAnn = useCallback((key) => {
+    setMinimizedAnns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
     if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
@@ -1056,43 +1067,77 @@ export default function DrawingOverlay({
 
           {m.annotations.length > 0 && (
             <div
-              className={`absolute top-[calc(100%+6px)] flex flex-col gap-1.5 w-[260px] ${
-                // 사각형: 마커 왼쪽 모서리에 정렬 (사각형 박스 아래로 자연스럽게 이어짐)
-                // 펜: 마커 중심 기준 살짝 왼쪽 시작 (메모 폭이 마커보다 훨씬 넓으므로
-                //     translate-x 로 마커 중앙 위치를 기준 잡고 약간 왼쪽 오프셋)
+              className={`absolute top-[calc(100%+6px)] flex flex-col items-start gap-1.5 max-w-[260px] ${
+                // 사각형: 마커 왼쪽 모서리 정렬 / 펜: 마커 중심 정렬
                 isRect ? 'left-0' : 'left-1/2 -translate-x-1/2'
               }`}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              {m.annotations.slice(-3).map((a, i) => (
-                <div
-                  key={a.msgId || i}
-                  className="rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 shadow-md backdrop-blur-sm w-full"
-                  style={{ borderColor: m.strokeColor }}
-                  title={`${a.authorName} · ${a.text}`}
-                >
-                  {/* 헤더: 아바타 + 이름 — 폭 제약(w-full) 안에서 자연스럽게 정렬 */}
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span
-                      className="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold shrink-0"
-                      style={{ backgroundColor: a.authorColor }}
+              {m.annotations.slice(-3).map((a, i) => {
+                const annKey = a.msgId || `${m.strokes?.[0]?.id || 'm'}-${i}`;
+                const isMin = minimizedAnns.has(annKey);
+
+                // 최소화 상태 — 작은 프로필 아바타만. 클릭으로 펼침.
+                if (isMin) {
+                  return (
+                    <button
+                      key={annKey}
+                      type="button"
+                      onClick={() => toggleMinAnn(annKey)}
+                      className="w-7 h-7 rounded-full text-white flex items-center justify-center text-[11px] font-bold shadow-md hover:scale-110 transition-transform"
+                      style={{
+                        backgroundColor: a.authorColor,
+                        boxShadow: `0 0 0 2px white, 0 0 0 3px ${m.strokeColor}, 0 2px 4px rgba(0,0,0,0.3)`,
+                      }}
+                      title={`${a.authorName} · ${a.text} (클릭으로 펼치기)`}
+                      aria-label="메모 펼치기"
                     >
                       {(a.authorName || '?')[0]}
-                    </span>
-                    <span
-                      className="text-[10px] font-semibold truncate"
-                      style={{ color: m.strokeColor }}
+                    </button>
+                  );
+                }
+
+                // 펼친 상태 — 풀 카드 (max-w-[260px], w-fit으로 텍스트 길이에 따라 폭 자동)
+                return (
+                  <div
+                    key={annKey}
+                    className="relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 pr-7 shadow-md backdrop-blur-sm w-fit max-w-[260px]"
+                    style={{ borderColor: m.strokeColor }}
+                    title={`${a.authorName} · ${a.text}`}
+                  >
+                    {/* 헤더: 아바타 + 이름 */}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span
+                        className="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold shrink-0"
+                        style={{ backgroundColor: a.authorColor }}
+                      >
+                        {(a.authorName || '?')[0]}
+                      </span>
+                      <span
+                        className="text-[10px] font-semibold truncate"
+                        style={{ color: m.strokeColor }}
+                      >
+                        {a.authorName}
+                      </span>
+                    </div>
+                    {/* 본문 */}
+                    <p className="leading-relaxed break-words whitespace-pre-wrap text-[12px]">
+                      {a.text}
+                    </p>
+                    {/* 최소화 버튼 — 우상단 */}
+                    <button
+                      type="button"
+                      onClick={() => toggleMinAnn(annKey)}
+                      className="absolute top-1 right-1 w-4 h-4 rounded flex items-center justify-center text-[#666] hover:text-[#222] hover:bg-black/5 transition-colors"
+                      aria-label="최소화"
+                      title="최소화"
                     >
-                      {a.authorName}
-                    </span>
+                      <Minus size={11} strokeWidth={2.4} />
+                    </button>
                   </div>
-                  {/* 메모 본문 — 260px 내 자연스러운 줄바꿈, 잘림 없음 */}
-                  <p className="leading-relaxed break-words whitespace-pre-wrap text-[12px]">
-                    {a.text}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
               {m.annotations.length > 3 && (
                 <span className="text-[9px] text-center text-white bg-black/60 rounded px-1">
                   외 {m.annotations.length - 3}개
