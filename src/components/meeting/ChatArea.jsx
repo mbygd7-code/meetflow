@@ -121,6 +121,23 @@ export default function ChatArea({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceMuted, voiceConnected, sttSupported]);
+
+  // LiveKit 참여/종료 전환 시 입력 모드 자동 전환
+  //   - voiceConnected: false → true 전환 시 voiceMode = true (음성 입력)
+  //   - voiceConnected: true → false 전환 시 voiceMode = false (텍스트)
+  // 사용자가 LiveKit 참여 중 수동으로 텍스트 모드 누른 경우엔 그 상태 유지 (전환점에서만 동기화)
+  const prevVoiceConnectedRef = useRef(voiceConnected);
+  useEffect(() => {
+    const prev = prevVoiceConnectedRef.current;
+    prevVoiceConnectedRef.current = voiceConnected;
+    if (!prev && voiceConnected) {
+      setVoiceMode(true);
+    } else if (prev && !voiceConnected) {
+      setVoiceMode(false);
+      if (isListening) stopSTT(); // 혹시 STT 켜져 있으면 종료
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceConnected]);
   const { user } = useAuthStore();
 
   const handleReact = (messageId, key) => {
