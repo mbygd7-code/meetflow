@@ -1098,11 +1098,12 @@ export default function DrawingOverlay({
                   );
                 }
 
-                // 펼친 상태 — 풀 카드 (max-w-[260px], w-fit으로 텍스트 길이에 따라 폭 자동)
+                // 펼친 상태 — 풀 카드 (w-max: 텍스트 자연 폭, max-w-[260px] 로 캡 → wrap)
+                //   w-fit 은 부모 가용 공간에 끌려 좁아지는 케이스가 있어 w-max 사용
                 return (
                   <div
                     key={annKey}
-                    className="relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 pr-7 shadow-md backdrop-blur-sm w-fit max-w-[260px]"
+                    className="relative rounded-lg bg-white border text-[12px] text-[#1a1a1a] px-2.5 py-1.5 pr-7 shadow-md backdrop-blur-sm w-max max-w-[260px]"
                     style={{ borderColor: m.strokeColor }}
                     title={`${a.authorName} · ${a.text}`}
                   >
