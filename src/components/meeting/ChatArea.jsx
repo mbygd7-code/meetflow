@@ -262,17 +262,21 @@ export default function ChatArea({
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+    const restoreView = () => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
     const onFocus = () => {
-      // 포커스 시 iOS 가 textarea 를 viewport 상단으로 자동 스크롤하는 것을 막기 위해
-      // 다음 프레임에 메시지 리스트 스크롤을 다시 하단으로 복원
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-        // window 스크롤이 발생했다면 0 으로 되돌림 — body 는 overflow:hidden 이지만
-        // iOS 가 일시적으로 layout viewport 를 스크롤하는 케이스 방어
-        window.scrollTo(0, 0);
-      });
+      // iOS 는 키보드가 완전히 올라온 후(약 300~500ms) 까지 여러 차례
+      // focused element 를 viewport 상단으로 끌어올리려 시도함.
+      // 여러 프레임 + setTimeout 에서 반복적으로 위치 복원.
+      restoreView();
+      requestAnimationFrame(restoreView);
+      [50, 150, 300, 500].forEach((t) => setTimeout(restoreView, t));
     };
     ta.addEventListener('focus', onFocus);
     return () => ta.removeEventListener('focus', onFocus);
