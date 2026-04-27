@@ -60,6 +60,9 @@ export function useLiveKitVoice(meetingId) {
   const [localStream, setLocalStream] = useState(null);
 
   const roomRef = useRef(null);
+  // 원격 오디오 트랙별 <audio> 엘리먼트 — Map<`${identity}:${trackSid}`, HTMLAudioElement>
+  //   leave/언마운트 시 일괄 정리
+  const audioContainersRef = useRef(new Map());
 
   // 참가자 목록을 Room 으로부터 새로 빌드
   const rebuildParticipants = useCallback(() => {
@@ -142,6 +145,32 @@ export function useLiveKitVoice(meetingId) {
         const set = new Set(speakers.map((s) => s.identity));
         setActiveSpeakers(set);
       });
+
+      // ★ 원격 오디오 트랙 자동 재생 — LiveKit SDK 는 자동 attach 하지 않음
+      //   TrackSubscribed 시 audio 엘리먼트 만들어 DOM 에 부착해야 들림
+      const audioElsRef = audioContainersRef.current;
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        try {
+          const el = track.attach();
+          el.setAttribute('data-livekit-audio', participant.identity);
+          el.style.display = 'none';
+          document.body.appendChild(el);
+          audioElsRef.set(`${participant.identity}:${track.sid}`, el);
+        } catch (e) {
+          console.warn('[useLiveKitVoice] track.attach failed:', e?.message);
+        }
+      });
+      room.on(RoomEvent.TrackUnsubscribed, (track, _publication, participant) => {
+        if (track.kind !== Track.Kind.Audio) return;
+        const key = `${participant.identity}:${track.sid}`;
+        const el = audioElsRef.get(key);
+        if (el) {
+          try { track.detach(el); } catch {}
+          el.remove();
+          audioElsRef.delete(key);
+        }
+      });
       room.on(RoomEvent.Disconnected, () => {
         setConnected(false);
         setActiveSpeakers(new Set());
@@ -187,6 +216,15 @@ export function useLiveKitVoice(meetingId) {
     }
   }, [meetingId, fetchToken, rebuildParticipants]);
 
+  // 원격 오디오 엘리먼트 일괄 정리
+  const cleanupAudioElements = useCallback(() => {
+    audioContainersRef.current.forEach((el) => {
+      try { el.pause(); } catch {}
+      try { el.remove(); } catch {}
+    });
+    audioContainersRef.current.clear();
+  }, []);
+
   // === 룸 퇴장 ===
   const leave = useCallback(async () => {
     const room = roomRef.current;
@@ -194,11 +232,12 @@ export function useLiveKitVoice(meetingId) {
     try { await room.disconnect(); } catch {}
     try { room.removeAllListeners(); } catch {}
     roomRef.current = null;
+    cleanupAudioElements();
     setConnected(false);
     setActiveSpeakers(new Set());
     setParticipants([]);
     setLocalStream(null);
-  }, []);
+  }, [cleanupAudioElements]);
 
   // === 음소거 토글 ===
   const toggleMute = useCallback(async () => {
@@ -233,6 +272,11 @@ export function useLiveKitVoice(meetingId) {
         try { room.removeAllListeners(); } catch {}
         roomRef.current = null;
       }
+      // 원격 오디오 엘리먼트 정리 (페이지 이탈 후 음성 잔류 방지)
+      audioContainersRef.current.forEach((el) => {
+        try { el.pause(); el.remove(); } catch {}
+      });
+      audioContainersRef.current.clear();
     };
   }, []);
 
