@@ -176,7 +176,7 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
           className={`shrink-0 rounded-full transition-transform ${
             isMine || readonly
               ? 'cursor-default'
-              : 'hover:scale-110 hover:ring-2 hover:ring-brand-purple/40 cursor-pointer'
+              : 'hover:scale-110 cursor-pointer'
           }`}
           title={isMine ? '나' : `@${senderName} 멘션하기`}
           aria-label={isMine ? '내 아바타' : `${senderName}님 멘션`}
