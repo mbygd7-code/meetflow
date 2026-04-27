@@ -130,7 +130,43 @@ export default function DrawingOverlay({
     if (!msgId) return;
     if (!window.confirm('이 메모를 삭제하시겠습니까?\n채팅에서도 같이 사라집니다.')) return;
     try {
-      // .select() 추가 — 실제 삭제된 행을 반환받아 RLS 차단 여부 확인 가능
+      // 1) DB 의 실제 user_id 확인 (RLS 의 본인 매칭 기준)
+      const { data: row } = await supabase
+        .from('messages')
+        .select('id, user_id')
+        .eq('id', msgId)
+        .maybeSingle();
+
+      // 2) 현재 세션의 auth.uid() 확인
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUid = sessionData?.session?.user?.id || null;
+
+      console.log('[DrawingOverlay] 삭제 진단:', {
+        msgId,
+        msg_user_id: row?.user_id,
+        auth_uid: authUid,
+        store_user_id: user?.id,
+        match_msg_vs_auth: row?.user_id === authUid,
+        match_store_vs_auth: user?.id === authUid,
+      });
+
+      if (!row) {
+        alert('이미 삭제된 메모입니다.');
+        return;
+      }
+      if (!authUid) {
+        alert('로그인 세션이 만료되었습니다. 다시 로그인하세요.');
+        return;
+      }
+      if (row.user_id !== authUid) {
+        alert(
+          `이 메모는 본인이 작성한 게 아니라 삭제할 수 없어요.\n\n` +
+          `메시지 작성자: ${row.user_id?.slice(0, 8)}\n현재 로그인: ${authUid.slice(0, 8)}`
+        );
+        return;
+      }
+
+      // 3) 실제 삭제 — RLS user_id 일치 보장된 후 호출
       const { data, error } = await supabase
         .from('messages')
         .delete()
@@ -142,9 +178,8 @@ export default function DrawingOverlay({
         return;
       }
       if (!data || data.length === 0) {
-        // RLS 가 차단했거나 이미 삭제됨
-        console.warn('[DrawingOverlay] 메모 삭제 — 영향받은 행 없음 (권한/이미 삭제)');
-        alert('삭제할 권한이 없거나 이미 삭제된 메모입니다.');
+        console.warn('[DrawingOverlay] 메모 삭제 — 영향받은 행 없음 (RLS 추가 정책 또는 race)');
+        alert('삭제 권한이 없거나 메시지가 이미 사라졌습니다.');
         return;
       }
       console.log('[DrawingOverlay] 메모 삭제 성공:', msgId);
@@ -152,7 +187,7 @@ export default function DrawingOverlay({
       console.error('[DrawingOverlay] 메모 삭제 예외:', e);
       alert('삭제 중 오류가 발생했습니다.');
     }
-  }, []);
+  }, [user?.id]);
   // 지우개 OFF 시 hover 해제
   useEffect(() => {
     if (!eraserMode && eraserHoverId !== null) setEraserHoverId(null);
