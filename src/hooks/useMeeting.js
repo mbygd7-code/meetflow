@@ -126,17 +126,24 @@ export function useMeeting() {
         if (partErr) console.error('[createMeeting] participants insert error:', partErr);
       }
 
-      // ═══ 파일 업로드 (base64 → Storage + DB) ═══
-      // CreateMeetingModal은 파일을 base64로 전달. Storage에 업로드하고 meeting_files 테이블에 기록.
+      // ═══ 파일 업로드 (base64 → Storage + DB) — 병렬 처리 ═══
+      // 각 파일 독립 업로드 (Promise.all). 실패한 파일은 결과 배열에서 추적해 호출자에게 보고.
+      let uploadFailures = [];
       if (files.length > 0 && user?.id) {
-        for (const f of files) {
+        const OFFICE_RE = /\.(pptx|ppt|docx|doc|xlsx|xls|odp|odt|ods|rtf|csv|txt|md)$/i;
+        const isOffice = (f) => OFFICE_RE.test(f.name || '')
+          || /presentation|wordprocessing|spreadsheet|msword|ms-excel|ms-powerpoint|opendocument|application\/rtf|text\/csv/.test(f.type || '');
+
+        const results = await Promise.all(files.map(async (f) => {
           try {
-            if (!f.base64) continue;
+            if (!f.base64) return { name: f.name, ok: false, reason: 'no_base64' };
             const fileUuid = crypto.randomUUID();
-            const safeName = (f.name || 'file').replace(/[^\w가-힣.\-]/g, '_');
+            // Supabase Storage 는 ASCII 만 허용 — 한글/특수문자 모두 _ 로 치환.
+            // 원본 파일명은 DB 의 name 컬럼에 그대로 보존.
+            const ext = (f.name || '').match(/\.[^.]+$/)?.[0] || '';
+            const safeName = `file${ext}`.replace(/[^\w.\-]/g, '_');
             const storagePath = `meetings/${meeting.id}/${fileUuid}_${safeName}`;
 
-            // base64 → Blob
             const binary = atob(f.base64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -147,24 +154,39 @@ export function useMeeting() {
               .upload(storagePath, blob, { cacheControl: '3600' });
             if (upErr) {
               console.error('[createMeeting] file upload error:', f.name, upErr);
-              continue;
+              return { name: f.name, ok: false, reason: upErr.message || 'storage_error' };
             }
 
-            const { error: insErr } = await supabase.from('meeting_files').insert({
+            const { data: insData, error: insErr } = await supabase.from('meeting_files').insert({
               meeting_id: meeting.id,
               uploaded_by: user.id,
               name: f.name,
               type: f.type || null,
               size: f.size || 0,
               storage_path: storagePath,
-            });
+            }).select().single();
             if (insErr) {
-              console.error('[createMeeting] meeting_files insert error:', insErr);
+              console.error('[createMeeting] meeting_files insert error:', f.name, insErr);
+              return { name: f.name, ok: false, reason: insErr.message || 'db_error' };
             }
+
+            // Office 파일 → 백그라운드로 PDF 변환 (비차단)
+            if (insData?.id && isOffice(f)) {
+              supabase.functions.invoke('office-to-pdf', { body: { fileId: insData.id } })
+                .catch((e) => console.warn('[createMeeting] office 변환 실패:', f.name, e));
+            }
+            return { name: f.name, ok: true, row: insData };
           } catch (err) {
-            console.error('[createMeeting] file process error:', err);
+            console.error('[createMeeting] file process error:', f.name, err);
+            return { name: f.name, ok: false, reason: String(err?.message || err) };
           }
-        }
+        }));
+        uploadFailures = results.filter((r) => !r.ok);
+      }
+
+      // 실패 정보를 meeting 객체에 첨부 (호출자가 toast 로 안내)
+      if (uploadFailures.length > 0) {
+        meeting._uploadFailures = uploadFailures;
       }
 
       // 로컬 store에 참석자 정보 포함 (UI 렌더용)

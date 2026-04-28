@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2 } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2, Loader2 } from 'lucide-react';
+import { getFileTypeBadge, getFileExt } from '@/lib/fileTypeBadge';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui';
@@ -199,25 +200,62 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
     );
   }
 
-  // 일반 문서: compact 모드에서는 작게, 아니면 140px 중앙 정렬 (섹션 폭에 영향 안 받음)
+  // 일반 문서: compact 모드에서는 작게, 아니면 140px 중앙 정렬
+  // PPT/DOC/XLS 등은 컬러 뱃지 + 확장자로 placeholder. 변환 중이면 spinner 오버레이.
   const docWidth = compact ? '100%' : 140;
+  const badge = getFileTypeBadge(file.name || file.type || '');
+  const ext = getFileExt(file.name);
+  const isConverting = !!file._converting;
+  const convertError = file._convertError;
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={cardKeyHandler}
-      className="mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 border-border-subtle hover:border-brand-purple/40 hover:shadow-md cursor-pointer"
+      className={`mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 hover:shadow-md cursor-pointer ${
+        convertError ? 'border-status-error/40' : 'border-border-subtle hover:border-brand-purple/40'
+      }`}
       style={{ width: docWidth }}
-      title={file.name}
+      title={convertError ? `변환 실패: ${convertError}` : file.name}
     >
-      <div className={`relative w-full ${compact ? 'h-[60px]' : 'h-[100px]'} bg-bg-tertiary flex flex-col items-center justify-center gap-1 text-txt-muted`}>
-        <FileText size={compact ? 20 : 32} strokeWidth={1.4} />
+      <div
+        className={`relative w-full ${compact ? 'h-[60px]' : 'h-[100px]'} flex flex-col items-center justify-center gap-1`}
+        style={{ backgroundColor: badge.bg }}
+      >
+        {/* 큰 컬러 사각 뱃지 — placeholder 썸네일 역할 */}
+        <div
+          className={`flex items-center justify-center rounded font-bold tracking-wide ${
+            compact ? 'w-7 h-7 text-[9px]' : 'w-10 h-12 text-[11px]'
+          }`}
+          style={{ backgroundColor: badge.color, color: badge.textColor }}
+        >
+          {badge.label}
+        </div>
         {!compact && (
-          <span className="text-[9px] uppercase tracking-wider">
-            {(file.name?.split('.').pop() || 'FILE').slice(0, 6)}
+          <span className="text-[9px] uppercase tracking-wider text-txt-muted/80">
+            {ext}
           </span>
         )}
+
+        {/* 변환 중 오버레이 */}
+        {isConverting && (
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1.5">
+            <Loader2 size={compact ? 16 : 22} className="text-white animate-spin" />
+            {!compact && (
+              <span className="text-[9px] text-white font-medium">PDF 변환 중…</span>
+            )}
+          </div>
+        )}
+
+        {/* 변환 실패 표시 */}
+        {convertError && !isConverting && (
+          <div className="absolute bottom-1 left-1 right-1 flex items-center justify-center gap-1 px-1 py-0.5 rounded bg-status-error/90">
+            <AlertTriangle size={10} className="text-white" />
+            <span className="text-[8px] text-white font-medium truncate">변환 실패</span>
+          </div>
+        )}
+
         {SourceBadge}
         {DeleteBtn}
       </div>
