@@ -158,9 +158,12 @@ export default function MemberTaskCard({
       className="w-full bg-bg-secondary border border-border-subtle rounded-lg px-3.5 py-2 text-left hover:border-brand-purple/30 hover:bg-bg-tertiary/30 transition-all group cursor-pointer focus:outline-none focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/20"
     >
       <div className="flex items-stretch gap-3">
-        {/* 우선순위 컬러바 — 시각 인디케이터 (긴급일 때 두껍게 강조) */}
+        {/* 우선순위 컬러바 — 시각 인디케이터 (긴급일 때 두껍게 강조)
+            진행 중 상태에선 부드럽게 fade in/out 루프 (사용자에게 "지금 진행 중" 강조) */}
         <div
-          className={`${task.priority === 'urgent' ? 'w-1.5' : 'w-1'} self-stretch rounded-full ${priority.dot} shrink-0`}
+          className={`${task.priority === 'urgent' ? 'w-1.5' : 'w-1'} self-stretch rounded-full ${priority.dot} shrink-0 ${
+            task.status === 'in_progress' ? 'animate-breathe' : ''
+          }`}
           aria-label={`우선순위: ${priority.label}`}
         />
 

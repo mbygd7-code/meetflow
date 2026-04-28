@@ -267,6 +267,15 @@ html.theme-transitioning *::after {
   20%, 60% { transform: translateX(-6px); }
   40%, 80% { transform: translateX(6px); }
 }
+
+/* breathe — 진행 중 상태의 컬러바 페이드 in/out 루프 */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.animate-breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
 .sidebar-symbol {
   background: linear-gradient(135deg, #FFEF63 0%, #34D399 50%, #FFEF63 100%);
   background-size: 200% 200%;

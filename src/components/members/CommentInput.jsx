@@ -168,7 +168,7 @@ export default function CommentInput({ members = [], onSubmit, onCancel, placeho
                 ? '전송 중...'
                 : justSent
                   ? '✓ 전송됨!'
-                  : placeholder || '댓글 입력... (@ 입력으로 멘션, Enter 전송, 📎 파일 첨부)'
+                  : placeholder || '댓글 입력... (@ 입력으로 멘션)'
             }
             rows={1}
             disabled={sending}

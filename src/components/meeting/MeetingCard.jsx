@@ -208,15 +208,30 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
               seen.add(k);
               return true;
             });
-            return unique.slice(0, 4).map((p) => (
-              <Avatar
-                key={p.id}
-                name={p.name || (p.id ? `참가자 ${p.id.slice(0, 4)}` : '참가자')}
-                color={p.color || '#723CEB'}
-                size="sm"
-                className="ring-2 ring-bg-secondary"
-              />
-            ));
+            // 슬랙 응답 (참석/불참) — user_id별 마지막 응답 매핑
+            const ackList = Array.isArray(meeting.acknowledged_by) ? meeting.acknowledged_by : [];
+            const responseMap = new Map();
+            ackList.forEach((a) => {
+              if (!a?.user_id) return;
+              responseMap.set(a.user_id, a);
+            });
+            return unique.slice(0, 4).map((p) => {
+              const resp = responseMap.get(p.id);
+              // status 누락된 레거시 데이터는 'attending'으로 간주
+              const status = resp?.status || (resp ? 'attending' : null);
+              return (
+                <Avatar
+                  key={p.id}
+                  name={p.name || (p.id ? `참가자 ${p.id.slice(0, 4)}` : '참가자')}
+                  color={p.color || undefined}
+                  size="sm"
+                  acknowledged={status === 'attending'}
+                  declined={status === 'declined'}
+                  declineReason={resp?.reason || ''}
+                  className="ring-2 ring-bg-secondary"
+                />
+              );
+            });
           })()}
           {meeting.participants?.length > 4 && (
             <div className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-[10px] text-txt-secondary ring-2 ring-bg-secondary">

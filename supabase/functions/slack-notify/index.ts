@@ -19,6 +19,11 @@ function taskUrl(taskId: string, commentId?: string): string {
   return commentId ? `${base}&comment=${encodeURIComponent(commentId)}` : base;
 }
 
+// 회의방 딥링크
+function meetingUrl(meetingId: string): string {
+  return `${APP_URL}/meetings/${encodeURIComponent(meetingId)}`;
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -396,6 +401,32 @@ serve(async (req) => {
         const fileCount = (payload.files || []).length;
         const fileNotice = fileCount > 0 ? `\n📎 첨부 파일 ${fileCount}개` : '';
 
+        // 액션 버튼: "MeetFlow에서 참여" + "참석" + "불참석"
+        const reqMeetingId = payload.meeting_id || '';
+        const reqActionElements: any[] = [];
+        if (reqMeetingId) {
+          reqActionElements.push({
+            type: 'button',
+            text: { type: 'plain_text', text: '🎥 MeetFlow', emoji: true },
+            url: meetingUrl(reqMeetingId),
+            action_id: 'open_meeting',
+          });
+          reqActionElements.push({
+            type: 'button',
+            style: 'primary',
+            text: { type: 'plain_text', text: '✅ 참석', emoji: true },
+            action_id: 'attend_meeting',
+            value: reqMeetingId,
+          });
+          reqActionElements.push({
+            type: 'button',
+            style: 'danger',
+            text: { type: 'plain_text', text: '❌ 불참석', emoji: true },
+            action_id: 'decline_meeting',
+            value: reqMeetingId,
+          });
+        }
+
         const msgRes = await postSlack(reqTeam.slack_channel_id, {
           text: `📋 *${payload.requested_by}*님이 새 회의를 요청했어요`,
           blocks: [
@@ -410,6 +441,11 @@ serve(async (req) => {
             ...(reqAgendas ? [{
               type: 'section',
               text: { type: 'mrkdwn', text: `*어젠다*\n${reqAgendas}` },
+            }] : []),
+            ...(reqActionElements.length > 0 ? [{
+              type: 'actions',
+              block_id: `actions_meeting_${reqMeetingId}`,
+              elements: reqActionElements,
             }] : []),
           ],
         });

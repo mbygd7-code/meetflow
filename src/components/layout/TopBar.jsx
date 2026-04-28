@@ -192,7 +192,7 @@ export default function TopBar() {
         )}
 
         {/* 우측 액션 — lg에서 My Tasks(300px)와 동일 너비 */}
-        <div className="flex items-center gap-1 md:gap-1.5 shrink-0 lg:w-[300px] lg:justify-end">
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0 lg:justify-end">
           <button
             type="button"
             onClick={() => palette?.openPalette?.()}

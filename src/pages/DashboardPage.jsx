@@ -416,7 +416,7 @@ export default function DashboardPage() {
             compact
           />
         ) : (
-          <div className="space-y-1.5 max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-hide pr-0.5">
+          <div className="space-y-1.5 pr-0.5">
             {myActiveTasks.map((t) => (
               <MemberTaskCard
                 key={t.id}

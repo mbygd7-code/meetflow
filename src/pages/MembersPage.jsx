@@ -13,7 +13,7 @@ import CreateTaskModal from '@/components/task/CreateTaskModal';
 
 // ── 태스크 변경 diff → 사람이 읽는 요약 라인 ──
 const PRIORITY_LABEL = { urgent: '긴급', high: 'High', medium: 'Medium', low: 'Low' };
-const STATUS_LABEL = { todo: '대기', in_progress: '진행 중', review: '검토', done: '완료', cancelled: '취소' };
+const STATUS_LABEL = { todo: '대기', in_progress: '진행 중', review: '리뷰', done: '완료', cancelled: '취소' };
 
 function truncate(s, n = 80) {
   const t = String(s || '').replace(/\s+/g, ' ').trim();
