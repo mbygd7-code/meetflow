@@ -70,6 +70,11 @@ export function useLiveKitVoice(meetingId) {
   const audioContainersRef = useRef(new Map());
   // 사용량 계측: connect 시각 기록 → leave 시 (now - joinedAt) 으로 분 계산
   const joinedAtRef = useRef(null);
+  // 사용량 중복 기록 방지 — leave() 와 unmount cleanup 가 둘 다 실행되는 race 차단
+  const usageLoggedRef = useRef(false);
+  // unmount cleanup deps `[]` 에서 meetingId 사용을 위한 stale closure 방지
+  const meetingIdRef = useRef(meetingId);
+  useEffect(() => { meetingIdRef.current = meetingId; }, [meetingId]);
 
   // 참가자 목록을 Room 으로부터 새로 빌드
   const rebuildParticipants = useCallback(() => {
@@ -193,6 +198,7 @@ export function useLiveKitVoice(meetingId) {
       await room.connect(url, token, { autoSubscribe: true });
       roomRef.current = room;
       joinedAtRef.current = Date.now();
+      usageLoggedRef.current = false; // 새 세션 시작 — 사용량 기록 플래그 리셋
       setConnected(true);
 
       // iOS Safari autoplay: room.startAudio() 사용자 제스처 컨텍스트에서 호출
@@ -237,12 +243,16 @@ export function useLiveKitVoice(meetingId) {
   const leave = useCallback(async () => {
     const room = roomRef.current;
     if (!room) return;
-    // 사용량 계측: 본인 참여 분 + 평균 참가자 수로 추정
-    //   (정확히는 각 참가자별 분당 누적이지만, MVP 는 본인 세션 기준만 자체 기록)
-    if (joinedAtRef.current) {
+    // 사용량 계측 — 1회만 (leave 와 unmount cleanup 둘 다 실행되는 race 방지)
+    if (joinedAtRef.current && !usageLoggedRef.current) {
+      usageLoggedRef.current = true;
       const durationSec = Math.max(0, (Date.now() - joinedAtRef.current) / 1000);
       const participantCount = Math.max(1, room.numParticipants || 1);
-      logLiveKitSession({ meetingId, durationSeconds: durationSec, participantCount }).catch(() => {});
+      logLiveKitSession({
+        meetingId: meetingIdRef.current,
+        durationSeconds: durationSec,
+        participantCount,
+      }).catch(() => {});
       joinedAtRef.current = null;
     }
     try { await room.disconnect(); } catch {}
@@ -253,7 +263,7 @@ export function useLiveKitVoice(meetingId) {
     setActiveSpeakers(new Set());
     setParticipants([]);
     setLocalStream(null);
-  }, [cleanupAudioElements, meetingId]);
+  }, [cleanupAudioElements]);
 
   // === 음소거 토글 ===
   const toggleMute = useCallback(async () => {
@@ -364,11 +374,16 @@ export function useLiveKitVoice(meetingId) {
     return () => {
       const room = roomRef.current;
       if (room) {
-        // 사용량 계측 — leave() 가 호출되지 않은 채 페이지 이탈한 경우에도 기록
-        if (joinedAtRef.current) {
+        // 사용량 계측 — 1회만 (meetingIdRef 로 stale closure 회피)
+        if (joinedAtRef.current && !usageLoggedRef.current) {
+          usageLoggedRef.current = true;
           const durationSec = Math.max(0, (Date.now() - joinedAtRef.current) / 1000);
           const pcount = Math.max(1, room.numParticipants || 1);
-          logLiveKitSession({ meetingId, durationSeconds: durationSec, participantCount: pcount }).catch(() => {});
+          logLiveKitSession({
+            meetingId: meetingIdRef.current,
+            durationSeconds: durationSec,
+            participantCount: pcount,
+          }).catch(() => {});
           joinedAtRef.current = null;
         }
         try { room.disconnect(); } catch {}

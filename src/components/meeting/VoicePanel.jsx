@@ -4,7 +4,7 @@
 // - 위치: ChatArea 위에 슬라이드형 (참여 중일 때만 표시)
 
 import { Mic, MicOff, Headphones, ChevronUp, ChevronDown, Radio, Repeat } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function VoicePanel({
   participants = [],     // [{ identity, name, isLocal, avatar_color, isMuted }]
@@ -17,10 +17,32 @@ export default function VoicePanel({
   pttPressed = false,
 }) {
   // 모바일(< md, 768px) 에서는 기본 접힘 — 화면 공간 절약. 데스크톱은 기본 펼침.
+  // 사용자가 수동으로 토글한 후엔 자동 동기화 안 함 (의도 보존)
+  const userToggledRef = useRef(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(max-width: 767px)').matches;
   });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = (e) => {
+      // 사용자가 수동 토글 후엔 미디어 쿼리 변동 무시
+      if (userToggledRef.current) return;
+      setCollapsed(e.matches);
+    };
+    // 구형 브라우저 (Safari < 14) addListener fallback
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+  const handleToggleCollapsed = () => {
+    userToggledRef.current = true;
+    setCollapsed((c) => !c);
+  };
 
   const total = participants.length;
   const speakingCount = activeSpeakers?.size || 0;
@@ -104,7 +126,7 @@ export default function VoicePanel({
           </div>
 
           <button
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={handleToggleCollapsed}
             className="p-1 text-txt-muted hover:text-txt-primary transition-colors"
             title={collapsed ? '펼치기' : '접기'}
             aria-label={collapsed ? '참가자 목록 펼치기' : '참가자 목록 접기'}

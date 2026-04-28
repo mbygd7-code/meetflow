@@ -57,8 +57,9 @@ export default function PdfViewer({
   const cursorThrottleRef = useRef(0);
 
   // onLinkClick stale closure 방지 — ref 로 최신 콜백 보관
+  // (렌더 본체에서 ref 변형은 StrictMode 하에서 두 번 실행됨 → useEffect 로 옮겨 안정화)
   const onLinkClickRef = useRef(onLinkClick);
-  onLinkClickRef.current = onLinkClick;
+  useEffect(() => { onLinkClickRef.current = onLinkClick; }, [onLinkClick]);
 
   // PDF annotation 링크 — 클릭 인터셉트(인앱 iframe 오픈) + 폴백 target 설정.
   //   부모가 onLinkClick 을 제공하면: 클릭 시 preventDefault 후 콜백 호출 (인앱 iframe).
@@ -207,7 +208,7 @@ export default function PdfViewer({
   // touchstart 시 두 손가락 간 거리 기록 → touchmove 에서 비율로 zoom 조정
   //   zoom 클로저 stale 방지: ref로 최신 zoom 유지
   const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -358,23 +359,30 @@ export default function PdfViewer({
   // 줌이 1 초과이고 페이지폭이 변할 때마다 부모에게 알림
   // — 부모(DocumentPanel) 가 자료 섹션을 함께 확장하여 콘텐츠가 잘리지 않게 함.
   // zoom <= 1 이면 0 을 보고 → 부모는 baseWidth 로 복귀.
+  // onContentWidthChange ref 화 → 콜백 reference 변동에 effect/cleanup 영향 안 받음.
   const lastReportedRef = useRef(0);
+  const onContentWidthChangeRef = useRef(onContentWidthChange);
+  useEffect(() => { onContentWidthChangeRef.current = onContentWidthChange; }, [onContentWidthChange]);
+
   useEffect(() => {
-    if (typeof onContentWidthChange !== 'function') return;
+    const cb = onContentWidthChangeRef.current;
+    if (typeof cb !== 'function') return;
     const reported = zoom > 1 ? Math.ceil(pageWidth) : 0;
     if (reported === lastReportedRef.current) return;
     lastReportedRef.current = reported;
-    onContentWidthChange(reported);
-  }, [pageWidth, zoom, onContentWidthChange]);
+    cb(reported);
+  }, [pageWidth, zoom]);
 
   // 언마운트 시 부모 보고치 0 으로 리셋 — 다른 파일로 전환해도 잔존 폭이 남지 않게
+  // deps `[]` — 콜백 변동으로 cleanup 이 잘못 발화하지 않게.
   useEffect(() => {
     return () => {
-      if (typeof onContentWidthChange === 'function' && lastReportedRef.current !== 0) {
-        onContentWidthChange(0);
+      const cb = onContentWidthChangeRef.current;
+      if (typeof cb === 'function' && lastReportedRef.current !== 0) {
+        cb(0);
       }
     };
-  }, [onContentWidthChange]);
+  }, []);
 
   // 컨트롤(페이지 네비/줌) — controlsContainer 가 있으면 포털, 없으면 인라인
   // 모바일에서는 패딩/아이콘 사이즈/min-width 압축으로 한 줄에 들어가게

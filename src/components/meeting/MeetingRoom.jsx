@@ -1539,20 +1539,19 @@ function DocumentPanel({
     }
   }, [docFile, zoomFile, pendingInitialPage, pendingInitialPageFileId]);
 
-  // 리사이저 드래그 — 최소 80px (컴팩트), 최대 화면폭-CHAT_MIN_WIDTH (채팅창 모바일 최소 가로폭 보장)
-  // 풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px (툴바 + 100px 여유)
+  // 리사이저 드래그 — 마우스/터치 모두 지원
+  //   최소 80px (컴팩트), 최대 화면폭-CHAT_MIN_WIDTH (채팅창 모바일 최소 가로폭 보장)
+  //   풀사이즈 뷰어(zoomFile/docFile) 활성 시: 최소 480px
   const onResizerDown = (e) => {
     e.preventDefault();
-    // 사용자가 의도적으로 드래그하면 collapsed 상태 해제 — drag 결과가 즉시 반영됨
     if (userCollapsed) setUserCollapsed(false);
-    const startX = e.clientX;
-    // 화면에 실제로 그려진 폭부터 드래그 시작 — collapsed/clamp 상태에서 점프 방지
-    //   userCollapsed=true 면 baseWidth=MIN_WIDTH 였으므로 그 값에서, 아니면 effectiveWidth 그대로
+    // 마우스/터치 통합 — clientX 추출
+    const getClientX = (ev) => (ev.touches?.[0]?.clientX ?? ev.clientX);
+    const startX = getClientX(e);
     const startW = userCollapsed ? MIN_WIDTH : effectiveWidth;
     const minWForDrag = (zoomFile || docFile) ? 480 : 80;
     const onMove = (ev) => {
-      const dx = ev.clientX - startX;
-      // 우측 한계 — 화면 폭에서 채팅 최소폭(400)을 뺀 값까지만 자료 패널 확장 허용
+      const dx = getClientX(ev) - startX;
       const maxW = Math.max(minWForDrag, window.innerWidth - CHAT_MIN_WIDTH);
       const next = Math.max(minWForDrag, Math.min(maxW, startW + dx));
       setWidth(next);
@@ -1560,6 +1559,9 @@ function DocumentPanel({
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+      document.removeEventListener('touchcancel', onUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -1567,6 +1569,9 @@ function DocumentPanel({
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+    document.addEventListener('touchcancel', onUp);
   };
 
   // 파일이 없을 때는 최소 폭(80px)으로 자동 축소 → 채팅 공간 확보
@@ -1767,7 +1772,8 @@ function DocumentPanel({
           <div
             ref={resizerRef}
             onMouseDown={onResizerDown}
-            className="absolute top-0 right-0 w-2 h-full cursor-col-resize group/resize z-30"
+            onTouchStart={onResizerDown}
+            className="absolute top-0 right-0 w-2 h-full cursor-col-resize group/resize z-30 touch-none"
             title="드래그하여 가로 크기 조절"
           >
             {/* 세로 라인 — 호버 시 두꺼워지고 보라색으로 강조 */}

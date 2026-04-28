@@ -149,24 +149,29 @@ export default function ChatArea({
   //   - Space 키 (PTT 또는 toggle 모드) 로 mute 변경 → 즉시 STT 따라가기
   //   - 큰 마이크 버튼 클릭으로 mute 변경 → 동일하게 동기화
   // 단일 source of truth = voiceMuted state. 클릭/Space 어느 쪽으로 변해도 STT 일관 동작.
+  // STT 자동 시작/중지 — isListening 도 deps 에 포함해야 함
+  // (Web Speech API 가 onend 로 자체 종료 시 isListening false 로 변하면
+  //  effect 가 재실행되어 다시 startSTT 호출 — 자막 영구 끊김 방지)
+  // startSTT/stopSTT 도 deps 에 포함하지만 useCallback 으로 안정화되어 있음.
   useEffect(() => {
     if (!voiceConnected) return;
     if (!sttSupported) return;
     if (!voiceMuted && !isListening) {
-      // unmute → STT 시작 (자막)
       startSTT();
     } else if (voiceMuted && isListening) {
-      // mute → STT 중지
       stopSTT();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceMuted, voiceConnected, sttSupported]);
+  }, [voiceMuted, voiceConnected, sttSupported, isListening, startSTT, stopSTT]);
 
   // LiveKit 참여/종료 전환 시 입력 모드 자동 전환
   //   - voiceConnected: false → true 전환 시 voiceMode = true (음성 입력)
   //   - voiceConnected: true → false 전환 시 voiceMode = false (텍스트)
-  // 사용자가 LiveKit 참여 중 수동으로 텍스트 모드 누른 경우엔 그 상태 유지 (전환점에서만 동기화)
+  // ref 패턴으로 isListening/stopSTT stale closure 회피
   const prevVoiceConnectedRef = useRef(voiceConnected);
+  const isListeningRef = useRef(isListening);
+  const stopSTTRef = useRef(stopSTT);
+  useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
+  useEffect(() => { stopSTTRef.current = stopSTT; }, [stopSTT]);
   useEffect(() => {
     const prev = prevVoiceConnectedRef.current;
     prevVoiceConnectedRef.current = voiceConnected;
@@ -174,9 +179,8 @@ export default function ChatArea({
       setVoiceMode(true);
     } else if (prev && !voiceConnected) {
       setVoiceMode(false);
-      if (isListening) stopSTT(); // 혹시 STT 켜져 있으면 종료
+      if (isListeningRef.current) stopSTTRef.current?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceConnected]);
   const { user } = useAuthStore();
 
@@ -270,16 +274,31 @@ export default function ChatArea({
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
     };
+    // 활성 timer 트래킹 — blur/unmount 시 모두 cleanup 하여 의도치 않은 호출 방지
+    let rafId = null;
+    const timeoutIds = [];
     const onFocus = () => {
-      // iOS 는 키보드가 완전히 올라온 후(약 300~500ms) 까지 여러 차례
-      // focused element 를 viewport 상단으로 끌어올리려 시도함.
-      // 여러 프레임 + setTimeout 에서 반복적으로 위치 복원.
       restoreView();
-      requestAnimationFrame(restoreView);
-      [50, 150, 300, 500].forEach((t) => setTimeout(restoreView, t));
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        restoreView();
+      });
+      [50, 150, 300, 500].forEach((t) => {
+        timeoutIds.push(setTimeout(restoreView, t));
+      });
+    };
+    const onBlur = () => {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      timeoutIds.forEach(clearTimeout);
+      timeoutIds.length = 0;
     };
     ta.addEventListener('focus', onFocus);
-    return () => ta.removeEventListener('focus', onFocus);
+    ta.addEventListener('blur', onBlur);
+    return () => {
+      ta.removeEventListener('focus', onFocus);
+      ta.removeEventListener('blur', onBlur);
+      onBlur();
+    };
   }, []);
 
   return (
