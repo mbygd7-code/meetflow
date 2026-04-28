@@ -328,12 +328,25 @@ serve(async (req) => {
       }
 
       case 'meeting_request': {
-        const { data: reqTeam } = await supabase
-          .from('teams')
-          .select('slack_channel_id')
-          .eq('id', payload.team_id)
-          .single();
-        if (!reqTeam?.slack_channel_id) break;
+        // team_id 가 있으면 해당 팀 channel, 없으면 SLACK_DEFAULT_CHANNEL fallback
+        let channelId: string | null = null;
+        if (payload.team_id) {
+          const { data: reqTeam } = await supabase
+            .from('teams')
+            .select('slack_channel_id')
+            .eq('id', payload.team_id)
+            .single();
+          channelId = reqTeam?.slack_channel_id || null;
+        }
+        if (!channelId) {
+          channelId = Deno.env.get('SLACK_DEFAULT_CHANNEL') || null;
+        }
+        if (!channelId) {
+          console.warn('[slack-notify] meeting_request: 채널 없음 (team_id missing + SLACK_DEFAULT_CHANNEL 미설정)');
+          break;
+        }
+        // 호환을 위해 reqTeam 객체 형태 유지
+        const reqTeam = { slack_channel_id: channelId };
 
         const reqAgendas = (payload.agendas || [])
           .map((a: any, i: number) => `${i + 1}. ${a.title} (${a.duration_minutes}분)`)

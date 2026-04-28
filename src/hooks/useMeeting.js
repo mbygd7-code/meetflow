@@ -388,9 +388,10 @@ export function useMeeting() {
       const meeting = await createMeeting({ title, team_id, agendas, participants, files, scheduledDate, scheduledTime });
 
       // 2. Slack 통지 (Edge Function 호출)
-      if (canUseDB && team_id) {
+      // team_id 없어도 Slack 알림 시도 (slack-notify 함수가 default channel 또는 참가자 DM 처리)
+      if (canUseDB) {
         try {
-          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id, '파일 수:', files.length, '파일명:', files.map(f => f.name));
+          console.log('[requestMeeting] Slack 통지 시작 — team_id:', team_id || '(없음)', '파일 수:', files.length, '참가자:', participants.length);
           const { data: slackRes, error: slackErr } = await supabase.functions.invoke('slack-notify', {
             body: {
               event: 'meeting_request',
@@ -421,7 +422,8 @@ export function useMeeting() {
       // 3. Google Calendar 이벤트 생성 (Edge Function 호출)
       if (canUseDB && scheduledDate && scheduledTime) {
         try {
-          await supabase.functions.invoke('gcal-create-event', {
+          console.log('[requestMeeting] Calendar 등록 시작:', scheduledDate, scheduledTime);
+          const { data: calRes, error: calErr } = await supabase.functions.invoke('gcal-create-event', {
             body: {
               title,
               date: scheduledDate,
@@ -431,9 +433,16 @@ export function useMeeting() {
               meeting_id: meeting.id,
             },
           });
+          if (calErr) {
+            console.error('[requestMeeting] Calendar 에러:', calErr);
+          } else {
+            console.log('[requestMeeting] Calendar 응답:', calRes);
+          }
         } catch (err) {
-          console.warn('[requestMeeting] Google Calendar 연동 실패:', err);
+          console.error('[requestMeeting] Calendar 예외:', err);
         }
+      } else {
+        console.log('[requestMeeting] Calendar 스킵 — date/time 누락:', { scheduledDate, scheduledTime });
       }
 
       // 데모 모드에서도 시각적 피드백을 위해 콘솔 로그
