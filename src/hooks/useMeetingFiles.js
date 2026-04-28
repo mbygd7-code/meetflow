@@ -49,8 +49,25 @@ export function useMeetingFiles(meetingId) {
 
     let cancelled = false;
 
-    // 초기 fetch — 신규 회의 진입 직후엔 INSERT 가 아직 read replica 에 보이지 않을 수 있음.
+    // 초기 fetch + 변환 안 된 office 파일 자동 재시도
+    // 신규 회의 진입 직후엔 INSERT 가 아직 read replica 에 보이지 않을 수 있음.
     // 짧은 retry 로 누락된 파일까지 모두 잡아옴 (200ms × 3회 → 800ms 후 정상 안정).
+    //
+    // 추가: 페이지 진입 시 변환 누락된 office 파일 발견하면 자동 재시도
+    async function retryStuckConversions(rows) {
+      const OFFICE_RE = /\.(pptx|ppt|docx|doc|xlsx|xls|odp|odt|ods|rtf|csv)$/i;
+      const stuck = (rows || []).filter((r) =>
+        r.type !== 'application/pdf'
+        && OFFICE_RE.test(r.name || '')
+        && !r.metadata?.converted_at
+      );
+      for (const row of stuck) {
+        // 비차단 — 재시도 트리거. 변환 완료 시 Realtime UPDATE 로 UI 자동 갱신.
+        supabase.functions.invoke('office-to-pdf', { body: { fileId: row.id } })
+          .catch((e) => console.warn('[useMeetingFiles] 자동 재변환 실패:', row.name, e));
+      }
+    }
+
     async function load(attempt = 0) {
       const { data, error } = await supabase
         .from('meeting_files')
@@ -81,6 +98,10 @@ export function useMeetingFiles(meetingId) {
         if (attempt < 2) {
           setTimeout(() => { if (!cancelled) load(attempt + 1); }, 200 * (attempt + 1));
         }
+        // 마지막 attempt 후 변환 누락된 파일 자동 재시도
+        if (attempt === 2 && !cancelled) {
+          retryStuckConversions(data || []);
+        }
       }
     }
     load();
@@ -100,6 +121,19 @@ export function useMeetingFiles(meetingId) {
             if (prev.some((f) => f.id === payload.new.id)) return prev;
             return [payload.new, ...prev];
           });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'meeting_files', filter: `meeting_id=eq.${meetingId}` },
+        async (payload) => {
+          // REPLICA IDENTITY DEFAULT 환경에선 payload.new 가 완전치 않을 수 있음 → 다시 fetch
+          const id = payload?.new?.id;
+          if (!id) return;
+          const { data: full } = await supabase
+            .from('meeting_files').select('*').eq('id', id).maybeSingle();
+          if (!full) return;
+          setFiles((prev) => prev.map((f) => (f.id === full.id ? { ...full } : f)));
         }
       )
       .on(

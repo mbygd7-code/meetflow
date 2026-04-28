@@ -185,7 +185,24 @@ export function useMeeting() {
             // Office 파일 → 백그라운드로 PDF 변환 (비차단)
             if (insData?.id && isOffice(f)) {
               supabase.functions.invoke('office-to-pdf', { body: { fileId: insData.id } })
-                .catch((e) => console.warn('[createMeeting] office 변환 실패:', f.name, e));
+                .then(async (res) => {
+                  // 디버그: 응답 본문 명시적 로그
+                  if (res?.error) {
+                    // FunctionsHttpError 의 경우 res.error.context.body 에 응답 텍스트
+                    let bodyText = null;
+                    try {
+                      bodyText = await res.error?.context?.text?.();
+                    } catch {}
+                    console.error('[office-to-pdf] 변환 실패:', f.name, {
+                      message: res.error.message,
+                      status: res.error?.context?.status,
+                      body: bodyText,
+                    });
+                  } else if (res?.data) {
+                    console.log('[office-to-pdf] 변환 성공:', f.name, res.data);
+                  }
+                })
+                .catch((e) => console.error('[office-to-pdf] 변환 예외:', f.name, e));
             }
             return { name: f.name, ok: true, row: insData };
           } catch (err) {

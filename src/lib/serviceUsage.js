@@ -40,6 +40,13 @@ export const SERVICE_PRICING = {
     label: 'Database',
     unit: '월정액',
   },
+  // CloudConvert — Office → PDF 변환. paid plan: $0.005/credit (≈ 1 minute)
+  cloudconvert: {
+    perMinute: 0.005,
+    freeQuota: 25, // free plan: 25 credits/month
+    label: 'CloudConvert (PDF 변환)',
+    unit: '변환·분',
+  },
 };
 
 // ── 사용량 기록 ─────────────────────────────────────────────────────────

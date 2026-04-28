@@ -184,6 +184,7 @@ export default function TokenUsagePage() {
     stt: { icon: Mic, label: SERVICE_PRICING.stt.label, color: 'text-brand-orange' },
     edge_function: { icon: Server, label: SERVICE_PRICING.edge_function.label, color: 'text-status-info' },
     storage: { icon: Database, label: SERVICE_PRICING.storage.label, color: 'text-status-success' },
+    cloudconvert: { icon: FileText, label: SERVICE_PRICING.cloudconvert.label, color: 'text-status-error' },
   };
 
   return (

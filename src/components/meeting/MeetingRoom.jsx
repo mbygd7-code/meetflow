@@ -205,19 +205,28 @@ function FileThumbCard({ file, getUrl, onClick, isImage, compact = false, canDel
   const docWidth = compact ? '100%' : 140;
   const badge = getFileTypeBadge(file.name || file.type || '');
   const ext = getFileExt(file.name);
-  const isConverting = !!file._converting;
+  // Office 파일이고 아직 PDF 로 변환 안 된 상태 → 변환 진행 중으로 간주
+  // (createMeeting 경로에선 _converting 플래그가 안 set 되지만, 파일 type 자체로 판정 가능)
+  const OFFICE_NAME_RE = /\.(pptx|ppt|docx|doc|xlsx|xls|odp|odt|ods|rtf|csv)$/i;
+  const isOfficeOriginal =
+    OFFICE_NAME_RE.test(file.name || '') &&
+    file.type !== 'application/pdf' &&
+    !file.metadata?.converted_at;
+  const isConverting = !!file._converting || isOfficeOriginal;
   const convertError = file._convertError;
   return (
     <div
       role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={cardKeyHandler}
-      className={`mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 hover:shadow-md cursor-pointer ${
+      tabIndex={isConverting ? -1 : 0}
+      onClick={isConverting ? undefined : onClick}
+      onKeyDown={isConverting ? undefined : cardKeyHandler}
+      className={`mx-auto rounded-lg overflow-hidden transition-all group text-center border bg-bg-tertiary/50 hover:shadow-md ${
+        isConverting ? 'cursor-wait' : 'cursor-pointer'
+      } ${
         convertError ? 'border-status-error/40' : 'border-border-subtle hover:border-brand-purple/40'
       }`}
       style={{ width: docWidth }}
-      title={convertError ? `변환 실패: ${convertError}` : file.name}
+      title={convertError ? `변환 실패: ${convertError}` : isConverting ? `${file.name} (PDF 변환 중...)` : file.name}
     >
       <div
         className={`relative w-full ${compact ? 'h-[60px]' : 'h-[100px]'} flex flex-col items-center justify-center gap-1`}
