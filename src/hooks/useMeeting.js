@@ -431,6 +431,8 @@ export function useMeeting() {
               duration: duration || 30,
               participants: participants.map((p) => p.name),
               meeting_id: meeting.id,
+              agendas: (agendas || []).map((a) => ({ title: a.title, duration_minutes: a.duration_minutes })),
+              files: (files || []).map((f) => ({ name: f.name, size: f.size })),
             },
           });
           if (calErr) {

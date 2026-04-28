@@ -74,7 +74,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { title, date, time, duration, participants, meeting_id } = await req.json();
+    const { title, date, time, duration, participants, meeting_id, agendas, files } = await req.json();
 
     if (!title || !date || !time) {
       return new Response(
@@ -102,14 +102,38 @@ serve(async (req) => {
     const endMs = startMs + (duration || 30) * 60 * 1000;
     const endDateTime = new Date(endMs).toISOString().replace('Z', '');
 
+    // 어젠다 / 첨부파일 텍스트 빌드
+    const agendaLines = (agendas || [])
+      .filter((a: any) => a?.title?.trim())
+      .map((a: any, i: number) => `  ${i + 1}. ${a.title}${a.duration_minutes ? ` (${a.duration_minutes}분)` : ''}`)
+      .join('\n');
+    const fileLines = (files || [])
+      .filter((f: any) => f?.name)
+      .map((f: any) => `  • ${f.name}`)
+      .join('\n');
+
+    // 캘린더 이벤트 설명 — 회의 제목 + 어젠다 + 참석자 + 첨부파일 + 안내 멘트
+    const descriptionParts: string[] = [];
+    descriptionParts.push(`[MeetFlow] ${title}`);
+    if (agendaLines) descriptionParts.push(`📋 어젠다\n${agendaLines}`);
+    if ((participants || []).length > 0) descriptionParts.push(`👥 참석자\n  ${(participants || []).join(', ')}`);
+    if (fileLines) descriptionParts.push(`📎 첨부 파일\n${fileLines}`);
+    // 안내 멘트 — 어젠다 또는 첨부파일이 있을 때만 표시
+    if (agendaLines || fileLines) {
+      let subject: string;
+      if (agendaLines && fileLines) subject = '어젠다와 첨부 파일을';
+      else if (agendaLines) subject = '어젠다를';
+      else subject = '첨부 파일을';
+      descriptionParts.push(
+        `💡 회의 시작 전 위 ${subject} 미리 확인해 주세요.\n` +
+        `   준비된 회의가 짧고 효율적인 회의를 만듭니다.`
+      );
+    }
+
     // Google Calendar API 호출
     const event = {
       summary: `[MeetFlow] ${title}`,
-      description: [
-        `MeetFlow 회의 요청`,
-        `참석자: ${(participants || []).join(', ')}`,
-        meeting_id ? `회의 ID: ${meeting_id}` : '',
-      ].filter(Boolean).join('\n'),
+      description: descriptionParts.join('\n\n'),
       start: {
         dateTime: `${startDateTime}+09:00`, // KST
         timeZone: 'Asia/Seoul',
