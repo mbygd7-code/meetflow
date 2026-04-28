@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -7,9 +7,21 @@ import { generateSummary } from '@/lib/claude';
 const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
 
 export function useMeeting() {
-  const { meetings, setMeetings, addMeeting, updateMeeting, removeMeeting, getById } =
+  const { meetings: rawMeetings, setMeetings, addMeeting, updateMeeting, removeMeeting, getById } =
     useMeetingStore();
   const { user } = useAuthStore();
+
+  // store 차원에서 race 로 같은 id 가 두 번 들어가는 케이스 방어 — 항상 unique 한 배열만 노출
+  const meetings = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const m of (rawMeetings || [])) {
+      if (!m?.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push(m);
+    }
+    return out;
+  }, [rawMeetings]);
 
   // 데모 사용자(mockSignIn)인 경우 Supabase DB 사용 안 함
   const isDemo = user?.id?.startsWith('mock-');
