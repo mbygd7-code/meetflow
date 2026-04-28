@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import {
   Users, Plus, X, Trash2, UserPlus, UserMinus, Check, Search, Edit2,
   Mail, UserCog, Loader2, AlertCircle, ChevronRight, KeyRound, Copy, ArrowLeft,
+  HelpCircle,
 } from 'lucide-react';
+import SlackIdHelpModal from '@/components/common/SlackIdHelpModal';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -53,6 +55,7 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
   const [inviteName, setInviteName] = useState('');
   const [inviteTeamId, setInviteTeamId] = useState('');
   const [inviteSlackId, setInviteSlackId] = useState('');
+  const [slackHelpOpen, setSlackHelpOpen] = useState(false);
   // ── 비밀번호 재설정 링크 ──
   const [resetLinkLoadingId, setResetLinkLoadingId] = useState(null);
   const [resetLinkModal, setResetLinkModal] = useState(null); // { email, link }
@@ -566,18 +569,27 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
                       <rect x="3" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/>
                     </svg>
                     <span>Slack ID</span>
+                    <button
+                      type="button"
+                      onClick={() => setSlackHelpOpen(true)}
+                      className="text-txt-muted hover:text-brand-purple transition-colors"
+                      title="Slack ID 찾는 방법"
+                      aria-label="도움말"
+                    >
+                      <HelpCircle size={13} />
+                    </button>
                   </div>
                   <input
                     type="text"
                     value={inviteSlackId}
                     onChange={(e) => setInviteSlackId(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleInviteUser()}
-                    placeholder="U09XXXXXXX (사용자 ID) 또는 C09XXXXXXX (채널 ID) — 선택"
+                    placeholder="U09XXXXXXX (사용자 ID) — 선택"
                     disabled={inviting}
                     className="flex-1 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-1.5 text-xs text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50 disabled:opacity-50 font-mono"
                   />
                   <span className="hidden md:inline text-[10px] text-txt-muted shrink-0">
-                    DM/채널 알림용
+                    DM 알림용
                   </span>
                 </div>
               </div>
@@ -1110,6 +1122,9 @@ export default function TeamManagementModal({ open, onClose, initialTab = 'teams
           </div>
         </div>
       )}
+
+      {/* Slack ID 도움말 팝오버 — 공용 컴포넌트 */}
+      <SlackIdHelpModal open={slackHelpOpen} onClose={() => setSlackHelpOpen(false)} />
     </div>,
     document.body
   );
@@ -1563,13 +1578,13 @@ function EditMemberDialog({ member, allTeams, memberTeamIds, onClose, onSaved })
           {/* Slack ID */}
           <div>
             <label className="block text-[11px] text-txt-muted font-semibold uppercase tracking-wider mb-1.5">
-              Slack ID <span className="text-txt-muted font-normal normal-case tracking-normal">(DM/채널 알림용)</span>
+              Slack ID <span className="text-txt-muted font-normal normal-case tracking-normal">(DM 알림용)</span>
             </label>
             <input
               type="text"
               value={slackId}
               onChange={(e) => setSlackId(e.target.value)}
-              placeholder="U09XXXXXXX (사용자 ID) 또는 C09XXXXXXX (채널 ID)"
+              placeholder="U09XXXXXXX (사용자 ID)"
               className="w-full bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50 font-mono"
             />
             <p className="text-[10px] text-txt-muted mt-1">

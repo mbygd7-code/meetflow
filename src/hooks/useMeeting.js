@@ -400,11 +400,13 @@ export function useMeeting() {
                 team_id,
                 meeting_id: meeting.id,
                 agendas,
-                participants: participants.map((p) => p.name),
+                // {id, name} 형태로 전달 — 함수가 slack_user_id 조회해 멘션 처리
+                participants: participants.map((p) => ({ id: p.id, name: p.name })),
                 scheduled_date: scheduledDate,
                 scheduled_time: scheduledTime,
                 duration,
                 requested_by: user?.name || '사용자',
+                requested_by_id: user?.id || null, // 요청자 본인도 멘션 받도록
                 files: files.slice(0, 5),
               },
             },
