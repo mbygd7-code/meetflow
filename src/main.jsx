@@ -23,6 +23,17 @@ import './index.css';
   window.addEventListener('load', setVh);
 })();
 
+// react-pdf worker termination 무해 에러 silent 처리
+//   PDF 썸네일이 빠르게 마운트/언마운트할 때 PDF.js worker 가 강제 종료되며 발생.
+//   기능엔 영향 없지만 콘솔이 지저분해 사용자가 진짜 에러를 못 보게 됨.
+//   "Worker was terminated" 메시지만 정확히 매칭해서 silent.
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = String(e.reason?.message || e.reason || '');
+  if (msg.includes('Worker was terminated')) {
+    e.preventDefault(); // 콘솔 출력 차단
+  }
+});
+
 // iOS Safari layout viewport 강제 스크롤 차단
 //   input 포커스 시 iOS 가 layout viewport(html) 를 위로 스크롤해서 focused 요소를
 //   상단으로 끌어올리는 동작이 있음. body{overflow:hidden} 만으로는 못 막아
