@@ -2,6 +2,30 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 
+// Office 파일 (PDF/이미지 외 — Drive 변환 대상) 판정
+//   확장자 우선, mime type 보조 (브라우저별 mime 비표준 케이스 대비)
+const OFFICE_EXT = /\.(pptx|ppt|docx|doc|xlsx|xls|odp|odt|ods|rtf|csv|txt|md)$/i;
+const OFFICE_MIME = new Set([
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/rtf',
+  'text/csv',
+  'text/plain',
+]);
+export function isOfficeFile(file) {
+  if (!file) return false;
+  if (OFFICE_EXT.test(file.name || '')) return true;
+  if (file.type && OFFICE_MIME.has(file.type)) return true;
+  return false;
+}
+
 /**
  * 회의별 파일 첨부 관리 훅
  * - 초기 로드: meeting_files 테이블에서 조회
@@ -120,6 +144,32 @@ export function useMeetingFiles(meetingId) {
           if (prev.some((f) => f.id === data.id)) return prev;
           return [data, ...prev];
         });
+
+        // Office 파일 자동 PDF 변환 — 업로드 직후 비동기 호출 (UI 비차단)
+        // 지원: pptx/ppt, docx/doc, xlsx/xls, odp/odt/ods, rtf, csv
+        if (isOfficeFile(file)) {
+          (async () => {
+            try {
+              const { data: convRes, error: convErr } = await supabase.functions.invoke('office-to-pdf', {
+                body: { fileId: data.id },
+              });
+              if (convErr) {
+                console.warn('[useMeetingFiles] office 변환 실패:', convErr.message);
+                return;
+              }
+              if (convRes?.ok) {
+                const { data: updated } = await supabase
+                  .from('meeting_files').select('*').eq('id', data.id).single();
+                if (updated) {
+                  setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+                }
+              }
+            } catch (e) {
+              console.warn('[useMeetingFiles] office 변환 예외:', e);
+            }
+          })();
+        }
+
         return data;
       } catch (err) {
         console.error('[useMeetingFiles.uploadFile] error:', err);

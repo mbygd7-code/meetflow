@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkles, Zap } from 'lucide-react';
+import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkles, Zap, Link2, Globe } from 'lucide-react';
 import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
@@ -177,6 +177,9 @@ export default function CreateMeetingModal({ open, onClose }) {
   const [showTimeSuggestions, setShowTimeSuggestions] = useState(false);
   const [duration, setDuration] = useState(draft.current?.duration || 30);
   const [files, setFiles] = useState([]);
+  const [urls, setUrls] = useState([]); // [{ id, url, label }] — URL 자료 목록
+  const [urlInput, setUrlInput] = useState('');
+  const [urlOpen, setUrlOpen] = useState(false); // URL 입력창 토글
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -244,6 +247,24 @@ export default function CreateMeetingModal({ open, onClose }) {
 
   const removeFile = (id) => setFiles((prev) => prev.filter((f) => f.id !== id));
 
+  // URL 자료 추가/제거 — Google Docs/Sheets/Slides 등 외부 URL
+  const handleAddUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    let normalized = trimmed;
+    if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
+    try {
+      const u = new URL(normalized);
+      // 라벨 — 도메인 + 경로 끝부분
+      const label = `${u.hostname}${u.pathname.length > 1 ? u.pathname.slice(0, 30) : ''}`;
+      setUrls((prev) => [...prev, { id: crypto.randomUUID(), url: normalized, label }]);
+      setUrlInput('');
+    } catch {
+      // 유효하지 않은 URL — 사용자에게 비주얼 피드백 (input 흔들기 등은 생략)
+    }
+  };
+  const removeUrl = (id) => setUrls((prev) => prev.filter((u) => u.id !== id));
+
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -276,6 +297,9 @@ export default function CreateMeetingModal({ open, onClose }) {
     setScheduledTime('');
     setDuration(30);
     setFiles([]);
+    setUrls([]);
+    setUrlInput('');
+    setUrlOpen(false);
   };
 
   // 임시저장
@@ -311,6 +335,7 @@ export default function CreateMeetingModal({ open, onClose }) {
         agendas: cleaned,
         participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
         files: filePayloads,
+        urls: urls.map(({ url, label }) => ({ url, label })),
         scheduledDate,
         scheduledTime,
         duration,
@@ -341,6 +366,16 @@ export default function CreateMeetingModal({ open, onClose }) {
         participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
       });
       await startMeeting(meeting.id);
+
+      // URL 자료 — 즉시 시작 시 회의방 진입 후 import-google-doc 으로 가져오기 (비차단)
+      if (urls.length > 0) {
+        urls.forEach((u) => {
+          supabase.functions.invoke('import-google-doc', {
+            body: { meetingId: meeting.id, url: u.url, label: u.label },
+          }).catch((e) => console.warn('[handleStartNow] URL 가져오기 실패:', u.url, e));
+        });
+      }
+
       clearDraft();
       onClose();
       navigate(`/meetings/${meeting.id}`);
@@ -702,42 +737,83 @@ export default function CreateMeetingModal({ open, onClose }) {
           </div>
         </div>
 
-        {/* 참고 문서 */}
+        {/* 참고 문서 — 파일 업로드 + URL 자료 추가 */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-txt-secondary uppercase tracking-wider">
               참고 문서
             </label>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
-            >
-              <Paperclip size={16} strokeWidth={2.4} />
-              첨부
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs text-brand-purple hover:text-txt-primary flex items-center gap-1 transition-colors"
+              >
+                <Paperclip size={16} strokeWidth={2.4} />
+                파일
+              </button>
+              <button
+                type="button"
+                onClick={() => setUrlOpen((v) => !v)}
+                className={`text-xs flex items-center gap-1 transition-colors ${
+                  urlOpen ? 'text-brand-purple' : 'text-brand-purple hover:text-txt-primary'
+                }`}
+              >
+                <Link2 size={16} strokeWidth={2.4} />
+                URL
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.odp,.ods,.rtf,.txt,.md,.csv"
               onChange={handleFileAdd}
               className="hidden"
             />
           </div>
 
-          {files.length === 0 ? (
+          {/* URL 입력 패널 — 토글 */}
+          {urlOpen && (
+            <div className="mb-2 p-3 rounded-md bg-bg-tertiary border border-border-subtle">
+              <div className="flex items-center gap-2">
+                <Globe size={14} className="text-brand-purple shrink-0" />
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddUrl(); } }}
+                  placeholder="https://docs.google.com/... 또는 https://..."
+                  className="flex-1 bg-bg-primary border border-border-subtle rounded-md px-3 py-1.5 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:border-brand-purple/50"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddUrl}
+                  disabled={!urlInput.trim()}
+                  className="px-3 py-1.5 rounded-md bg-brand-purple text-white text-xs font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity"
+                >
+                  추가
+                </button>
+              </div>
+              <p className="text-[10px] text-txt-muted mt-1.5">
+                Google Docs / Sheets / Slides 또는 일반 웹페이지 — 회의 시 참고 자료로 표시
+              </p>
+            </div>
+          )}
+
+          {files.length === 0 && urls.length === 0 ? (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="w-full border-2 border-dashed border-border-default rounded-md py-6 flex flex-col items-center gap-2 text-txt-muted hover:border-brand-purple/30 hover:text-txt-secondary transition-colors"
             >
               <Paperclip size={20} />
-              <p className="text-xs">문서, 이미지 등을 드래그하거나 클릭하여 첨부</p>
-              <p className="text-[10px]">PDF, DOC, XLS, PPT, 이미지 등</p>
+              <p className="text-xs">문서·이미지를 드래그하거나 클릭하여 첨부</p>
+              <p className="text-[10px]">PDF, DOC, XLS, PPT, 이미지 — Office 파일은 자동으로 PDF 변환됩니다</p>
             </button>
           ) : (
             <div className="space-y-1.5">
+              {/* 파일 목록 */}
               {files.map((f) => {
                 const IconComp = getFileIcon(f.type);
                 return (
@@ -760,14 +836,44 @@ export default function CreateMeetingModal({ open, onClose }) {
                   </div>
                 );
               })}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full border border-dashed border-border-default rounded-md py-2 text-xs text-txt-muted hover:border-brand-purple/30 hover:text-txt-secondary transition-colors flex items-center justify-center gap-1"
-              >
-                <Plus size={14} />
-                파일 추가
-              </button>
+              {/* URL 목록 */}
+              {urls.map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-2.5 bg-bg-tertiary border border-border-subtle rounded-md px-3 py-2"
+                >
+                  <Link2 size={18} className="text-brand-purple shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-txt-primary truncate">{u.label}</p>
+                    <p className="text-[11px] text-txt-muted truncate">{u.url}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeUrl(u.id)}
+                    className="text-txt-muted hover:text-status-error p-1 transition-colors shrink-0"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 border border-dashed border-border-default rounded-md py-2 text-xs text-txt-muted hover:border-brand-purple/30 hover:text-txt-secondary transition-colors flex items-center justify-center gap-1"
+                >
+                  <Paperclip size={13} />
+                  파일 추가
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUrlOpen(true)}
+                  className="flex-1 border border-dashed border-border-default rounded-md py-2 text-xs text-txt-muted hover:border-brand-purple/30 hover:text-txt-secondary transition-colors flex items-center justify-center gap-1"
+                >
+                  <Link2 size={13} />
+                  URL 추가
+                </button>
+              </div>
             </div>
           )}
         </div>

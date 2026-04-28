@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Search, X, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { Plus, Search, X, FileText, ArrowRight, Loader2, HelpCircle } from 'lucide-react';
 import { Button, SectionPanel } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useAutoCancelMeetings } from '@/hooks/useAutoCancelMeetings';
@@ -8,6 +8,7 @@ import { useToastStore } from '@/stores/toastStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import MeetingCard from './MeetingCard';
 import CreateMeetingModal from './CreateMeetingModal';
+import OnboardingGuide from '@/components/onboarding/OnboardingGuide';
 
 const TABS = [
   { id: 'active', label: '진행 중' },
@@ -32,6 +33,7 @@ function groupByMonth(meetings) {
 export default function MeetingLobby({ pageTitle }) {
   const [tab, setTab] = useState('active');
   const [modalOpen, setModalOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [completedMonths, setCompletedMonths] = useState(1);
@@ -108,7 +110,18 @@ export default function MeetingLobby({ pageTitle }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           {pageTitle && (
-            <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider">{pageTitle}</h2>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full text-txt-muted hover:text-brand-purple hover:bg-brand-purple/10 transition-colors"
+                title="회의 자세와 사용 설명서"
+                aria-label="가이드 열기"
+              >
+                <HelpCircle size={18} strokeWidth={2.2} />
+              </button>
+            </div>
           )}
           <p className="text-sm text-txt-secondary">
             팀과 함께 회의를 진행하거나 새 회의를 만드세요
@@ -244,6 +257,7 @@ export default function MeetingLobby({ pageTitle }) {
       </SectionPanel>
 
       <CreateMeetingModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <OnboardingGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }
