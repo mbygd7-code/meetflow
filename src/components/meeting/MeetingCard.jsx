@@ -45,9 +45,17 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
   // 완료 회의의 보조 상대 시각 ("1일 전")
   const relativeLabel = isCompleted ? formatRelative(meetingAt) : '';
 
-  // 진행 중 회의: 미참석 직원 (online !== true인 참여자)
+  // 진행 중 회의: 미참석 직원 (online !== true인 참여자) — id 중복 제거
   const absentParticipants = isActive
-    ? (meeting.participants || []).filter((p) => p.online !== true)
+    ? (() => {
+        const seen = new Set();
+        return (meeting.participants || []).filter((p) => {
+          if (p?.online === true) return false;
+          if (!p?.id || seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+      })()
     : [];
 
   const handleRemind = (e, participant) => {
@@ -188,19 +196,28 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
         </div>
       )}
 
-      {/* 참여자 아바타 */}
+      {/* 참여자 아바타 — id 중복 제거 (DB 차원 dup 방어) */}
       <div className="flex items-center justify-between">
         <div className="flex -space-x-2">
           <Avatar variant="ai" size="sm" label="M" />
-          {meeting.participants?.slice(0, 4).map((p) => (
-            <Avatar
-              key={p.id}
-              name={p.name || (p.id ? `참가자 ${p.id.slice(0, 4)}` : '참가자')}
-              color={p.color || '#723CEB'}
-              size="sm"
-              className="ring-2 ring-bg-secondary"
-            />
-          ))}
+          {(() => {
+            const seen = new Set();
+            const unique = (meeting.participants || []).filter((p) => {
+              const k = p?.id;
+              if (!k || seen.has(k)) return false;
+              seen.add(k);
+              return true;
+            });
+            return unique.slice(0, 4).map((p) => (
+              <Avatar
+                key={p.id}
+                name={p.name || (p.id ? `참가자 ${p.id.slice(0, 4)}` : '참가자')}
+                color={p.color || '#723CEB'}
+                size="sm"
+                className="ring-2 ring-bg-secondary"
+              />
+            ));
+          })()}
           {meeting.participants?.length > 4 && (
             <div className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-[10px] text-txt-secondary ring-2 ring-bg-secondary">
               +{meeting.participants.length - 4}
