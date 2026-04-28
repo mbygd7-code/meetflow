@@ -233,16 +233,45 @@ export default function CreateMeetingModal({ open, onClose }) {
     return ALL_MEMBERS.filter((m) => ids.has(m.id));
   }, [teamMemberIds, selectedMembers]);
 
+  // 파일 가드: 한 번에 최대 10개, 각 파일 50MB 이하 (Supabase Storage 기본 한도)
+  const MAX_FILES = 10;
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;
   const handleFileAdd = (e) => {
-    const newFiles = Array.from(e.target.files).map((f) => ({
-      id: crypto.randomUUID(),
-      file: f,
-      name: f.name,
-      size: f.size,
-      type: f.type,
-    }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    const picked = Array.from(e.target.files);
     e.target.value = '';
+    const accepted = [];
+    const rejected = [];
+    for (const f of picked) {
+      if (f.size > MAX_FILE_SIZE) {
+        rejected.push(`${f.name} (${(f.size / 1024 / 1024).toFixed(1)}MB)`);
+      } else {
+        accepted.push(f);
+      }
+    }
+    if (rejected.length > 0) {
+      addToast(`50MB 초과 파일 ${rejected.length}개 제외: ${rejected.slice(0, 2).join(', ')}${rejected.length > 2 ? ' 외' : ''}`, 'error');
+    }
+    if (accepted.length === 0) return;
+
+    setFiles((prev) => {
+      const remaining = MAX_FILES - prev.length;
+      if (remaining <= 0) {
+        addToast(`회의당 최대 ${MAX_FILES}개 파일까지 첨부 가능`, 'error');
+        return prev;
+      }
+      const truncated = accepted.slice(0, remaining);
+      if (accepted.length > remaining) {
+        addToast(`${MAX_FILES}개 한도 초과 — ${accepted.length - remaining}개 제외됨`, 'warn');
+      }
+      const newFiles = truncated.map((f) => ({
+        id: crypto.randomUUID(),
+        file: f,
+        name: f.name,
+        size: f.size,
+        type: f.type,
+      }));
+      return [...prev, ...newFiles];
+    });
   };
 
   const removeFile = (id) => setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -359,15 +388,34 @@ export default function CreateMeetingModal({ open, onClose }) {
     setBusy(true);
     try {
       const cleaned = agendas.filter((a) => a.title.trim());
+
+      // 첨부 파일을 base64 로 변환 (createMeeting 이 Storage 업로드 + meeting_files INSERT)
+      const filePayloads = await Promise.all(
+        files.map(async (f) => {
+          const buf = await f.file.arrayBuffer();
+          const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
+          return { name: f.name, type: f.type, size: f.size, base64 };
+        })
+      );
+
       const meeting = await createMeeting({
         title: title.trim(),
         team_id: selectedTeams[0] || null,
         agendas: cleaned,
         participants: allParticipants.map(({ id, name, color }) => ({ id, name, color })),
+        files: filePayloads, // ← 누락 수정: 즉시 시작 시에도 파일 업로드
       });
+
+      // 일부 파일 업로드 실패 → toast 로 알림
+      if (meeting?._uploadFailures?.length) {
+        const names = meeting._uploadFailures.map((f) => f.name).slice(0, 3).join(', ');
+        const more = meeting._uploadFailures.length > 3 ? ` 외 ${meeting._uploadFailures.length - 3}개` : '';
+        addToast(`${meeting._uploadFailures.length}개 파일 업로드 실패: ${names}${more}`, 'error');
+      }
+
       await startMeeting(meeting.id);
 
-      // URL 자료 — 즉시 시작 시 회의방 진입 후 import-google-doc 으로 가져오기 (비차단)
+      // URL 자료 — 비차단 import
       if (urls.length > 0) {
         urls.forEach((u) => {
           supabase.functions.invoke('import-google-doc', {

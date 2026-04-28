@@ -49,25 +49,38 @@ export function useMeetingFiles(meetingId) {
 
     let cancelled = false;
 
-    async function load() {
+    // 초기 fetch — 신규 회의 진입 직후엔 INSERT 가 아직 read replica 에 보이지 않을 수 있음.
+    // 짧은 retry 로 누락된 파일까지 모두 잡아옴 (200ms × 3회 → 800ms 후 정상 안정).
+    async function load(attempt = 0) {
       const { data, error } = await supabase
         .from('meeting_files')
         .select('*')
         .eq('meeting_id', meetingId)
         .order('created_at', { ascending: false });
       if (error) {
-        // 에러 메시지/코드/상세를 모두 표시
         console.error('[useMeetingFiles] load error:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-          status: error.status,
+          message: error.message, code: error.code, details: error.details, hint: error.hint, status: error.status,
         });
       }
       if (!cancelled) {
-        setFiles(data || []);
+        // INSERT 후 read replica 지연으로 일부 행이 누락된 경우 — 짧은 retry 로 보강
+        // (Realtime 으로 결국 도달하지만 진입 직후 가능한 빨리 모두 표시하기 위해)
+        setFiles((prev) => {
+          // 기존 files 와 union — Realtime 으로 이미 들어온 행 보존
+          const map = new Map();
+          (data || []).forEach((row) => map.set(row.id, row));
+          prev.forEach((row) => { if (!map.has(row.id)) map.set(row.id, row); });
+          const merged = Array.from(map.values()).sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          return merged;
+        });
         setLoading(false);
+
+        // attempt < 3 일 때 200ms 후 재시도 — 새 row 도착 가능성 체크
+        if (attempt < 2) {
+          setTimeout(() => { if (!cancelled) load(attempt + 1); }, 200 * (attempt + 1));
+        }
       }
     }
     load();
@@ -118,7 +131,9 @@ export function useMeetingFiles(meetingId) {
       try {
         const fileUuid = crypto.randomUUID();
         // 파일명에서 특수문자 제거 (Storage 경로 안전성)
-        const safeName = file.name.replace(/[^\w가-힣.\-]/g, '_');
+        // Supabase Storage 는 ASCII 만 허용 — 한글/특수문자는 모두 _ 치환. 원본명은 DB 에 보존.
+        const ext = file.name.match(/\.[^.]+$/)?.[0] || '';
+        const safeName = `file${ext}`.replace(/[^\w.\-]/g, '_');
         const storagePath = `meetings/${meetingId}/${fileUuid}_${safeName}`;
 
         const { error: upErr } = await supabase.storage
@@ -148,6 +163,10 @@ export function useMeetingFiles(meetingId) {
         // Office 파일 자동 PDF 변환 — 업로드 직후 비동기 호출 (UI 비차단)
         // 지원: pptx/ppt, docx/doc, xlsx/xls, odp/odt/ods, rtf, csv
         if (isOfficeFile(file)) {
+          // 변환 시작 시점 — _converting 플래그로 UI 에 진행 표시
+          setFiles((prev) => prev.map((f) =>
+            f.id === data.id ? { ...f, _converting: true, _convertError: null } : f
+          ));
           (async () => {
             try {
               const { data: convRes, error: convErr } = await supabase.functions.invoke('office-to-pdf', {
@@ -155,17 +174,24 @@ export function useMeetingFiles(meetingId) {
               });
               if (convErr) {
                 console.warn('[useMeetingFiles] office 변환 실패:', convErr.message);
+                setFiles((prev) => prev.map((f) =>
+                  f.id === data.id ? { ...f, _converting: false, _convertError: convErr.message || '변환 실패' } : f
+                ));
                 return;
               }
               if (convRes?.ok) {
                 const { data: updated } = await supabase
                   .from('meeting_files').select('*').eq('id', data.id).single();
                 if (updated) {
+                  // _converting 플래그 제거 + 신규 PDF row 로 교체
                   setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
                 }
               }
             } catch (e) {
               console.warn('[useMeetingFiles] office 변환 예외:', e);
+              setFiles((prev) => prev.map((f) =>
+                f.id === data.id ? { ...f, _converting: false, _convertError: String(e?.message || e) } : f
+              ));
             }
           })();
         }

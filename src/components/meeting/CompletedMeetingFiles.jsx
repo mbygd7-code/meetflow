@@ -3,10 +3,11 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, FileText, Image as ImageIcon, X, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { FolderOpen, FileText, Image as ImageIcon, X, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useMeetingFiles } from '@/hooks/useMeetingFiles';
 import DrawingOverlay from './DrawingOverlay';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
+import { getFileTypeBadge } from '@/lib/fileTypeBadge';
 
 function isImageFile(f) {
   return !!f?.type?.startsWith('image/');
@@ -76,15 +77,24 @@ function FileThumb({ file, getDownloadUrl }) {
     );
   }
 
-  // 로딩 중 또는 fallback — 아이콘
+  // fallback — 컬러 뱃지 + 변환 중 오버레이
+  const badge = getFileTypeBadge(file.name || file.type || '');
+  const isConverting = !!file._converting;
   return (
-    <div className="w-10 h-10 rounded bg-bg-tertiary flex items-center justify-center shrink-0 ring-1 ring-border-subtle">
-      {isImg ? (
-        <ImageIcon size={16} className="text-brand-purple" />
-      ) : isPdf ? (
-        <FileText size={16} className="text-status-error" />
-      ) : (
-        <FileText size={16} className="text-txt-muted" />
+    <div
+      className="relative w-10 h-10 rounded shrink-0 ring-1 ring-border-subtle flex items-center justify-center overflow-hidden"
+      style={{ backgroundColor: badge.bg }}
+    >
+      <span
+        className="px-1 py-0.5 rounded text-[8px] font-bold tracking-wide"
+        style={{ backgroundColor: badge.color, color: badge.textColor }}
+      >
+        {badge.label}
+      </span>
+      {isConverting && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <Loader2 size={14} className="text-white animate-spin" />
+        </div>
       )}
     </div>
   );
