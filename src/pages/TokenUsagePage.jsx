@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Coins, Zap, AlertTriangle, ArrowLeft, RefreshCw,
-  TrendingDown, Database, Headphones, Mic, Server,
+  TrendingDown, Database, Headphones, Mic, Server, FileText,
 } from 'lucide-react';
 import { MetricCard, SectionPanel, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
