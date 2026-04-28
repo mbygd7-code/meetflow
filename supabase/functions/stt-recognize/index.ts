@@ -94,21 +94,45 @@ serve(async (req) => {
 
   try {
     const { audio, language = 'ko-KR', meetingId = null, durationMs = null } = await req.json();
-    // 인증 헤더에서 user_id 추출 — 사용량 로그에 기록
+
+    // 인증 — 서명 검증된 사용자 JWT 만 통과
     let userId: string | null = null;
-    try {
+    {
       const authHeader = req.headers.get('Authorization') || '';
-      const jwt = authHeader.replace(/^Bearer\s+/i, '');
-      if (jwt) {
-        const payload = JSON.parse(atob(jwt.split('.')[1]));
-        userId = payload?.sub || null;
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      if (!token) {
+        return new Response(
+          JSON.stringify({ error: 'auth_required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    } catch { /* 익명 OK */ }
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+      const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (SUPABASE_URL && SERVICE_KEY) {
+        const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+        const { data: userData, error: authErr } = await sb.auth.getUser(token);
+        if (authErr || !userData?.user?.id) {
+          return new Response(
+            JSON.stringify({ error: 'unauthorized' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        userId = userData.user.id;
+      }
+    }
 
     if (!audio) {
       return new Response(
         JSON.stringify({ error: 'audio field required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 페이로드 크기 가드 — 5초 webm/opus chunk 약 60KB. 1.5MB 넘으면 비정상 → 차단
+    if (typeof audio === 'string' && audio.length > 1_500_000) {
+      return new Response(
+        JSON.stringify({ error: 'audio_too_large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -169,14 +193,20 @@ serve(async (req) => {
       billedSec = Math.max(0, durationMs / 1000);
     }
     if (billedSec > 0) {
-      // 비차단 — 응답 지연 0
-      logSttUsage({
+      // 비차단이지만 응답 후에도 실행 보장 — EdgeRuntime.waitUntil 사용
+      // (Edge Functions 는 응답 후 주류 promise 종료 — waitUntil 로 보호 안 하면 데이터 손실 가능)
+      const usagePromise = logSttUsage({
         audioSeconds: billedSec,
         meetingId,
         userId,
         model: 'default',
         transcriptLen: transcript.length,
       });
+      // @ts-ignore — Deno Deploy / Supabase Edge runtime 전역
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(usagePromise);
+      }
     }
 
     return new Response(

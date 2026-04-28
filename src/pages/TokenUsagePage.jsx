@@ -41,10 +41,13 @@ export default function TokenUsagePage() {
   const [billings, setBillings] = useState([]);        // service_usage_billing (Phase B 외부 정산)
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('7d'); // 7d | 30d | all
+  // 에러 상세 — 사용자에게 노출 (마이그레이션 미적용 vs RLS 차단 vs 네트워크 등 구분)
+  const [loadErrors, setLoadErrors] = useState({ ai: null, svc: null, bill: null });
 
   // DB에서 사용량 로그 로드 — Anthropic + 외부 인프라 + 외부 정산 동시
   const loadLogs = async () => {
     setLoading(true);
+    setLoadErrors({ ai: null, svc: null, bill: null });
     try {
       const sinceIso = period === '7d'
         ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -52,7 +55,6 @@ export default function TokenUsagePage() {
           ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
           : null;
 
-      // ai_usage_logs (Anthropic 토큰)
       let aiQuery = supabase
         .from('ai_usage_logs')
         .select('*')
@@ -60,7 +62,6 @@ export default function TokenUsagePage() {
         .limit(500);
       if (sinceIso) aiQuery = aiQuery.gte('created_at', sinceIso);
 
-      // service_usage_logs (LiveKit / STT / Edge Functions / Storage)
       let svcQuery = supabase
         .from('service_usage_logs')
         .select('*')
@@ -68,7 +69,6 @@ export default function TokenUsagePage() {
         .limit(2000);
       if (sinceIso) svcQuery = svcQuery.gte('created_at', sinceIso);
 
-      // service_usage_billing (월 1회 외부 API 동기화 정확 청구액)
       const billingQuery = supabase
         .from('service_usage_billing')
         .select('*')
@@ -76,14 +76,17 @@ export default function TokenUsagePage() {
         .limit(36);
 
       const [aiRes, svcRes, billRes] = await Promise.all([aiQuery, svcQuery, billingQuery]);
-      if (aiRes.error) throw aiRes.error;
       setLogs(aiRes.data || []);
-      // service_usage_logs / billing 은 마이그레이션 적용 전이면 에러 — 조용히 빈 배열로
-      setServiceLogs(svcRes.error ? [] : (svcRes.data || []));
-      setBillings(billRes.error ? [] : (billRes.data || []));
+      setServiceLogs(svcRes.data || []);
+      setBillings(billRes.data || []);
+      setLoadErrors({
+        ai: aiRes.error?.message || null,
+        svc: svcRes.error?.message || null,
+        bill: billRes.error?.message || null,
+      });
     } catch (err) {
       console.error('[TokenUsagePage] Load failed:', err);
-      setLogs([]);
+      setLoadErrors((p) => ({ ...p, ai: err?.message || String(err) }));
     } finally {
       setLoading(false);
     }
@@ -226,6 +229,15 @@ export default function TokenUsagePage() {
           </button>
         </div>
       </div>
+
+      {/* 에러 배너 — 어떤 테이블/쿼리가 실패했는지 사용자에게 명시 */}
+      {(loadErrors.ai || loadErrors.svc || loadErrors.bill) && (
+        <div className="rounded-md border border-status-error/30 bg-status-error/10 p-3 text-xs text-status-error space-y-1">
+          {loadErrors.ai && <p>⚠️ ai_usage_logs 로드 실패: {loadErrors.ai}</p>}
+          {loadErrors.svc && <p>⚠️ service_usage_logs 로드 실패: {loadErrors.svc} (마이그레이션 043 미적용 가능)</p>}
+          {loadErrors.bill && <p>⚠️ service_usage_billing 로드 실패: {loadErrors.bill}</p>}
+        </div>
+      )}
 
       {/* 상단 메트릭 카드 */}
       <SectionPanel>

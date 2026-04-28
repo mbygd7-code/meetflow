@@ -202,17 +202,20 @@ export function useVoiceInput({ provider = 'google', language = 'ko-KR', onTrans
     else stopGoogleSTT();
   }, [provider, stopWebSpeech, stopGoogleSTT]);
 
-  // 언마운트 시 정리
+  // 언마운트 시에만 정리 — externalStream 참조 변경에 cleanup 발화하지 않게 ref 패턴
+  // (기존 deps `[externalStream]` 은 stream 객체가 매 렌더 새로 생성되면 진행 중인
+  //  recording 을 강제 중단시켰음)
+  const externalStreamRef = useRef(externalStream);
+  useEffect(() => { externalStreamRef.current = externalStream; }, [externalStream]);
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
       try { mediaRecorderRef.current?.stop(); } catch {}
-      // 외부 주입 스트림은 정리 X — 소유권은 외부에
-      if (!externalStream) {
+      if (!externalStreamRef.current) {
         streamRef.current?.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [externalStream]);
+  }, []);
 
   return { isListening, start, stop, interim, error, supported };
 }

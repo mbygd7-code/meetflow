@@ -99,27 +99,32 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // 권한 검증 — 호출자가 service_role 이거나 admin 사용자여야 함
+    // 권한 검증 — 서명 검증된 service_role 키 또는 admin 사용자만 통과
     const authHeader = req.headers.get('Authorization') || '';
-    const jwt = authHeader.replace(/^Bearer\s+/i, '');
-    if (!jwt) {
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (!token) {
       return new Response(JSON.stringify({ error: 'auth_required' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    // service_role JWT 또는 admin 사용자만 통과
+
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     let isAuthorized = false;
-    try {
-      const payload = JSON.parse(atob(jwt.split('.')[1]));
-      if (payload.role === 'service_role') {
-        isAuthorized = true;
-      } else if (payload.sub) {
-        // admin 사용자 검증
-        const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-        const { data: u } = await sb.from('users').select('role').eq('id', payload.sub).single();
+
+    // ① 토큰이 service_role 키 자체와 정확히 일치 — 가장 강한 신뢰 (cron 호출 케이스)
+    if (token === SERVICE_KEY) {
+      isAuthorized = true;
+    } else {
+      // ② 사용자 JWT — supabase.auth.getUser() 가 서명 검증까지 처리
+      const { data: userData, error: authErr } = await sb.auth.getUser(token);
+      if (!authErr && userData?.user?.id) {
+        const { data: u } = await sb.from('users').select('role').eq('id', userData.user.id).single();
         if (u?.role === 'admin') isAuthorized = true;
       }
-    } catch {}
+    }
+
     if (!isAuthorized) {
       return new Response(JSON.stringify({ error: 'admin_required' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -142,8 +147,7 @@ serve(async (req) => {
       syncGCP(start, end),
     ]);
 
-    // service_usage_billing 에 upsert
-    const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    // service_usage_billing 에 upsert (sb 는 위에서 이미 service_role 로 생성됨)
     const upserts: any[] = [];
     if ('amount' in livekit) {
       upserts.push({
