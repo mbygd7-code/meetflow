@@ -80,6 +80,14 @@ export default function MeetingLobby({ pageTitle }) {
 
   const filtered = useMemo(() => {
     let list = meetings.filter((m) => m.status === tab);
+    // 방어적 dedup — Realtime INSERT + setMeetings race 등으로 일시 중복 가능.
+    // React 의 "two children with the same key" 경고 + 중복 카드 노출 방지.
+    const seen = new Set();
+    list = list.filter((m) => {
+      if (!m?.id || seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((m) => m.title?.toLowerCase().includes(q));
