@@ -260,6 +260,13 @@ html.theme-transitioning *::after {
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* shake — 폼 입력 누락 시 강조 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
 .sidebar-symbol {
   background: linear-gradient(135deg, #FFEF63 0%, #34D399 50%, #FFEF63 100%);
   background-size: 200% 200%;

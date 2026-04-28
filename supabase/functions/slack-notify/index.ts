@@ -351,7 +351,44 @@ serve(async (req) => {
         const reqAgendas = (payload.agendas || [])
           .map((a: any, i: number) => `${i + 1}. ${a.title} (${a.duration_minutes}분)`)
           .join('\n');
-        const participantNames = (payload.participants || []).join(', ');
+
+        // 참가자 + 요청자 — slack_user_id 로 멘션 (요청자도 본인 알림 받음)
+        let participantsDisplay: string;
+        let requesterDisplay: string = payload.requested_by || '사용자';
+        const partList = payload.participants || [];
+        const hasIds = partList.length > 0 && typeof partList[0] === 'object' && partList[0]?.id;
+
+        // 조회 대상 user_ids — 참가자 + 요청자
+        const allIds = new Set<string>();
+        if (hasIds) {
+          partList.forEach((p: any) => p?.id && allIds.add(p.id));
+        }
+        if (payload.requested_by_id) allIds.add(payload.requested_by_id);
+
+        let slackMap = new Map<string, string>();
+        if (allIds.size > 0) {
+          const { data: usersData } = await supabase
+            .from('users')
+            .select('id, name, slack_user_id')
+            .in('id', Array.from(allIds));
+          slackMap = new Map((usersData || []).map((u: any) => [u.id, u.slack_user_id]));
+        }
+
+        if (hasIds) {
+          participantsDisplay = partList.map((p: any) => {
+            const sid = slackMap.get(p.id);
+            return sid ? `<@${sid}>` : p.name;
+          }).join(', ');
+        } else {
+          participantsDisplay = partList.join(', ');
+        }
+
+        // 요청자 멘션 — slack_user_id 있으면 멘션, 없으면 이름만
+        if (payload.requested_by_id) {
+          const sid = slackMap.get(payload.requested_by_id);
+          if (sid) requesterDisplay = `<@${sid}>`;
+        }
+
         const scheduleInfo = payload.scheduled_date && payload.scheduled_time
           ? `📅 ${payload.scheduled_date} ${payload.scheduled_time} (${payload.duration || 30}분)`
           : '📅 시간 미정';
@@ -368,18 +405,12 @@ serve(async (req) => {
             },
             {
               type: 'section',
-              text: { type: 'mrkdwn', text: `*요청자:* ${payload.requested_by}\n${scheduleInfo}\n*참석자:* ${participantNames}${fileNotice}` },
+              text: { type: 'mrkdwn', text: `*요청자:* ${requesterDisplay}\n${scheduleInfo}\n*참석자:* ${participantsDisplay}${fileNotice}` },
             },
             ...(reqAgendas ? [{
               type: 'section',
               text: { type: 'mrkdwn', text: `*어젠다*\n${reqAgendas}` },
             }] : []),
-            {
-              type: 'context',
-              elements: [
-                { type: 'mrkdwn', text: '🤖 MeetFlow에서 전송됨 · Google Calendar에도 등록되었습니다' },
-              ],
-            },
           ],
         });
 
