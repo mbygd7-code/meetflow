@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Sparkles, HelpCircle } from 'lucide-react';
+import { Mail, Lock, User, Sparkles, HelpCircle, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Input } from '@/components/ui';
 import SlackIdHelpModal from '@/components/common/SlackIdHelpModal';
@@ -27,7 +27,39 @@ function detectRecoveryFromUrl() {
 
 export default function LoginPage() {
   const [mode, setMode] = useState('signin'); // signin | signup | reset
-  const [email, setEmail] = useState('');
+  // 최근 사용 이메일 목록 — localStorage 에 최대 5개 보관
+  const [recentEmails, setRecentEmails] = useState(() => {
+    try {
+      const raw = localStorage.getItem('meetflow_recent_emails');
+      if (raw) return JSON.parse(raw);
+      // 호환 — 옛 단일 이메일 키
+      const single = localStorage.getItem('meetflow_last_email');
+      return single ? [single] : [];
+    } catch { return []; }
+  });
+  const [email, setEmail] = useState(() => recentEmails[0] || '');
+  const [emailDropdownOpen, setEmailDropdownOpen] = useState(false);
+
+  // 이메일 추가/dedup/저장 — 최대 5개, 가장 최근이 맨 앞
+  const saveEmailToHistory = (val) => {
+    const v = (val || '').trim().toLowerCase();
+    if (!v) return;
+    setRecentEmails((prev) => {
+      const list = [v, ...prev.filter((e) => e !== v)].slice(0, 5);
+      try {
+        localStorage.setItem('meetflow_recent_emails', JSON.stringify(list));
+        localStorage.setItem('meetflow_last_email', v); // 호환 유지
+      } catch {}
+      return list;
+    });
+  };
+  const removeEmailFromHistory = (val) => {
+    setRecentEmails((prev) => {
+      const list = prev.filter((e) => e !== val);
+      try { localStorage.setItem('meetflow_recent_emails', JSON.stringify(list)); } catch {}
+      return list;
+    });
+  };
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -185,6 +217,7 @@ export default function LoginPage() {
           setLocalError(error.message);
           return;
         }
+        saveEmailToHistory(email);
         navigate('/');
       } else {
         const { data: signUpData, error } = await signUp(email, password, name);
@@ -208,6 +241,7 @@ export default function LoginPage() {
             }
           }
         }
+        saveEmailToHistory(email);
         setSuccessMsg('가입 완료! 이메일을 확인한 뒤 로그인해주세요.');
         setMode('signin');
       }
@@ -363,23 +397,70 @@ export default function LoginPage() {
                     data-field="name"
                   />
                 )}
-                <Input
-                  label="이메일"
-                  icon={Mail}
-                  type="email"
-                  placeholder="you@company.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (missingFields.has('email')) {
-                      const next = new Set(missingFields); next.delete('email'); setMissingFields(next);
-                    }
-                  }}
-                  error={missingFields.has('email') ? '이메일을 입력해주세요' : null}
-                  data-field="email"
-                  readOnly={mode === 'signin' && recoveryCompleted && !!email}
-                  className={`${mode === 'signin' && recoveryCompleted && email ? 'opacity-70' : ''} ${missingFields.has('email') ? 'animate-[shake_0.3s_ease-in-out]' : ''}`}
-                />
+                <div className="relative">
+                  <Input
+                    label="이메일"
+                    icon={Mail}
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (missingFields.has('email')) {
+                        const next = new Set(missingFields); next.delete('email'); setMissingFields(next);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (recentEmails.length > 0) setEmailDropdownOpen(true);
+                    }}
+                    onBlur={() => {
+                      // 드롭다운 클릭 처리를 위해 약간 지연
+                      setTimeout(() => setEmailDropdownOpen(false), 150);
+                    }}
+                    error={missingFields.has('email') ? '이메일을 입력해주세요' : null}
+                    data-field="email"
+                    autoComplete="off"
+                    readOnly={mode === 'signin' && recoveryCompleted && !!email}
+                    className={`${mode === 'signin' && recoveryCompleted && email ? 'opacity-70' : ''} ${missingFields.has('email') ? 'animate-[shake_0.3s_ease-in-out]' : ''}`}
+                  />
+                  {/* 최근 이메일 드롭다운 */}
+                  {emailDropdownOpen && recentEmails.length > 0 && (
+                    <div className="absolute z-30 left-0 right-0 mt-1 bg-bg-secondary border border-border-default rounded-md shadow-lg overflow-hidden">
+                      <div className="px-3 py-1.5 text-[10px] text-txt-muted bg-bg-primary/40 border-b border-border-subtle">
+                        최근 사용 이메일
+                      </div>
+                      {recentEmails
+                        .filter((e) => !email || e.toLowerCase().includes(email.toLowerCase()))
+                        .map((e) => (
+                          <div
+                            key={e}
+                            className="flex items-center gap-2 px-3 py-2 hover:bg-bg-tertiary cursor-pointer group/item"
+                            onMouseDown={(ev) => {
+                              ev.preventDefault();
+                              setEmail(e);
+                              setEmailDropdownOpen(false);
+                              // 패스워드 입력으로 자동 포커스
+                              setTimeout(() => {
+                                const pw = document.querySelector('[data-field="password"]');
+                                if (pw) pw.focus();
+                              }, 0);
+                            }}
+                          >
+                            <Mail size={13} className="text-txt-muted shrink-0" />
+                            <span className="flex-1 text-sm text-txt-primary truncate">{e}</span>
+                            <button
+                              type="button"
+                              onMouseDown={(ev) => { ev.preventDefault(); ev.stopPropagation(); removeEmailFromHistory(e); }}
+                              className="opacity-0 group-hover/item:opacity-100 text-txt-muted hover:text-status-error transition-opacity"
+                              title="목록에서 제거"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
                 {mode !== 'reset' && (
                   <div
                     className="relative"
