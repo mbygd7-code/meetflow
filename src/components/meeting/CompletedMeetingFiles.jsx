@@ -15,6 +15,81 @@ function isPdfFile(f) {
   return f?.type === 'application/pdf';
 }
 
+// 파일 썸네일 — 이미지: 원본 / PDF: 첫 페이지 / 그 외: 아이콘
+//   storage_path 기준 signed URL 을 1회 비동기 로드 후 캐시 (썸네일 클릭은 부모 onClick 으로 위임)
+function FileThumb({ file, getDownloadUrl }) {
+  const [thumbUrl, setThumbUrl] = useState(null);
+  const isImg = isImageFile(file);
+  const isPdf = isPdfFile(file);
+
+  useEffect(() => {
+    if (!isImg && !isPdf) return;
+    if (!file?.storage_path || !getDownloadUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = await getDownloadUrl(file.storage_path);
+        if (!cancelled) setThumbUrl(url);
+      } catch (e) {
+        // 실패 시 아이콘 fallback
+        if (!cancelled) setThumbUrl(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [file?.storage_path, isImg, isPdf, getDownloadUrl]);
+
+  // 이미지 — object-cover 로 정사각 썸네일
+  if (isImg && thumbUrl) {
+    return (
+      <div className="w-10 h-10 rounded overflow-hidden bg-bg-tertiary shrink-0 ring-1 ring-border-subtle">
+        <img
+          src={thumbUrl}
+          alt={file.name}
+          loading="lazy"
+          draggable={false}
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  // PDF — 첫 페이지를 mini render
+  if (isPdf && thumbUrl) {
+    return (
+      <div className="w-10 h-10 rounded overflow-hidden bg-white shrink-0 ring-1 ring-border-subtle relative flex items-center justify-center">
+        <PdfDocument
+          file={thumbUrl}
+          loading={<FileText size={16} className="text-status-error" />}
+          error={<FileText size={16} className="text-status-error" />}
+          noData={<FileText size={16} className="text-status-error" />}
+        >
+          <PdfPage
+            pageNumber={1}
+            width={40}
+            renderAnnotationLayer={false}
+            renderTextLayer={false}
+          />
+        </PdfDocument>
+        {/* PDF 표식 — 우상단 빨간 점 */}
+        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-status-error shadow-sm" />
+      </div>
+    );
+  }
+
+  // 로딩 중 또는 fallback — 아이콘
+  return (
+    <div className="w-10 h-10 rounded bg-bg-tertiary flex items-center justify-center shrink-0 ring-1 ring-border-subtle">
+      {isImg ? (
+        <ImageIcon size={16} className="text-brand-purple" />
+      ) : isPdf ? (
+        <FileText size={16} className="text-status-error" />
+      ) : (
+        <FileText size={16} className="text-txt-muted" />
+      )}
+    </div>
+  );
+}
+
 // 파일 뷰어 모달 — 이미지/PDF + 드로잉 오버레이 readOnly
 function FileViewerModal({ file, url, meetingId, onClose }) {
   const containerRef = useRef(null);
@@ -210,15 +285,7 @@ export default function CompletedMeetingFiles({ meetingId }) {
                     onClick={() => handleOpen(f)}
                     className="flex items-center gap-2 p-2.5 rounded-md bg-bg-tertiary/50 border border-border-subtle hover:border-brand-purple/40 hover:bg-brand-purple/5 transition-colors text-left group/fi"
                   >
-                    <div className="w-8 h-8 rounded bg-bg-tertiary flex items-center justify-center shrink-0">
-                      {isImg ? (
-                        <ImageIcon size={16} className="text-brand-purple" />
-                      ) : isPdf ? (
-                        <FileText size={16} className="text-status-error" />
-                      ) : (
-                        <FileText size={16} className="text-txt-muted" />
-                      )}
-                    </div>
+                    <FileThumb file={f} getDownloadUrl={getDownloadUrl} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] font-medium text-txt-primary truncate group-hover/fi:text-brand-purple">
                         {f.name}
