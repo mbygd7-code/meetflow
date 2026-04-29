@@ -3,10 +3,16 @@ import { Clock, ListChecks, Bell, Calendar, UserCircle, AlertTriangle } from 'lu
 import { Card, Avatar, Badge } from '@/components/ui';
 import { formatRelative, formatElapsed, safeFormatDate } from '@/utils/formatters';
 import { useToastStore } from '@/stores/toastStore';
+import { useAuthStore } from '@/stores/authStore';
 
-export default function MeetingCard({ meeting, onClick, onCancel }) {
+export default function MeetingCard({ meeting, onClick, onCancel, onJoin }) {
   const navigate = useNavigate();
   const addToast = useToastStore((s) => s.addToast);
+  const currentUser = useAuthStore((s) => s.user);
+  const isCreator = !!(meeting.created_by && currentUser?.id && meeting.created_by === currentUser.id);
+  const isParticipant = !!(currentUser?.id && (meeting.participants || []).some((p) => p?.id === currentUser.id));
+  // 초대 안 된 사용자(주로 관리자가 다른 회의 보는 경우) → 참석 버튼
+  const showJoinAction = !isCreator && !isParticipant;
   const isActive = meeting.status === 'active';
   const isScheduled = meeting.status === 'scheduled';
   const isCompleted = meeting.status === 'completed';
@@ -117,12 +123,18 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
             진행 중
           </Badge>
         )}
-        {isScheduled && onCancel ? (
+        {isScheduled && (showJoinAction ? onJoin : onCancel) ? (
           <>
             <Badge variant="purple" className="group-hover/card:hidden">예정</Badge>
-            <button onClick={onCancel} className="hidden group-hover/card:inline-flex">
-              <Badge variant="danger">취소</Badge>
-            </button>
+            {showJoinAction && onJoin ? (
+              <button onClick={onJoin} className="hidden group-hover/card:inline-flex" title="회의 참석">
+                <Badge variant="success">참석</Badge>
+              </button>
+            ) : (
+              <button onClick={onCancel} className="hidden group-hover/card:inline-flex" title={isCreator ? '회의 취소' : '회의 불참'}>
+                <Badge variant="danger">{isCreator ? '취소' : '불참'}</Badge>
+              </button>
+            )}
           </>
         ) : isScheduled ? (
           <Badge variant="purple">예정</Badge>
@@ -202,11 +214,22 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
           <Avatar variant="ai" size="sm" label="M" />
           {(() => {
             const seen = new Set();
-            const unique = (meeting.participants || []).filter((p) => {
+            const unique = [];
+            // 1) 요청자(creator)를 먼저 포함 — meeting_participants에 누락된 경우 방어
+            if (meeting.creator?.id) {
+              unique.push({
+                id: meeting.creator.id,
+                name: meeting.creator.name,
+                color: meeting.creator.color || creatorColor,
+              });
+              seen.add(meeting.creator.id);
+            }
+            // 2) participants에서 중복 제거하며 추가
+            (meeting.participants || []).forEach((p) => {
               const k = p?.id;
-              if (!k || seen.has(k)) return false;
+              if (!k || seen.has(k)) return;
               seen.add(k);
-              return true;
+              unique.push(p);
             });
             // 슬랙 응답 (참석/불참) — user_id별 마지막 응답 매핑
             const ackList = Array.isArray(meeting.acknowledged_by) ? meeting.acknowledged_by : [];
@@ -233,20 +256,17 @@ export default function MeetingCard({ meeting, onClick, onCancel }) {
               );
             });
           })()}
-          {meeting.participants?.length > 4 && (
-            <div className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-[10px] text-txt-secondary ring-2 ring-bg-secondary">
-              +{meeting.participants.length - 4}
-            </div>
-          )}
-          {/* 참여자 정보가 없을 때 요청자 아바타를 fallback으로 */}
-          {(!meeting.participants || meeting.participants.length === 0) && creatorName && (
-            <Avatar
-              name={creatorName}
-              color={creatorColor}
-              size="sm"
-              className="ring-2 ring-bg-secondary"
-            />
-          )}
+          {(() => {
+            // creator + participants 통합 인원 — 4명 초과면 잔여 카운트
+            const total = new Set();
+            if (meeting.creator?.id) total.add(meeting.creator.id);
+            (meeting.participants || []).forEach((p) => p?.id && total.add(p.id));
+            return total.size > 4 ? (
+              <div className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-[10px] text-txt-secondary ring-2 ring-bg-secondary">
+                +{total.size - 4}
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
 

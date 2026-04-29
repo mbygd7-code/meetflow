@@ -800,17 +800,85 @@ serve(async (req) => {
         break;
       }
 
+      case 'meeting_self_join': {
+        // 미초대 사용자가 직접 참석 — 요청자에게 DM
+        // payload: { meeting_id, title, created_by, joined_by_id, joined_by_name, scheduled_at }
+        const creatorId = payload.created_by;
+        if (!creatorId) break;
+        const idsToLookup = [creatorId];
+        if (payload.joined_by_id) idsToLookup.push(payload.joined_by_id);
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, name, slack_user_id')
+          .in('id', idsToLookup);
+        const userMap = new Map((usersData || []).map((u: any) => [u.id, u]));
+        const creator = userMap.get(creatorId);
+        if (!creator?.slack_user_id) break;
+
+        const joinedName = payload.joined_by_name
+          || userMap.get(payload.joined_by_id)?.name
+          || '참가자';
+        const scheduledLabel = payload.scheduled_at
+          ? new Date(payload.scheduled_at).toLocaleString('ko-KR', {
+              month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+            })
+          : null;
+
+        const lines: string[] = [
+          `✅ *${joinedName}님이 회의에 참석으로 등록했습니다*`,
+          `• 회의: *${payload.title || '제목 없음'}*`,
+        ];
+        if (scheduledLabel) lines.push(`• 예정: ${scheduledLabel}`);
+
+        lastResult = await postSlack(creator.slack_user_id, { text: lines.join('\n') });
+        break;
+      }
+
+      case 'meeting_declined': {
+        // 참가자 불참 알림 — 회의 요청자에게 DM
+        // payload: { meeting_id, title, declined_by_id, declined_by_name, reason, scheduled_at, created_by }
+        const creatorId = payload.created_by;
+        if (!creatorId) {
+          console.warn('[slack-notify] meeting_declined: created_by 누락');
+          break;
+        }
+        // 요청자 slack_user_id + 불참자 정보 조회
+        const idsToLookup = [creatorId];
+        if (payload.declined_by_id) idsToLookup.push(payload.declined_by_id);
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, name, slack_user_id')
+          .in('id', idsToLookup);
+        const userMap = new Map((usersData || []).map((u: any) => [u.id, u]));
+        const creator = userMap.get(creatorId);
+        if (!creator?.slack_user_id) {
+          console.warn('[slack-notify] meeting_declined: 요청자 slack_user_id 없음', creatorId);
+          break;
+        }
+
+        const declinedName = payload.declined_by_name
+          || userMap.get(payload.declined_by_id)?.name
+          || '참가자';
+        const scheduledLabel = payload.scheduled_at
+          ? new Date(payload.scheduled_at).toLocaleString('ko-KR', {
+              month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+            })
+          : null;
+
+        const lines: string[] = [
+          `❌ *${declinedName}님이 회의 불참을 표시했습니다*`,
+          `• 회의: *${payload.title || '제목 없음'}*`,
+        ];
+        if (scheduledLabel) lines.push(`• 예정: ${scheduledLabel}`);
+        if (payload.reason) lines.push(`• 사유: ${payload.reason}`);
+
+        lastResult = await postSlack(creator.slack_user_id, { text: lines.join('\n') });
+        break;
+      }
+
       case 'meeting_cancelled': {
         // 회의 취소 알림 (자동/수동 통합)
-        // payload: { title, team_id, scheduled_at, cancelled_by, auto_cancel, reason }
-        if (!payload.team_id) break;
-        const { data: team } = await supabase
-          .from('teams')
-          .select('slack_channel_id')
-          .eq('id', payload.team_id)
-          .single();
-        if (!team?.slack_channel_id) break;
-
+        // payload: { title, team_id, scheduled_at, cancelled_by, cancelled_by_id, participant_ids, created_by, auto_cancel, reason }
         const isAuto = !!payload.auto_cancel;
         const icon = isAuto ? '⏰' : '🚫';
         const headline = isAuto
@@ -829,11 +897,56 @@ serve(async (req) => {
         if (scheduledLabel) lines.push(`• 예정: ${scheduledLabel}`);
         if (isAuto) {
           lines.push(`• 사유: ${payload.reason || '24시간 경과, 시작 안 됨'}`);
-        } else if (payload.cancelled_by) {
-          lines.push(`• 취소자: ${payload.cancelled_by}`);
+        } else {
+          if (payload.cancelled_by) lines.push(`• 취소자: ${payload.cancelled_by}`);
+          if (payload.reason) lines.push(`• 사유: ${payload.reason}`);
+        }
+        const text = lines.join('\n');
+
+        // (1) 팀 채널 게시 (있을 때만)
+        if (payload.team_id) {
+          try {
+            const { data: team } = await supabase
+              .from('teams')
+              .select('slack_channel_id')
+              .eq('id', payload.team_id)
+              .single();
+            if (team?.slack_channel_id) {
+              const r = await postSlack(team.slack_channel_id, { text });
+              lastResult = r;
+            }
+          } catch (e) {
+            console.warn('[meeting_cancelled] 팀 채널 게시 실패:', e);
+          }
         }
 
-        await postSlack(team.slack_channel_id, { text: lines.join('\n') });
+        // (2) 참가자 DM — 취소자 본인은 제외, 요청자는 포함 (자동 취소 시)
+        const recipientIds = new Set<string>();
+        for (const pid of (payload.participant_ids || [])) {
+          if (pid && pid !== payload.cancelled_by_id) recipientIds.add(pid);
+        }
+        // 자동 취소 시 요청자도 알림
+        if (isAuto && payload.created_by && payload.created_by !== payload.cancelled_by_id) {
+          recipientIds.add(payload.created_by);
+        }
+
+        if (recipientIds.size > 0) {
+          try {
+            const { data: usersData } = await supabase
+              .from('users')
+              .select('id, slack_user_id')
+              .in('id', Array.from(recipientIds));
+            const slackIds = (usersData || []).map((u: any) => u.slack_user_id).filter(Boolean);
+            console.log('[meeting_cancelled] DM 대상:', slackIds.length, '명');
+            for (const sid of slackIds) {
+              const r = await postSlack(sid, { text });
+              if (!r.ok) console.warn('[meeting_cancelled] DM 실패:', sid, r.error);
+            }
+          } catch (e) {
+            console.warn('[meeting_cancelled] 참가자 DM 실패:', e);
+          }
+        }
+
         break;
       }
     }

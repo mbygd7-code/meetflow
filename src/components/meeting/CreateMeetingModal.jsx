@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkles, Zap, Link2, Globe } from 'lucide-react';
+import { Plus, X, Clock, Users, Check, Paperclip, FileText, Image, File, Sparkles, Zap, Link2, Globe, CalendarClock, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Modal, Input, Button } from '@/components/ui';
 import { useMeeting } from '@/hooks/useMeeting';
 import { useToastStore } from '@/stores/toastStore';
@@ -134,7 +134,7 @@ export default function CreateMeetingModal({ open, onClose }) {
   // 모달이 열리면 짧은 딜레이 후 드롭다운 허용
   useEffect(() => {
     if (open) {
-      // 모달 열릴 때 임시저장 데이터 복원
+      // 모달 열릴 때 임시저장 데이터 복원 — 저장된 draft 있으면 복원, 없으면 깨끗이 초기화
       const saved = loadDraft();
       if (saved) {
         setTitle(saved.title || '');
@@ -143,7 +143,21 @@ export default function CreateMeetingModal({ open, onClose }) {
         setAgendas(saved.agendas?.length ? saved.agendas : [{ title: '', duration_minutes: 10 }]);
         setScheduledDate(saved.scheduledDate || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })());
         setScheduledTime(saved.scheduledTime || '');
-        setDuration(saved.duration || 30);
+        setDuration(saved.duration || 20);
+      } else {
+        // 임시저장 안 하고 닫았다 다시 열면 — 깨끗한 상태로 시작
+        setTitle('');
+        setSelectedTeams([]);
+        setSelectedMembers([]);
+        setAgendas([{ title: '', duration_minutes: 10 }]);
+        const d = new Date();
+        setScheduledDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+        setScheduledTime('');
+        setDuration(20);
+        setFiles([]);
+        setUrls([]);
+        setUrlInput('');
+        setUrlOpen(false);
       }
       setModalReady(false);
       setSuggestionsReady(false);
@@ -175,13 +189,116 @@ export default function CreateMeetingModal({ open, onClose }) {
   }));
   const [scheduledTime, setScheduledTime] = useState(draft.current?.scheduledTime || '');
   const [showTimeSuggestions, setShowTimeSuggestions] = useState(false);
-  const [duration, setDuration] = useState(draft.current?.duration || 30);
+  const [endTimeDraft, setEndTimeDraft] = useState('');
+  const [duration, setDuration] = useState(draft.current?.duration || 20);
   const [files, setFiles] = useState([]);
   const [urls, setUrls] = useState([]); // [{ id, url, label }] — URL 자료 목록
   const [urlInput, setUrlInput] = useState('');
   const [urlOpen, setUrlOpen] = useState(false); // URL 입력창 토글
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef(null);
+
+  // 종료 시간 입력 동기화 — 시작시간/길이 변경 시 자동 갱신
+  useEffect(() => {
+    if (!/^\d{2}:\d{2}$/.test(scheduledTime || '')) {
+      setEndTimeDraft('');
+      return;
+    }
+    const [sh, sm] = scheduledTime.split(':').map(Number);
+    const total = sh * 60 + sm + (duration || 20);
+    const eh = Math.floor((total / 60) % 24);
+    const em = total % 60;
+    setEndTimeDraft(`${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`);
+  }, [scheduledTime, duration]);
+
+  // 인접 회의 — 선택된 날짜 ±1일에 잡힌 회의 (충돌·참고용)
+  const [nearbyMeetings, setNearbyMeetings] = useState([]);
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !SUPABASE_ENABLED || isDemo) { setNearbyMeetings([]); return; }
+    if (!scheduledDate) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const base = new Date(`${scheduledDate}T00:00:00`);
+        if (isNaN(base)) return;
+        const startBound = new Date(base); startBound.setDate(startBound.getDate() - 1);
+        const endBound = new Date(base); endBound.setDate(endBound.getDate() + 2);
+        const { data, error } = await supabase
+          .from('meetings')
+          .select('id, title, scheduled_at, status, created_by, creator:users!meetings_created_by_fkey (id, name), agendas (duration_minutes)')
+          .in('status', ['scheduled', 'active'])
+          .not('scheduled_at', 'is', null)
+          .gte('scheduled_at', startBound.toISOString())
+          .lt('scheduled_at', endBound.toISOString())
+          .order('scheduled_at', { ascending: true });
+        if (cancelled) return;
+        if (error) { console.warn('[CreateMeetingModal] 인접 회의 조회 실패:', error); return; }
+        const enriched = (data || []).map((m) => {
+          const total = (m.agendas || []).reduce((s, a) => s + (a?.duration_minutes || 0), 0) || 30;
+          const startAt = new Date(m.scheduled_at);
+          const endAt = new Date(startAt.getTime() + total * 60000);
+          return {
+            id: m.id, title: m.title, status: m.status,
+            creatorName: m.creator?.name || null,
+            startAt, endAt, total,
+          };
+        });
+        setNearbyMeetings(enriched);
+      } catch (e) {
+        if (!cancelled) console.warn('[CreateMeetingModal] 인접 회의 예외:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, isDemo, scheduledDate]);
+
+  // 입력한 시각/길이 기반 시간 창
+  const proposedWindow = useMemo(() => {
+    if (!scheduledDate || !/^\d{2}:\d{2}$/.test(scheduledTime || '')) return null;
+    const start = new Date(`${scheduledDate}T${scheduledTime}:00`);
+    if (isNaN(start)) return null;
+    const end = new Date(start.getTime() + (duration || 30) * 60000);
+    return { start, end };
+  }, [scheduledDate, scheduledTime, duration]);
+
+  // 충돌(overlap) 및 인접(15분 이내) 분류
+  const ADJACENT_BUFFER_MS = 15 * 60000;
+  const { overlapping, adjacent } = useMemo(() => {
+    if (!proposedWindow) return { overlapping: [], adjacent: [] };
+    const overlap = [];
+    const near = [];
+    for (const m of nearbyMeetings) {
+      const isOverlap = m.startAt < proposedWindow.end && m.endAt > proposedWindow.start;
+      if (isOverlap) { overlap.push(m); continue; }
+      const gapBefore = proposedWindow.start - m.endAt;   // m이 먼저 끝남
+      const gapAfter = m.startAt - proposedWindow.end;    // m이 나중에 시작
+      if ((gapBefore >= 0 && gapBefore <= ADJACENT_BUFFER_MS) ||
+          (gapAfter >= 0 && gapAfter <= ADJACENT_BUFFER_MS)) {
+        near.push(m);
+      }
+    }
+    return { overlapping: overlap, adjacent: near };
+  }, [nearbyMeetings, proposedWindow]);
+
+  // 같은 날짜에 잡힌 회의만 추출 (시간 미입력 시에도 가이드용으로 보여줌)
+  const meetingsOnDate = useMemo(() => {
+    if (!scheduledDate) return [];
+    return nearbyMeetings.filter((m) => {
+      const y = m.startAt.getFullYear();
+      const mo = String(m.startAt.getMonth() + 1).padStart(2, '0');
+      const d = String(m.startAt.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${d}` === scheduledDate;
+    });
+  }, [nearbyMeetings, scheduledDate]);
+
+  const fmtHM = (d) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const fmtMin = (mins) => mins < 60 ? `${mins}분` : `${Math.floor(mins / 60)}시간${mins % 60 ? ` ${mins % 60}분` : ''}`;
+  const fmtGap = (ms) => {
+    const mins = Math.round(ms / 60000);
+    return mins <= 0 ? '바로' : `${mins}분`;
+  };
 
   // 최근 사용한 시간 (localStorage)
   const RECENT_TIMES_KEY = 'meetflow-recent-times';
@@ -324,7 +441,7 @@ export default function CreateMeetingModal({ open, onClose }) {
     setAgendas([{ title: '', duration_minutes: 10 }]);
     setScheduledDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })());
     setScheduledTime('');
-    setDuration(30);
+    setDuration(20);
     setFiles([]);
     setUrls([]);
     setUrlInput('');
@@ -729,23 +846,46 @@ export default function CreateMeetingModal({ open, onClose }) {
                 className="apple-input w-full bg-bg-tertiary border border-border-subtle rounded-[10px] px-4 py-3 text-sm font-medium text-txt-primary focus:outline-none focus:border-brand-purple/40 focus:ring-[4px] focus:ring-brand-purple/10 transition-all"
               />
             </div>
-            <div className="w-40 relative">
+            <div className="w-52 relative">
               <label className="block text-[11px] text-txt-muted mb-1">시간</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="HH:MM"
-                value={scheduledTime}
-                onChange={(e) => {
-                  let v = e.target.value.replace(/[^0-9:]/g, '');
-                  if (v.length === 2 && !v.includes(':') && scheduledTime.length < 3) v += ':';
-                  if (v.length > 5) v = v.slice(0, 5);
-                  setScheduledTime(v);
-                }}
-                onFocus={() => setShowTimeSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowTimeSuggestions(false), 150)}
-                className="w-full bg-bg-tertiary border border-border-subtle rounded-[10px] px-4 py-3 text-sm font-medium text-txt-primary focus:outline-none focus:border-brand-purple/40 focus:ring-[4px] focus:ring-brand-purple/10 transition-all"
-              />
+              <div className="flex items-center justify-center gap-2 bg-bg-tertiary border border-border-subtle rounded-[10px] px-4 py-3 transition-all focus-within:border-brand-purple/40 focus-within:ring-[4px] focus-within:ring-brand-purple/10">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:MM"
+                  value={scheduledTime}
+                  onChange={(e) => {
+                    let v = e.target.value.replace(/[^0-9:]/g, '');
+                    if (v.length === 2 && !v.includes(':') && scheduledTime.length < 3) v += ':';
+                    if (v.length > 5) v = v.slice(0, 5);
+                    setScheduledTime(v);
+                  }}
+                  onFocus={() => setShowTimeSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowTimeSuggestions(false), 150)}
+                  className="w-[52px] bg-transparent text-sm font-medium text-txt-primary placeholder:text-txt-muted focus:outline-none tabular-nums text-center"
+                />
+                <span className="text-sm text-txt-muted select-none">~</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:MM"
+                  value={endTimeDraft}
+                  onChange={(e) => {
+                    let v = e.target.value.replace(/[^0-9:]/g, '');
+                    if (v.length === 2 && !v.includes(':') && endTimeDraft.length < 3) v += ':';
+                    if (v.length > 5) v = v.slice(0, 5);
+                    setEndTimeDraft(v);
+                    if (/^\d{2}:\d{2}$/.test(v) && /^\d{2}:\d{2}$/.test(scheduledTime || '')) {
+                      const [sh, sm] = scheduledTime.split(':').map(Number);
+                      const [eh, em] = v.split(':').map(Number);
+                      let mins = (eh * 60 + em) - (sh * 60 + sm);
+                      if (mins <= 0) mins += 24 * 60;
+                      if (mins > 0 && mins <= 12 * 60) setDuration(mins);
+                    }
+                  }}
+                  className="w-[52px] bg-transparent text-sm font-medium text-txt-primary placeholder:text-txt-muted focus:outline-none tabular-nums text-center"
+                />
+              </div>
               {showTimeSuggestions && timeSuggestions.length > 0 && (
                 <div className="absolute z-20 left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-border-default rounded-lg shadow-lg overflow-hidden">
                   <p className="px-3 pt-2 pb-1 text-[10px] text-txt-muted font-medium uppercase tracking-wider">
@@ -768,7 +908,7 @@ export default function CreateMeetingModal({ open, onClose }) {
             </div>
           </div>
           <div className="flex gap-1.5 mt-3">
-            {[15, 30, 45, 60, 90].map((min) => (
+            {[20, 30, 45, 60, 90].map((min) => (
               <button
                 key={min}
                 type="button"
@@ -783,6 +923,108 @@ export default function CreateMeetingModal({ open, onClose }) {
               </button>
             ))}
           </div>
+
+          {/* 같은 날 잡힌 회의 — 충돌·인접 인라인 표시 */}
+          {meetingsOnDate.length > 0 && (
+            <div className={`mt-3 rounded-md border ${
+              overlapping.length > 0
+                ? 'border-status-error/40 bg-status-error/[0.06]'
+                : adjacent.length > 0
+                  ? 'border-brand-orange/40 bg-brand-orange/[0.06]'
+                  : 'border-border-subtle bg-bg-tertiary/40'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setNearbyOpen((v) => !v)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-tertiary/40 transition-colors rounded-md"
+              >
+                {overlapping.length > 0 ? (
+                  <AlertTriangle size={14} className="text-status-error" />
+                ) : adjacent.length > 0 ? (
+                  <AlertTriangle size={14} className="text-brand-orange" />
+                ) : (
+                  <CalendarClock size={14} className="text-brand-purple" />
+                )}
+                <span className="text-[12px] font-semibold text-txt-primary">
+                  이날 잡힌 회의 {meetingsOnDate.length}개
+                </span>
+                {proposedWindow && overlapping.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-error/20 text-status-error font-semibold">
+                    겹침 {overlapping.length}
+                  </span>
+                )}
+                {proposedWindow && adjacent.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-orange/20 text-brand-orange font-semibold">
+                    인접 {adjacent.length}
+                  </span>
+                )}
+                {!proposedWindow && (
+                  <span className="text-[10px] text-txt-muted ml-1">일정을 잡을 때 참고하세요</span>
+                )}
+                {proposedWindow && (
+                  <span className="ml-auto mr-1 text-[10px] text-txt-muted font-normal">
+                    {fmtHM(proposedWindow.start)}–{fmtHM(proposedWindow.end)} · {fmtMin(duration)}
+                  </span>
+                )}
+                <span className={proposedWindow ? 'text-txt-muted' : 'ml-auto text-txt-muted'}>
+                  {nearbyOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </span>
+              </button>
+              {nearbyOpen && (
+                <div className="px-3 pb-2.5 pt-0.5 space-y-1">
+                  {meetingsOnDate.map((m) => {
+                    const isOverlap = overlapping.some((o) => o.id === m.id);
+                    const isAdjacent = adjacent.some((a) => a.id === m.id);
+                    let adjacentLabel = null;
+                    if (isAdjacent && proposedWindow) {
+                      const before = m.endAt <= proposedWindow.start;
+                      const gap = before ? proposedWindow.start - m.endAt : m.startAt - proposedWindow.end;
+                      adjacentLabel = before ? `${fmtGap(gap)} 전 종료` : `${fmtGap(gap)} 후 시작`;
+                    }
+                    return (
+                      <div
+                        key={m.id}
+                        className={`flex items-center gap-2 text-[11px] px-2 py-1.5 rounded ${
+                          isOverlap
+                            ? 'bg-status-error/10 border border-status-error/30'
+                            : isAdjacent
+                              ? 'bg-brand-orange/10 border border-brand-orange/30'
+                              : 'bg-bg-secondary/50 border border-transparent'
+                        }`}
+                      >
+                        {isOverlap && (
+                          <span className="px-1.5 py-0.5 rounded bg-status-error/20 text-status-error font-semibold shrink-0">겹침</span>
+                        )}
+                        {isAdjacent && (
+                          <span className="px-1.5 py-0.5 rounded bg-brand-orange/20 text-brand-orange font-semibold shrink-0">
+                            {adjacentLabel}
+                          </span>
+                        )}
+                        {!isOverlap && !isAdjacent && (
+                          <Clock size={11} className="text-txt-muted shrink-0" />
+                        )}
+                        <span className="text-txt-secondary font-medium shrink-0">
+                          {fmtHM(m.startAt)}–{fmtHM(m.endAt)}
+                        </span>
+                        <span className="text-[10px] text-txt-muted shrink-0">· {fmtMin(m.total)}</span>
+                        <span className="text-txt-primary truncate flex-1">{m.title}</span>
+                        {m.creatorName && (
+                          <span className="text-[10px] text-txt-muted shrink-0 hidden sm:inline">
+                            요청자 <span className="text-txt-secondary">{m.creatorName}</span>
+                          </span>
+                        )}
+                        {m.status === 'active' && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-status-success/15 text-status-success font-semibold shrink-0">
+                            진행 중
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 참고 문서 — 파일 업로드 + URL 자료 추가 */}

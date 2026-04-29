@@ -10,7 +10,8 @@ import EvaluationReportModal from '@/components/admin/EvaluationReportModal';
 import { getOverallGrade, gradeToStyle } from '@/utils/gradeUtils';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import TaskSlidePanel from '@/components/task/TaskSlidePanel';
+import TaskDetailPanel from '@/components/members/TaskDetailPanel';
+import { useAuthStore } from '@/stores/authStore';
 import MemberTaskCard from '@/components/task/MemberTaskCard';
 import { useTaskStore } from '@/stores/taskStore';
 import { useToastStore } from '@/stores/toastStore';
@@ -103,8 +104,65 @@ export default function EmployeeDetailPage() {
   // AI 평가 관련
   const [evaluation, setEvaluation] = useState(null);
   const [evalHistory, setEvalHistory] = useState([]);
+
+  // 기간 필터
+  const [dateRange, setDateRange] = useState('all');
+  const [dateMenuOpen, setDateMenuOpen] = useState(false);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const dateRangeStart = useMemo(() => {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (dateRange === 'all') return null;
+    if (dateRange === 'day') return d;
+    if (dateRange === 'week') {
+      const dow = (d.getDay() + 6) % 7;
+      const start = new Date(d);
+      start.setDate(d.getDate() - dow);
+      return start;
+    }
+    if (dateRange === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+    if (dateRange === 'year') return new Date(now.getFullYear(), 0, 1);
+    if (dateRange === 'custom' && customStart) return new Date(`${customStart}T00:00:00`);
+    return null;
+  }, [dateRange, customStart]);
+
+  const dateRangeEnd = useMemo(() => {
+    if (dateRange === 'custom' && customEnd) {
+      const d = new Date(`${customEnd}T00:00:00`);
+      d.setDate(d.getDate() + 1);
+      return d;
+    }
+    return null;
+  }, [dateRange, customEnd]);
+
+  const inDateRange = (iso) => {
+    if (!dateRangeStart && !dateRangeEnd) return true;
+    if (!iso) return false;
+    const ts = new Date(iso).getTime();
+    if (isNaN(ts)) return false;
+    if (dateRangeStart && ts < dateRangeStart.getTime()) return false;
+    if (dateRangeEnd && ts >= dateRangeEnd.getTime()) return false;
+    return true;
+  };
+
+  // 기간 필터 적용된 데이터
+  const filteredMessages = useMemo(
+    () => messages.filter((m) => inDateRange(m.created_at)),
+    [messages, dateRangeStart, dateRangeEnd]
+  );
+  const filteredMeetings = useMemo(
+    () => meetings.filter((m) => inDateRange(m.ended_at || m.started_at || m.scheduled_at || m.created_at)),
+    [meetings, dateRangeStart, dateRangeEnd]
+  );
+  const filteredTasks = useMemo(
+    () => tasks.filter((t) => inDateRange(t.created_at)),
+    [tasks, dateRangeStart, dateRangeEnd]
+  );
   const [reportOpen, setReportOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const { user: currentUser } = useAuthStore();
   const [reportLoading, setReportLoading] = useState(false);
 
   const SUPABASE_ENABLED = !!import.meta.env.VITE_SUPABASE_URL;
@@ -310,8 +368,11 @@ export default function EmployeeDetailPage() {
     }
   }
 
-  // ── 통계 계산 ──
+  // ── 통계 계산 (기간 필터 적용) ──
   const stats = useMemo(() => {
+    const meetings = filteredMeetings;
+    const messages = filteredMessages;
+    const tasks = filteredTasks;
     const totalMeetings = meetings.length;
     const completedMeetings = meetings.filter((m) => m.status === 'completed').length;
     const totalMessages = messages.length;
@@ -373,7 +434,7 @@ export default function EmployeeDetailPage() {
       overallScore, grade, gradeLabel, hasAI,
       msgByMeeting,
     };
-  }, [meetings, tasks, messages, evaluation]);
+  }, [filteredMeetings, filteredTasks, filteredMessages, evaluation]);
 
   if (loading) {
     return (
@@ -430,6 +491,68 @@ export default function EmployeeDetailPage() {
               <p className="text-[11px] text-txt-muted mt-0.5">
                 계정 생성일: {profile.created_at ? format(parseISO(profile.created_at), 'yyyy.MM.dd') : '-'}
               </p>
+            </div>
+
+            {/* 기간 필터 드롭다운 */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setDateMenuOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle hover:border-brand-purple/40 transition-colors"
+              >
+                <Calendar size={13} className="text-txt-muted" />
+                <span className="text-xs font-medium text-txt-primary">
+                  {{ day: '일', week: '주', month: '월', year: '년', all: '전체', custom: '기간' }[dateRange] || '전체'}
+                </span>
+                <span className="text-[10px] text-txt-muted">▾</span>
+              </button>
+              {dateMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-bg-secondary border border-border-default rounded-md shadow-lg overflow-hidden min-w-[140px]">
+                    {[
+                      { id: 'day', label: '일 (오늘)' },
+                      { id: 'week', label: '주 (이번 주)' },
+                      { id: 'month', label: '월 (이번 달)' },
+                      { id: 'year', label: '년 (올해)' },
+                      { id: 'all', label: '전체' },
+                      { id: 'custom', label: '기간 (직접 선택)' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setDateRange(opt.id);
+                          if (opt.id !== 'custom') setDateMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                          dateRange === opt.id
+                            ? 'bg-brand-purple/15 text-brand-purple font-semibold'
+                            : 'text-txt-secondary hover:bg-bg-tertiary hover:text-txt-primary'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    {dateRange === 'custom' && (
+                      <div className="px-3 py-2 border-t border-border-divider flex flex-col gap-1.5 bg-bg-tertiary/30">
+                        <input
+                          type="date"
+                          value={customStart}
+                          onChange={(e) => setCustomStart(e.target.value)}
+                          className="bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-[11px] text-txt-primary focus:outline-none focus:border-brand-purple/50"
+                        />
+                        <input
+                          type="date"
+                          value={customEnd}
+                          onChange={(e) => setCustomEnd(e.target.value)}
+                          className="bg-bg-tertiary border border-border-subtle rounded px-2 py-1 text-[11px] text-txt-primary focus:outline-none focus:border-brand-purple/50"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* 종합 등급 */}
@@ -596,7 +719,16 @@ export default function EmployeeDetailPage() {
       {/* ═══ 오른쪽 사이드바: 배정 태스크 (MemberTaskCard 재사용) ═══ */}
       <aside className="hidden lg:block w-[340px] shrink-0 bg-[var(--bg-content)] rounded-[12px] p-3 self-start sticky top-3 lg:overflow-y-auto lg:max-h-[calc(100vh-120px)] scrollbar-hide relative">
         {/* 태스크 상세 슬라이드 패널 */}
-        <TaskSlidePanel task={selectedTask} onClose={() => setSelectedTask(null)} />
+        {selectedTask && (
+          <TaskDetailPanel
+            task={selectedTask}
+            members={members}
+            currentUser={currentUser}
+            onClose={() => setSelectedTask(null)}
+            onStatusChange={handleStatusChange}
+            onUpdate={handleUpdateTask}
+          />
+        )}
 
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -612,11 +744,13 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
 
-        {tasks.length === 0 ? (
-          <p className="text-sm text-txt-muted text-center py-8">배정된 태스크가 없습니다</p>
+        {filteredTasks.length === 0 ? (
+          <p className="text-sm text-txt-muted text-center py-8">
+            {dateRange === 'all' ? '배정된 태스크가 없습니다' : '선택한 기간에 태스크가 없습니다'}
+          </p>
         ) : (
           <div className="space-y-1.5">
-            {tasks.map((task) => (
+            {filteredTasks.map((task) => (
               <MemberTaskCard
                 key={task.id}
                 task={task}

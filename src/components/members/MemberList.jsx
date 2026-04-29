@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Search, Users, ChevronRight, X } from 'lucide-react';
+import { useMemo } from 'react';
+import { Users, ChevronRight } from 'lucide-react';
 
 /**
  * 좌측 멤버 리스트 (평탄 리스트)
@@ -8,8 +8,6 @@ import { Search, Users, ChevronRight, X } from 'lucide-react';
  * - 각 멤버: 아바타, 이름, 역할, 태스크 통계, 완수율 바
  */
 export default function MemberList({ members = [], tasks = [], selectedId, onSelect, mobileShowTasks = false }) {
-  const [query, setQuery] = useState('');
-
   // 멤버별 태스크 통계
   const statsByMember = useMemo(() => {
     const map = new Map();
@@ -38,39 +36,10 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
     };
   }, [tasks]);
 
-  // 검색 필터
-  const filtered = useMemo(() => {
-    if (!query.trim()) return members;
-    const q = query.toLowerCase();
-    return members.filter(
-      (m) => m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)
-    );
-  }, [members, query]);
+  const filtered = members;
 
   return (
     <div className={`w-full md:w-[240px] lg:w-[300px] shrink-0 border-r border-border-subtle bg-[var(--panel-bg)] flex-col overflow-hidden ${mobileShowTasks ? 'hidden md:flex' : 'flex'}`}>
-      {/* 검색 */}
-      <div className="p-3 border-b border-border-divider">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="팀원 검색"
-            className="w-full bg-bg-tertiary border border-border-subtle rounded-md pl-9 pr-8 py-2 text-sm text-txt-primary placeholder-txt-muted focus:outline-none focus:border-brand-purple/50 focus:ring-2 focus:ring-brand-purple/15 transition-all"
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary"
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* 리스트 */}
       <div className="flex-1 overflow-y-auto scrollbar-hide p-2">
         {/* "전체" 버튼 */}
@@ -115,7 +84,7 @@ export default function MemberList({ members = [], tasks = [], selectedId, onSel
         {/* 멤버 목록 */}
         {filtered.length === 0 ? (
           <p className="text-xs text-txt-muted text-center py-8">
-            {query ? `"${query}" 검색 결과 없음` : '등록된 팀원이 없습니다'}
+            등록된 팀원이 없습니다
           </p>
         ) : (
           filtered.map((m) => {

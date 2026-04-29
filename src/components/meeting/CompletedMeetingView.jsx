@@ -2339,7 +2339,7 @@ export default function CompletedMeetingView({ meeting }) {
         </div>
 
       {/* ═══ 자료 · 드로잉 히스토리 패널 (완료 회의 전용) ═══ */}
-      <CompletedMeetingFiles meetingId={meeting.id} />
+      <CompletedMeetingFiles meetingId={meeting.id} messages={messages} />
 
       {/* ═══ 메인 ═══ */}
       <div className="flex flex-1 overflow-hidden">

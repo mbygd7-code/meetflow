@@ -6,6 +6,8 @@ import { useMeeting } from '@/hooks/useMeeting';
 import { useAutoCancelMeetings } from '@/hooks/useAutoCancelMeetings';
 import { useToastStore } from '@/stores/toastStore';
 import { useMeetingStore } from '@/stores/meetingStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useMeetingCancel, isDeclinedByMe, isMyMeeting } from '@/hooks/useMeetingCancel';
 import MeetingCard from './MeetingCard';
 import CreateMeetingModal from './CreateMeetingModal';
 import OnboardingGuide from '@/components/onboarding/OnboardingGuide';
@@ -37,8 +39,12 @@ export default function MeetingLobby({ pageTitle }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [completedMonths, setCompletedMonths] = useState(1);
-  const { meetings, deleteMeeting } = useMeeting();
+  const { meetings } = useMeeting();
   const addToast = useToastStore((s) => s.addToast);
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
+  const [adminScope, setAdminScope] = useState('all'); // 'all' | 'mine' — 관리자 전용 필터
+  const { handleCancel, handleJoin, declinedIds } = useMeetingCancel();
   const summaryGeneratingId = useMeetingStore((s) => s.summaryGeneratingId);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -59,14 +65,30 @@ export default function MeetingLobby({ pageTitle }) {
   // 사용자가 수동으로 탭을 선택했는지 추적 (수동 선택 후엔 자동 전환 안 함)
   const userSelectedRef = useRef(false);
 
-  // 탭별 카운트 (자동 전환용)
+  // 가시성 사전 필터 — tabCounts/filtered가 동일한 기준을 공유
+  // 1) ID dedup → 2) 비관리자/내회의 모드면 isMyMeeting → 3) 예정인데 본인 불참이면 제외
+  const visibleMeetings = useMemo(() => {
+    const restrictToMine = !isAdmin || adminScope === 'mine';
+    const seen = new Set();
+    const out = [];
+    for (const m of meetings) {
+      if (!m?.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      if (restrictToMine && user?.id && !isMyMeeting(m, user.id)) continue;
+      if (m.status === 'scheduled' && isDeclinedByMe(m, user?.id, declinedIds)) continue;
+      out.push(m);
+    }
+    return out;
+  }, [meetings, user?.id, declinedIds, isAdmin, adminScope]);
+
+  // 탭별 카운트 — visibleMeetings 기반 (filtered와 항상 일치)
   const tabCounts = useMemo(() => {
     const c = { active: 0, scheduled: 0, completed: 0 };
-    for (const m of meetings) {
+    for (const m of visibleMeetings) {
       if (c[m.status] != null) c[m.status]++;
     }
     return c;
-  }, [meetings]);
+  }, [visibleMeetings]);
 
   // 최초 진입 + 데이터 로드 완료 시:
   // 진행 중 0 → 예정 / 예정 0 → 완료 순서로 활성 탭 자동 전환
@@ -79,21 +101,13 @@ export default function MeetingLobby({ pageTitle }) {
   }, [tabCounts]);
 
   const filtered = useMemo(() => {
-    let list = meetings.filter((m) => m.status === tab);
-    // 방어적 dedup — Realtime INSERT + setMeetings race 등으로 일시 중복 가능.
-    // React 의 "two children with the same key" 경고 + 중복 카드 노출 방지.
-    const seen = new Set();
-    list = list.filter((m) => {
-      if (!m?.id || seen.has(m.id)) return false;
-      seen.add(m.id);
-      return true;
-    });
+    let list = visibleMeetings.filter((m) => m.status === tab);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((m) => m.title?.toLowerCase().includes(q));
     }
     return list;
-  }, [meetings, tab, searchQuery]);
+  }, [visibleMeetings, tab, searchQuery]);
 
   // 완료 탭: 월별 그룹
   const completedGroups = useMemo(() => {
@@ -103,14 +117,6 @@ export default function MeetingLobby({ pageTitle }) {
 
   const visibleCompletedGroups = completedGroups.slice(0, completedMonths);
   const hasMoreMonths = completedGroups.length > completedMonths;
-
-  // 예정 회의 취소
-  const handleCancel = async (e, meeting) => {
-    e.stopPropagation();
-    if (!confirm(`"${meeting.title}" 회의를 취소하시겠습니까?`)) return;
-    await deleteMeeting(meeting.id);
-    addToast(`"${meeting.title}" 회의가 취소되었습니다. Slack · Calendar 취소 알림이 전송되었습니다.`, 'success');
-  };
 
   return (
     <div className="p-3 md:p-4 lg:p-4 max-w-[1400px] space-y-4 md:space-y-6 bg-[var(--bg-content)] rounded-[12px] m-2 md:m-3 lg:m-4 lg:mr-3">
@@ -165,7 +171,7 @@ export default function MeetingLobby({ pageTitle }) {
         <div className="flex items-center justify-between px-6 lg:px-8 pt-5 border-b border-border-divider">
           <div className="flex gap-1">
             {TABS.map((t) => {
-              const count = meetings.filter((m) => m.status === t.id).length;
+              const count = tabCounts[t.id] || 0;
               const active = tab === t.id;
               return (
                 <button
@@ -187,8 +193,29 @@ export default function MeetingLobby({ pageTitle }) {
               );
             })}
           </div>
-          {/* 검색 */}
+          {/* 관리자 전용: 내 회의 / 전체 회의 토글 */}
           <div className="flex items-center gap-2 pb-2">
+            {isAdmin && (
+              <div className="inline-flex items-center bg-bg-tertiary rounded-md p-0.5 border border-border-subtle mr-2">
+                {[
+                  { id: 'mine', label: '내 회의' },
+                  { id: 'all', label: '전체 회의' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setAdminScope(opt.id)}
+                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                      adminScope === opt.id
+                        ? 'bg-brand-purple/15 text-brand-purple'
+                        : 'text-txt-secondary hover:text-txt-primary'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {searchOpen ? (
               <div className="flex items-center gap-1 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle focus-within:border-brand-purple/50">
                 <Search size={16} className="text-txt-muted shrink-0" />
@@ -257,6 +284,8 @@ export default function MeetingLobby({ pageTitle }) {
                   key={m.id}
                   meeting={m}
                   onCancel={tab === 'scheduled' ? (e) => handleCancel(e, m) : undefined}
+                  onJoin={tab === 'scheduled' ? (e) => handleJoin(e, m) : undefined}
+
                 />
               ))}
             </div>

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, FileText, Image as ImageIcon, X, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { FolderOpen, FileText, Image as ImageIcon, X, Download, ChevronDown, ChevronUp, Loader2, Eye, EyeOff, ZoomIn, ZoomOut } from 'lucide-react';
 import { useMeetingFiles } from '@/hooks/useMeetingFiles';
 import DrawingOverlay from './DrawingOverlay';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
@@ -100,11 +100,58 @@ function FileThumb({ file, getDownloadUrl }) {
   );
 }
 
-// 파일 뷰어 모달 — 이미지/PDF + 드로잉 오버레이 readOnly
-function FileViewerModal({ file, url, meetingId, onClose }) {
+// PDF 페이지 + 페이지별 드로잉 오버레이 (readOnly)
+function PdfPageWithOverlay({ pageNumber, pageWidth, meetingId, fileId, messages, showAnnotations }) {
+  const wrapRef = useRef(null);
+  const [pageBox, setPageBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const el = wrapRef.current;
+    const update = () => {
+      const canvas = el.querySelector('canvas');
+      if (canvas) setPageBox({ w: canvas.clientWidth, h: canvas.clientHeight });
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    update();
+    return () => ro.disconnect();
+  }, [pageWidth]);
+
+  return (
+    <div ref={wrapRef} className="relative shadow-md rounded overflow-hidden bg-white">
+      <PdfPage
+        pageNumber={pageNumber}
+        width={pageWidth}
+        renderAnnotationLayer={true}
+        renderTextLayer={false}
+        onRenderSuccess={() => {
+          const canvas = wrapRef.current?.querySelector('canvas');
+          if (canvas) setPageBox({ w: canvas.clientWidth, h: canvas.clientHeight });
+        }}
+      />
+      {showAnnotations && pageBox.w > 0 && pageBox.h > 0 && (
+        <DrawingOverlay
+          targetKey={`doc:${fileId}:p${pageNumber}`}
+          meetingId={meetingId}
+          width={pageBox.w}
+          height={pageBox.h}
+          messages={messages}
+          readOnly
+        />
+      )}
+    </div>
+  );
+}
+
+// 파일 뷰어 모달 — 이미지/PDF + 드로잉 오버레이 readOnly + 페이지별 메시지/드로잉
+function FileViewerModal({ file, url, meetingId, messages = [], onClose }) {
   const containerRef = useRef(null);
   const imageRef = useRef(null);
   const [bodySize, setBodySize] = useState({ w: 0, h: 0 });
+  const [showAnnotations, setShowAnnotations] = useState(true); // 드로잉/태그 표시 토글
+  const [zoom, setZoom] = useState(1);                          // 0.5 ~ 3.0
+  const [numPages, setNumPages] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -118,9 +165,25 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
 
   const isImage = isImageFile(file);
   const isPdf = isPdfFile(file);
-  const targetKey = isImage ? `img:${file.id || file.name}` : `doc:${file.id || file.name}`;
+  const fileKey = file.id || file.name;
+  const imageTargetKey = `img:${fileKey}`;
+  const fileId = fileKey;
 
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
+
+  // Ctrl + 휠 줌 (PDF만)
+  const handleWheel = (e) => {
+    if (!isPdf) return;
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setZoom((z) => {
+      const next = z + (e.deltaY < 0 ? 0.1 : -0.1);
+      return Math.min(3, Math.max(0.5, Math.round(next * 10) / 10));
+    });
+  };
+
+  const baseFitWidth = Math.min((bodySize.w || 800) - 32, 800);
+  const pageWidth = Math.max(200, Math.round(baseFitWidth * zoom));
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -136,6 +199,35 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
           <span className="text-[10px] text-txt-muted px-2 py-0.5 rounded border border-border-subtle">
             읽기 전용 · 저장된 드로잉 포함
           </span>
+          {/* 드로잉/태그 표시 토글 */}
+          <button
+            onClick={() => setShowAnnotations((v) => !v)}
+            className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded hover:bg-bg-tertiary text-txt-secondary hover:text-txt-primary transition-colors"
+            title={showAnnotations ? '드로잉/태그 숨기기' : '드로잉/태그 보기'}
+          >
+            {showAnnotations ? <Eye size={14} /> : <EyeOff size={14} />}
+            <span className="hidden sm:inline">{showAnnotations ? '주석 숨기기' : '주석 보기'}</span>
+          </button>
+          {/* PDF 전용: 줌 컨트롤 */}
+          {isPdf && (
+            <div className="inline-flex items-center gap-0.5 ml-1">
+              <button
+                onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10))}
+                className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded"
+                title="축소"
+              >
+                <ZoomOut size={14} />
+              </button>
+              <span className="text-[10px] text-txt-muted tabular-nums w-9 text-center">{Math.round(zoom * 100)}%</span>
+              <button
+                onClick={() => setZoom((z) => Math.min(3, Math.round((z + 0.1) * 10) / 10))}
+                className="p-1 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded"
+                title="확대 (Ctrl+휠)"
+              >
+                <ZoomIn size={14} />
+              </button>
+            </div>
+          )}
           {url && (
             <a
               href={url}
@@ -159,7 +251,8 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
         {/* 바디 */}
         <div
           ref={containerRef}
-          className="flex-1 min-h-0 relative bg-bg-tertiary/30 overflow-auto flex items-center justify-center p-4"
+          onWheel={handleWheel}
+          className="flex-1 min-h-0 relative bg-bg-tertiary/30 overflow-auto flex items-start justify-center p-4"
         >
           {isImage && url && (
             <div className="relative">
@@ -171,12 +264,13 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
                 onLoad={(e) => setImgSize({ w: e.target.clientWidth, h: e.target.clientHeight })}
                 className="select-none pointer-events-none max-w-full max-h-[80vh] object-contain rounded-md shadow-md block"
               />
-              {imgSize.w > 0 && (
+              {imgSize.w > 0 && showAnnotations && (
                 <DrawingOverlay
-                  targetKey={targetKey}
+                  targetKey={imageTargetKey}
                   meetingId={meetingId}
                   width={imgSize.w}
                   height={imgSize.h}
+                  messages={messages}
                   readOnly
                 />
               )}
@@ -184,32 +278,33 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
           )}
 
           {isPdf && url && (
-            <div className="relative w-full h-full flex flex-col items-center overflow-auto">
+            <div className="w-full flex flex-col items-center gap-3">
               <PdfDocument
                 file={url}
+                onLoadSuccess={(p) => setNumPages(p.numPages)}
                 loading={<div className="text-xs text-txt-muted py-8">PDF 로딩 중...</div>}
                 error={<div className="text-xs text-status-error py-8">PDF 로드 실패</div>}
-                // PDF 내 외부 링크는 새 탭으로 (회의록 뷰에서도 일관 동작)
                 externalLinkTarget="_blank"
                 externalLinkRel="noopener noreferrer"
               >
-                <PdfPage
-                  pageNumber={1}
-                  width={Math.min(bodySize.w - 32, 800)}
-                  // 첫 페이지에 목차/링크가 있는 경우 클릭 가능하도록
-                  renderAnnotationLayer={true}
-                  renderTextLayer={false}
-                />
+                {numPages > 0 && Array.from({ length: numPages }, (_, idx) => {
+                  const pageNumber = idx + 1;
+                  return (
+                    <PdfPageWithOverlay
+                      key={`page-${pageNumber}`}
+                      pageNumber={pageNumber}
+                      pageWidth={pageWidth}
+                      meetingId={meetingId}
+                      fileId={fileId}
+                      messages={messages}
+                      showAnnotations={showAnnotations}
+                    />
+                  );
+                })}
               </PdfDocument>
-              {bodySize.w > 0 && bodySize.h > 0 && (
-                <DrawingOverlay
-                  targetKey={targetKey}
-                  meetingId={meetingId}
-                  width={bodySize.w}
-                  height={bodySize.h}
-                  readOnly
-                />
-              )}
+              <p className="text-[10px] text-txt-muted pb-4">
+                Ctrl + 휠로 확대/축소 · 총 {numPages}페이지
+              </p>
             </div>
           )}
 
@@ -237,7 +332,7 @@ function FileViewerModal({ file, url, meetingId, onClose }) {
   );
 }
 
-export default function CompletedMeetingFiles({ meetingId }) {
+export default function CompletedMeetingFiles({ meetingId, messages = [] }) {
   const { files, getDownloadUrl } = useMeetingFiles(meetingId);
   const [expanded, setExpanded] = useState(false);
   const [openFile, setOpenFile] = useState(null);
@@ -320,6 +415,7 @@ export default function CompletedMeetingFiles({ meetingId }) {
           file={openFile}
           url={openUrl}
           meetingId={meetingId}
+          messages={messages}
           onClose={() => { setOpenFile(null); setOpenUrl(null); }}
         />
       )}

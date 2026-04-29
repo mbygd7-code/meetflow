@@ -441,6 +441,17 @@ export function useMeeting() {
             console.error('[requestMeeting] Calendar 에러:', calErr);
           } else {
             console.log('[requestMeeting] Calendar 응답:', calRes);
+            // 이벤트 ID를 회의 row에 저장 — 취소 시 삭제용
+            if (calRes?.eventId) {
+              try {
+                await supabase
+                  .from('meetings')
+                  .update({ gcal_event_id: calRes.eventId })
+                  .eq('id', meeting.id);
+              } catch (e) {
+                console.warn('[requestMeeting] gcal_event_id 저장 실패:', e);
+              }
+            }
           }
         } catch (err) {
           console.error('[requestMeeting] Calendar 예외:', err);
@@ -472,25 +483,51 @@ export function useMeeting() {
       const meeting = useMeetingStore.getState().meetings.find((m) => m.id === id);
 
       if (canUseDB) {
-        // Slack 취소 알림 — DB 삭제 전에 발송 (팀 채널 조회는 slack-notify 내부에서)
-        if (meeting?.team_id) {
+        // 참가자 목록 — DELETE cascade 전에 미리 조회
+        let participantIds = [];
+        try {
+          const { data: parts } = await supabase
+            .from('meeting_participants')
+            .select('user_id')
+            .eq('meeting_id', id);
+          participantIds = (parts || []).map((p) => p.user_id).filter(Boolean);
+        } catch (e) {
+          console.warn('[deleteMeeting] 참가자 조회 실패:', e);
+        }
+
+        // Google Calendar 이벤트 삭제 — gcal_event_id 있을 때만
+        if (meeting?.gcal_event_id) {
           try {
-            await supabase.functions.invoke('slack-notify', {
-              body: {
-                event: 'meeting_cancelled',
-                payload: {
-                  title: meeting.title,
-                  team_id: meeting.team_id,
-                  scheduled_at: meeting.scheduled_at,
-                  cancelled_by: user?.name || '사용자',
-                  auto_cancel: autoCancel,
-                  reason: reason || (autoCancel ? '24시간 경과, 시작 안 됨' : null),
-                },
-              },
+            const { data: gcalRes, error: gcalErr } = await supabase.functions.invoke('gcal-delete-event', {
+              body: { eventId: meeting.gcal_event_id },
             });
+            if (gcalErr) console.warn('[deleteMeeting] Calendar 삭제 에러:', gcalErr);
+            else console.log('[deleteMeeting] Calendar 삭제 응답:', gcalRes);
           } catch (err) {
-            console.warn('[deleteMeeting] Slack 취소 알림 실패:', err);
+            console.warn('[deleteMeeting] Calendar 삭제 실패:', err);
           }
+        }
+
+        // Slack 취소 알림 — team_id 없어도 참가자 DM 가능하므로 항상 발송
+        try {
+          await supabase.functions.invoke('slack-notify', {
+            body: {
+              event: 'meeting_cancelled',
+              payload: {
+                title: meeting?.title,
+                team_id: meeting?.team_id || null,
+                scheduled_at: meeting?.scheduled_at,
+                cancelled_by: user?.name || '사용자',
+                cancelled_by_id: user?.id || null,
+                participant_ids: participantIds,
+                created_by: meeting?.created_by || null,
+                auto_cancel: autoCancel,
+                reason: reason || (autoCancel ? '24시간 경과, 시작 안 됨' : null),
+              },
+            },
+          });
+        } catch (err) {
+          console.warn('[deleteMeeting] Slack 취소 알림 실패:', err);
         }
 
         await supabase.from('meetings').delete().eq('id', id);

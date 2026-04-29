@@ -12,6 +12,7 @@ import { useTaskStore } from '@/stores/taskStore';
 import { differenceInDays, parseISO, format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MeetingCard from '@/components/meeting/MeetingCard';
+import { useMeetingCancel, isDeclinedByMe, isMyMeeting } from '@/hooks/useMeetingCancel';
 import MemberTaskCard from '@/components/task/MemberTaskCard';
 import TaskDetailPanel from '@/components/members/TaskDetailPanel';
 import EmptyState from '@/components/ui/EmptyState';
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const { meetings } = useMeetingStore();
   const { tasks, updateTask } = useTaskStore();
   const addToast = useToastStore((s) => s.addToast);
+  const { handleCancel: handleMeetingCancel, handleJoin: handleMeetingJoin, declinedIds } = useMeetingCancel();
 
   // 태스크 상세 모달 상태 (id만 저장 → Realtime 업데이트 시 최신 객체 조회)
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -110,9 +112,14 @@ export default function DashboardPage() {
   // ─── 회의 분류 ───
   // 활성(진행중) 또는 예정된 회의 — 단, 예정인데 시간이 이미 지났고 시작 안 된 회의는 제외
   // (MeetingCard의 scheduledPassed 로직과 동일: scheduled_at 우선, 없으면 created_at)
+  const isAdmin = user?.role === 'admin';
   const todayMeetings = useMemo(() => {
     const now = Date.now();
     return meetings.filter((m) => {
+      // 비관리자는 본인 관련 회의만
+      if (!isAdmin && user?.id && !isMyMeeting(m, user.id)) return false;
+      // 본인이 불참 표시한 회의 숨김
+      if (m.status === 'scheduled' && isDeclinedByMe(m, user?.id, declinedIds)) return false;
       if (m.status === 'active') return true;
       if (m.status === 'scheduled') {
         const effective = m.scheduled_at || m.created_at;
@@ -124,7 +131,7 @@ export default function DashboardPage() {
       }
       return false;
     });
-  }, [meetings]);
+  }, [meetings, user?.id, declinedIds, isAdmin]);
 
   const recentSummaries = useMemo(
     () =>
@@ -270,7 +277,12 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {todayMeetings.slice(0, DASHBOARD_LIMITS.TODAY_MEETINGS).map((m) => (
-                <MeetingCard key={m.id} meeting={m} />
+                <MeetingCard
+                  key={m.id}
+                  meeting={m}
+                  onCancel={m.status === 'scheduled' ? (e) => handleMeetingCancel(e, m) : undefined}
+                  onJoin={m.status === 'scheduled' ? (e) => handleMeetingJoin(e, m) : undefined}
+                />
               ))}
             </div>
           )}

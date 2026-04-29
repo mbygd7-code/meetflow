@@ -6,8 +6,8 @@ import { useMeetingStore } from '@/stores/meetingStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import Toast from '@/components/ui/Toast';
-import SlackNotifyBanner from '@/components/onboarding/SlackNotifyBanner';
 import CommandPalette from '@/components/search/CommandPalette';
+import MeetingCancelDialog from '@/components/meeting/MeetingCancelDialog';
 
 const PAGE_TITLES = {
   '/': '마이보드',
@@ -142,8 +142,6 @@ export default function Layout() {
 
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className={`flex-1 overflow-y-auto content-gradient-bg scrollbar-hide md:pb-0 ${hideTopBar ? '' : 'pb-[72px]'}`}>
-              {/* 온보딩 배너 — 회의방 내부에선 숨김 (몰입 방해) */}
-              {!hideTopBar && <SlackNotifyBanner />}
               <Outlet context={{ pageTitle }} />
             </div>
           </main>
@@ -152,6 +150,7 @@ export default function Layout() {
         {/* 모바일 하단 탭 바 */}
         {!hideTopBar && <MobileTabBar />}
         <Toast />
+        <MeetingCancelDialog />
       </div>
 
       {/* 명령 팔레트 — 어디서든 Cmd+K 또는 "/" 로 열림 */}

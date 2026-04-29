@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { Users, UserCog } from 'lucide-react';
+import { Users, UserCog, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useTaskStore } from '@/stores/taskStore';
@@ -214,11 +214,53 @@ export default function MembersPage() {
     [members, selectedMemberId]
   );
 
-  // 필터된 태스크 (선택된 멤버 or 전체)
+  // 기간 필터 — 태스크 생성일 기준
+  const [dateRange, setDateRange] = useState('all'); // 'day' | 'week' | 'month' | 'year' | 'custom' | 'all'
+  const [dateMenuOpen, setDateMenuOpen] = useState(false);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const dateRangeStart = useMemo(() => {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 오늘 자정
+    if (dateRange === 'all') return null;
+    if (dateRange === 'day') return d;
+    if (dateRange === 'week') {
+      const dow = (d.getDay() + 6) % 7; // 월요일=0
+      const start = new Date(d);
+      start.setDate(d.getDate() - dow);
+      return start;
+    }
+    if (dateRange === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+    if (dateRange === 'year') return new Date(now.getFullYear(), 0, 1);
+    if (dateRange === 'custom' && customStart) return new Date(`${customStart}T00:00:00`);
+    return null;
+  }, [dateRange, customStart]);
+
+  const dateRangeEnd = useMemo(() => {
+    if (dateRange === 'custom' && customEnd) {
+      const d = new Date(`${customEnd}T00:00:00`);
+      d.setDate(d.getDate() + 1); // 종료일 포함
+      return d;
+    }
+    return null;
+  }, [dateRange, customEnd]);
+
+  // 필터된 태스크 (선택된 멤버 + 기간)
   const visibleTasks = useMemo(() => {
-    if (!selectedMemberId) return tasks;
-    return tasks.filter((t) => t.assignee_id === selectedMemberId);
-  }, [tasks, selectedMemberId]);
+    let list = selectedMemberId ? tasks.filter((t) => t.assignee_id === selectedMemberId) : tasks;
+    if (dateRangeStart) {
+      list = list.filter((t) => {
+        if (!t.created_at) return false;
+        const ts = new Date(t.created_at).getTime();
+        if (isNaN(ts)) return false;
+        if (ts < dateRangeStart.getTime()) return false;
+        if (dateRangeEnd && ts >= dateRangeEnd.getTime()) return false;
+        return true;
+      });
+    }
+    return list;
+  }, [tasks, selectedMemberId, dateRangeStart, dateRangeEnd]);
 
   // 멤버 선택 → URL 갱신 + 모바일 태스크 뷰로 전환
   const handleSelectMember = (id) => {
@@ -417,18 +459,101 @@ export default function MembersPage() {
           </div>
         </div>
 
-        {/* 팀/직원 관리 버튼 — 관리자만 */}
-        {admin && (
-          <button
-            onClick={() => setManageOpen(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
-            title="팀·직원 관리"
+        {/* 우측 컨트롤: 기간 필터 + 관리자 버튼 */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* 기간 필터 — 클릭 시 펼침 */}
+          <div className="hidden md:block relative">
+            <button
+              type="button"
+              onClick={() => setDateMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 bg-bg-tertiary rounded-md px-3 py-1.5 border border-border-subtle hover:border-brand-purple/40 transition-colors"
+            >
+              <Calendar size={13} className="text-txt-muted" />
+              <span className="text-xs font-medium text-txt-primary">
+                {{ day: '일', week: '주', month: '월', year: '년', all: '전체', custom: '기간' }[dateRange] || '기간'}
+              </span>
+              <span className="text-[10px] text-txt-muted">▾</span>
+            </button>
+            {dateMenuOpen && (
+              <>
+                {/* 외부 클릭 차단 */}
+                <div className="fixed inset-0 z-10" onClick={() => setDateMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 bg-bg-secondary border border-border-default rounded-md shadow-lg overflow-hidden min-w-[120px]">
+                  {[
+                    { id: 'day', label: '일 (오늘)' },
+                    { id: 'week', label: '주 (이번 주)' },
+                    { id: 'month', label: '월 (이번 달)' },
+                    { id: 'year', label: '년 (올해)' },
+                    { id: 'all', label: '전체' },
+                    { id: 'custom', label: '기간 (직접 선택)' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setDateRange(opt.id);
+                        if (opt.id !== 'custom') setDateMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                        dateRange === opt.id
+                          ? 'bg-brand-purple/15 text-brand-purple font-semibold'
+                          : 'text-txt-secondary hover:bg-bg-tertiary hover:text-txt-primary'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 모바일용 select fallback */}
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value)}
+            className="md:hidden bg-bg-tertiary border border-border-subtle rounded-md text-xs text-txt-primary px-2 py-1.5 focus:outline-none focus:border-brand-purple/50"
           >
-            <UserCog size={16} />
-            <span className="hidden sm:inline">팀·직원 관리</span>
-            <span className="sm:hidden">관리</span>
-          </button>
-        )}
+            <option value="day">일</option>
+            <option value="week">주</option>
+            <option value="month">월</option>
+            <option value="year">년</option>
+            <option value="custom">기간</option>
+            <option value="all">전체</option>
+          </select>
+
+          {/* custom 기간 선택 input */}
+          {dateRange === 'custom' && (
+            <div className="hidden md:inline-flex items-center gap-1 bg-bg-tertiary border border-border-subtle rounded-md px-2 py-1">
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="bg-transparent text-xs text-txt-primary focus:outline-none"
+              />
+              <span className="text-[10px] text-txt-muted">~</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="bg-transparent text-xs text-txt-primary focus:outline-none"
+              />
+            </div>
+          )}
+
+          {/* 팀/직원 관리 버튼 — 관리자만 */}
+          {admin && (
+            <button
+              onClick={() => setManageOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+              title="팀·직원 관리"
+            >
+              <UserCog size={16} />
+              <span className="hidden lg:inline">팀·직원 관리</span>
+              <span className="lg:hidden">관리</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 본문 — 2컬럼 (모바일: 1개씩 토글) */}
