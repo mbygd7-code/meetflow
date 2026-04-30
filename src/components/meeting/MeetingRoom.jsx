@@ -25,6 +25,8 @@ import DrawingOverlay from './DrawingOverlay';
 import RemoteCursorsLayer from './RemoteCursorsLayer';
 import IframeOverlay from './IframeOverlay';
 import VoiceJoinButton from './VoiceJoinButton';
+import ScreenShareButton from './ScreenShareButton';
+import ScreenShareView from './ScreenShareView';
 import VoicePanel from './VoicePanel';
 import VoiceJoinIntroModal, { shouldShowVoiceIntro } from './VoiceJoinIntroModal';
 import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
@@ -619,7 +621,12 @@ function ImageZoomOverlay({
               )}
               {/* 라이브 커서 — 이미지 콘텐츠 박스 위에 직접 마운트
                   (sender가 imageRef 기준으로 정규화하므로 receiver도 같은 박스 위에 표시) */}
-              <RemoteCursorsLayer cursors={remoteCursors} fileId={file.id || file.name} />
+              <RemoteCursorsLayer
+                cursors={remoteCursors}
+                fileId={file.id || file.name}
+                width={canvasSize.w}
+                height={canvasSize.h}
+              />
             </div>
           ) : (
             <p className="text-xs text-txt-muted">로딩 중...</p>
@@ -1915,6 +1922,16 @@ export default function MeetingRoom() {
   // ── LiveKit 음성 회의 ──
   // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
   const lk = useLiveKitVoice(id);
+  // 화면 공유 패널 숨김 상태 — X 버튼으로 임시 닫기 가능 (트랙은 유지). 새 공유 시작 시 자동 reopen.
+  const [screenShareHidden, setScreenShareHidden] = useState(false);
+  const prevScreenShareCountRef = useRef(0);
+  useEffect(() => {
+    const cur = lk.screenShares?.size || 0;
+    const prev = prevScreenShareCountRef.current;
+    if (cur > prev) setScreenShareHidden(false); // 새 공유자 증가 → 패널 다시 표시
+    if (cur === 0) setScreenShareHidden(false);  // 모두 종료 → 다음 공유 시 다시 표시되도록 리셋
+    prevScreenShareCountRef.current = cur;
+  }, [lk.screenShares]);
 
   // ── milo-analyze warmup ping ──
   // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
@@ -2406,6 +2423,27 @@ export default function MeetingRoom() {
                   size="sm"
                 />
               </div>
+              {/* 화면 공유 버튼 — LiveKit 연결 시에만 사용 가능 (모바일은 아이콘 전용) */}
+              <div className="md:hidden">
+                <ScreenShareButton
+                  connected={lk.connected}
+                  sharing={lk.localScreenSharing}
+                  supported={lk.screenShareSupported}
+                  onStart={lk.startScreenShare}
+                  onStop={lk.stopScreenShare}
+                  iconOnly
+                />
+              </div>
+              <div className="hidden md:block">
+                <ScreenShareButton
+                  connected={lk.connected}
+                  sharing={lk.localScreenSharing}
+                  supported={lk.screenShareSupported}
+                  onStart={lk.startScreenShare}
+                  onStop={lk.stopScreenShare}
+                  size="sm"
+                />
+              </div>
             </>
           )}
 
@@ -2490,7 +2528,7 @@ export default function MeetingRoom() {
       )}
 
       {/* ═══ 메인: 자료 패널 + 채팅 ═══ */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* 자료 패널 (데스크톱) */}
         <DocumentPanel
           files={meetingFiles}
@@ -2505,6 +2543,16 @@ export default function MeetingRoom() {
           meetingCreatedBy={meeting?.created_by}
           onDeleteFile={handleDeleteFile}
         />
+        {/* 화면 공유 활성 시 — 자료/채팅 영역 전체를 덮는 오버레이.
+            X 버튼으로 임시 숨길 수 있고 새 발표자 시작 시 자동 재오픈 */}
+        {lk.screenShares?.size > 0 && !screenShareHidden && (
+          <ScreenShareView
+            screenShares={lk.screenShares}
+            localIdentity={user?.id}
+            onStopLocal={lk.stopScreenShare}
+            onClose={() => setScreenShareHidden(true)}
+          />
+        )}
 
         {/* 채팅 영역 */}
         <ChatArea

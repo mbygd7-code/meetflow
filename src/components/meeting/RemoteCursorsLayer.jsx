@@ -7,22 +7,29 @@
 // 옵션:
 //   - fileId : 같은 fileId 의 커서만 표시
 //   - page   : 지정 시, 같은 page 의 커서만 표시 (PDF 멀티페이지)
-export default function RemoteCursorsLayer({ cursors = {}, fileId, page = null }) {
+export default function RemoteCursorsLayer({ cursors = {}, fileId, page = null, width = null, height = null }) {
   const list = Object.entries(cursors).filter(([, c]) => {
     if (c.fileId !== fileId) return false;
     if (page != null && c.page != null && c.page !== page) return false;
     return true;
   });
   if (list.length === 0) return null;
+  // width/height (콘텐츠의 실제 픽셀 크기)가 주어지면 픽셀 좌표로 위치 — wrapper 크기/레이아웃과 무관하게 정확히 매칭
+  const usePixels = typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0;
   return (
-    <div className="absolute inset-0 pointer-events-none z-[8]">
+    <div
+      className="absolute pointer-events-none z-[8]"
+      style={usePixels
+        ? { left: 0, top: 0, width: `${width}px`, height: `${height}px` }
+        : { inset: 0 }}
+    >
       {list.map(([uid, c]) => (
         <div
           key={uid}
           className="absolute transition-[left,top] duration-100 ease-linear"
           style={{
-            left: `${c.x * 100}%`,
-            top: `${c.y * 100}%`,
+            left: usePixels ? `${c.x * width}px` : `${c.x * 100}%`,
+            top: usePixels ? `${c.y * height}px` : `${c.y * 100}%`,
             transform: 'translate(-2px, -2px)',
           }}
         >

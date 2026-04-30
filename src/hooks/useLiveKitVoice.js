@@ -63,6 +63,15 @@ export function useLiveKitVoice(meetingId) {
   //                  'ptt' (Space hold = 발언, 떼면 음소거. 같은 방 다중 참여 시 하울링 방지)
   const [voiceMode, setVoiceMode] = useState('toggle');
   const [pttPressed, setPttPressed] = useState(false); // PTT 키 누르고 있는 중 (시각 피드백용)
+  // 화면 공유 — identity → { videoTrack, audioTrack, name, isLocal }
+  // Map은 mutate해도 React가 인지 못하므로 매 갱신 시 새 Map 생성
+  const [screenShares, setScreenShares] = useState(() => new Map());
+  const [localScreenSharing, setLocalScreenSharing] = useState(false);
+  const [screenShareError, setScreenShareError] = useState(null);
+  const screenShareSupported =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getDisplayMedia === 'function';
 
   const roomRef = useRef(null);
   // 원격 오디오 트랙별 <audio> 엘리먼트 — Map<`${identity}:${trackSid}`, HTMLAudioElement>
@@ -138,8 +147,41 @@ export function useLiveKitVoice(meetingId) {
       room.on(RoomEvent.TrackUnpublished, () => rebuildParticipants());
       room.on(RoomEvent.TrackMuted, () => rebuildParticipants());
       room.on(RoomEvent.TrackUnmuted, () => rebuildParticipants());
-      room.on(RoomEvent.LocalTrackPublished, () => {
+      room.on(RoomEvent.LocalTrackPublished, (publication) => {
         rebuildParticipants();
+        // local 화면 공유 published → screenShares Map 에 본인 entry 추가 (로컬 미리보기용)
+        if (publication?.track?.source === Track.Source.ScreenShare) {
+          setLocalScreenSharing(true);
+          const lp = room.localParticipant;
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(lp.identity) || {
+              identity: lp.identity,
+              name: lp.name || '나',
+              isLocal: true,
+            };
+            cur.videoTrack = publication.track;
+            cur.isLocal = true;
+            next.set(lp.identity, cur);
+            return next;
+          });
+          return;
+        }
+        if (publication?.track?.source === Track.Source.ScreenShareAudio) {
+          const lp = room.localParticipant;
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(lp.identity) || {
+              identity: lp.identity,
+              name: lp.name || '나',
+              isLocal: true,
+            };
+            cur.audioTrack = publication.track;
+            next.set(lp.identity, cur);
+            return next;
+          });
+          return;
+        }
         // local 마이크 published → muted 상태 동기화
         const pub = room.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
         setMuted(!!pub?.isMuted);
@@ -149,8 +191,35 @@ export function useLiveKitVoice(meetingId) {
           setLocalStream(new MediaStream([track.mediaStreamTrack]));
         }
       });
-      room.on(RoomEvent.LocalTrackUnpublished, () => {
+      room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
         rebuildParticipants();
+        if (publication?.track?.source === Track.Source.ScreenShare) {
+          setLocalScreenSharing(false);
+          const lp = room.localParticipant;
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(lp.identity);
+            if (!cur) return prev;
+            cur.videoTrack = undefined;
+            if (!cur.videoTrack && !cur.audioTrack) next.delete(lp.identity);
+            else next.set(lp.identity, cur);
+            return next;
+          });
+          return;
+        }
+        if (publication?.track?.source === Track.Source.ScreenShareAudio) {
+          const lp = room.localParticipant;
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(lp.identity);
+            if (!cur) return prev;
+            cur.audioTrack = undefined;
+            if (!cur.videoTrack && !cur.audioTrack) next.delete(lp.identity);
+            else next.set(lp.identity, cur);
+            return next;
+          });
+          return;
+        }
         setLocalStream(null);
       });
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
@@ -162,6 +231,39 @@ export function useLiveKitVoice(meetingId) {
       //   TrackSubscribed 시 audio 엘리먼트 만들어 DOM 에 부착해야 들림
       const audioElsRef = audioContainersRef.current;
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+        // 화면 공유 비디오/시스템 오디오 트랙 → screenShares state 갱신
+        // (실제 video element는 ScreenShareView에서 attach — 여러 viewer 인스턴스 대비)
+        // ScreenShare 시스템 오디오는 여기서 자동 재생 (다른 사람의 시스템 사운드 들리도록)
+        if (
+          track.source === Track.Source.ScreenShare ||
+          track.source === Track.Source.ScreenShareAudio
+        ) {
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(participant.identity) || {
+              identity: participant.identity,
+              name: participant.name || participant.identity || '발표자',
+              isLocal: false,
+            };
+            if (track.source === Track.Source.ScreenShare) cur.videoTrack = track;
+            else cur.audioTrack = track;
+            next.set(participant.identity, cur);
+            return next;
+          });
+          // 시스템 오디오는 자동 재생 (마이크 오디오와 동일 패턴)
+          if (track.source === Track.Source.ScreenShareAudio) {
+            try {
+              const el = track.attach();
+              el.setAttribute('data-livekit-screen-audio', participant.identity);
+              el.style.display = 'none';
+              document.body.appendChild(el);
+              audioElsRef.set(`${participant.identity}:${track.sid}`, el);
+            } catch (e) {
+              console.warn('[useLiveKitVoice] screen audio attach failed:', e?.message);
+            }
+          }
+          return;
+        }
         if (track.kind !== Track.Kind.Audio) return;
         try {
           const el = track.attach();
@@ -174,6 +276,33 @@ export function useLiveKitVoice(meetingId) {
         }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track, _publication, participant) => {
+        // 화면 공유 트랙 정리
+        if (
+          track.source === Track.Source.ScreenShare ||
+          track.source === Track.Source.ScreenShareAudio
+        ) {
+          setScreenShares((prev) => {
+            const next = new Map(prev);
+            const cur = next.get(participant.identity);
+            if (!cur) return prev;
+            if (track.source === Track.Source.ScreenShare) cur.videoTrack = undefined;
+            else cur.audioTrack = undefined;
+            if (!cur.videoTrack && !cur.audioTrack) next.delete(participant.identity);
+            else next.set(participant.identity, cur);
+            return next;
+          });
+          // 시스템 오디오 element 정리
+          if (track.source === Track.Source.ScreenShareAudio) {
+            const key = `${participant.identity}:${track.sid}`;
+            const el = audioElsRef.get(key);
+            if (el) {
+              try { track.detach(el); } catch {}
+              el.remove();
+              audioElsRef.delete(key);
+            }
+          }
+          return;
+        }
         if (track.kind !== Track.Kind.Audio) return;
         const key = `${participant.identity}:${track.sid}`;
         const el = audioElsRef.get(key);
@@ -188,6 +317,8 @@ export function useLiveKitVoice(meetingId) {
         setActiveSpeakers(new Set());
         setParticipants([]);
         setLocalStream(null);
+        setScreenShares(new Map());
+        setLocalScreenSharing(false);
       });
       room.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (state === ConnectionState.Connected) setConnected(true);
@@ -263,7 +394,44 @@ export function useLiveKitVoice(meetingId) {
     setActiveSpeakers(new Set());
     setParticipants([]);
     setLocalStream(null);
+    setScreenShares(new Map());
+    setLocalScreenSharing(false);
   }, [cleanupAudioElements]);
+
+  // === 화면 공유 시작/중지 ===
+  // 사용자 클릭 핸들러 안에서 호출되어야 함 (getDisplayMedia는 user gesture 필요)
+  // audio: true → 시스템 오디오 함께 캡처 (브라우저별 지원 다름)
+  const startScreenShare = useCallback(async ({ audio = false } = {}) => {
+    const room = roomRef.current;
+    if (!room) {
+      setScreenShareError('LiveKit 룸에 연결되지 않았습니다');
+      return;
+    }
+    if (!screenShareSupported) {
+      setScreenShareError('이 브라우저에서는 화면 공유를 지원하지 않습니다');
+      return;
+    }
+    setScreenShareError(null);
+    try {
+      await room.localParticipant.setScreenShareEnabled(true, { audio });
+    } catch (err) {
+      // 사용자가 권한 다이얼로그 취소 → NotAllowedError → 무음 처리
+      if (err?.name !== 'NotAllowedError' && err?.name !== 'AbortError') {
+        console.warn('[useLiveKitVoice] screen share failed:', err);
+        setScreenShareError(err?.message || String(err));
+      }
+    }
+  }, [screenShareSupported]);
+
+  const stopScreenShare = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      await room.localParticipant.setScreenShareEnabled(false);
+    } catch (err) {
+      console.warn('[useLiveKitVoice] stopScreenShare failed:', err);
+    }
+  }, []);
 
   // === 음소거 토글 ===
   const toggleMute = useCallback(async () => {
@@ -413,5 +581,12 @@ export function useLiveKitVoice(meetingId) {
     voiceMode,
     setVoiceMode,
     pttPressed, // PTT 모드에서 Space 누르고 있는 상태 시각 피드백
+    // 화면 공유
+    screenShares,           // Map<identity, { videoTrack, audioTrack, name, isLocal, identity }>
+    localScreenSharing,     // 본인이 현재 공유 중인지
+    screenShareError,
+    screenShareSupported,
+    startScreenShare,
+    stopScreenShare,
   };
 }

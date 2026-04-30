@@ -4,11 +4,17 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
 
-// react-pdf 워커가 컴포넌트 언마운트 시 "Worker was terminated"를 unhandled로 던짐.
-// 사용자 경험에는 영향 없는 정상 동작이므로 console만 정리.
+// 사용자 경험에 영향 없는 외부/언마운트 에러는 콘솔에서 정리:
+// - react-pdf 워커: 컴포넌트 언마운트 시 "Worker was terminated" / "Transport destroyed"
+// - Chrome 확장(광고 차단기·비밀번호 관리자 등) <-> 페이지 통신 끊김
 window.addEventListener('unhandledrejection', (e) => {
   const msg = String(e?.reason?.message || e?.reason || '');
-  if (msg.includes('Worker was terminated') || msg.includes('Transport destroyed')) {
+  if (
+    msg.includes('Worker was terminated') ||
+    msg.includes('Transport destroyed') ||
+    msg.includes('message channel closed before a response was received') ||
+    msg.includes('A listener indicated an asynchronous response')
+  ) {
     e.preventDefault();
   }
 });
