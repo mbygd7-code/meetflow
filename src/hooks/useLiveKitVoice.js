@@ -401,14 +401,25 @@ export function useLiveKitVoice(meetingId) {
   // === 화면 공유 시작/중지 ===
   // 사용자 클릭 핸들러 안에서 호출되어야 함 (getDisplayMedia는 user gesture 필요)
   // audio: true → 시스템 오디오 함께 캡처 (브라우저별 지원 다름)
+  // 룸 미연결 상태면 자동으로 join 후 화면 공유 시작 → 사용자 UX 상 음성과 분리.
+  // 자동 join은 mute 상태로 진행 (muted 초기값 true).
   const startScreenShare = useCallback(async ({ audio = false } = {}) => {
-    const room = roomRef.current;
-    if (!room) {
-      setScreenShareError('LiveKit 룸에 연결되지 않았습니다');
-      return;
-    }
     if (!screenShareSupported) {
       setScreenShareError('이 브라우저에서는 화면 공유를 지원하지 않습니다');
+      return;
+    }
+    // 룸 미연결 → 자동 join (mute 상태) 후 화면 공유 시작
+    if (!roomRef.current) {
+      try {
+        await join();
+      } catch (e) {
+        setScreenShareError('회의 룸 자동 입장 실패: ' + (e?.message || String(e)));
+        return;
+      }
+    }
+    const room = roomRef.current;
+    if (!room) {
+      setScreenShareError('LiveKit 룸 연결에 실패했습니다');
       return;
     }
     setScreenShareError(null);
@@ -421,7 +432,7 @@ export function useLiveKitVoice(meetingId) {
         setScreenShareError(err?.message || String(err));
       }
     }
-  }, [screenShareSupported]);
+  }, [screenShareSupported, join]);
 
   const stopScreenShare = useCallback(async () => {
     const room = roomRef.current;

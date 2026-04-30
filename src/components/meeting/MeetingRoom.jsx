@@ -2527,50 +2527,80 @@ export default function MeetingRoom() {
         />
       )}
 
-      {/* ═══ 메인: 자료 패널 + 채팅 ═══ */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* 자료 패널 (데스크톱) */}
-        <DocumentPanel
-          files={meetingFiles}
-          getUrl={getMeetingFileUrl}
-          meetingId={id}
-          messages={messages}
-          onViewerChange={setMaterialViewerActive}
-          mobileOpen={mobileDocOpen}
-          onMobileClose={() => setMobileDocOpen(false)}
-          currentUserId={user?.id}
-          isAdmin={user?.role === 'admin'}
-          meetingCreatedBy={meeting?.created_by}
-          onDeleteFile={handleDeleteFile}
-        />
-        {/* 화면 공유 활성 시 — 자료/채팅 영역 전체를 덮는 오버레이.
-            X 버튼으로 임시 숨길 수 있고 새 발표자 시작 시 자동 재오픈 */}
-        {lk.screenShares?.size > 0 && !screenShareHidden && (
-          <ScreenShareView
-            screenShares={lk.screenShares}
-            localIdentity={user?.id}
-            onStopLocal={lk.stopScreenShare}
-            onClose={() => setScreenShareHidden(true)}
-          />
-        )}
+      {/* ═══ 메인: 자료 패널 + 채팅 ═══
+          ※ 안전 정책: DocumentPanel/ChatArea는 항상 마운트. 화면 공유 활성 시
+            ScreenShareView를 absolute overlay로 그 위에 덮어 표시 (자료 패널 자리만,
+            채팅 영역은 비워둠 → 채팅 그대로 사용 가능). 어떤 이유로든 ScreenShareView
+            가 null/빈 결과를 반환해도 DocumentPanel이 그대로 보이므로 빈 화면 없음. */}
+      {(() => {
+        // 실제로 videoTrack이 있는 발표자가 1명 이상일 때만 화면 공유 active.
+        let hasActiveVideo = false;
+        if (lk.screenShares && lk.screenShares.size > 0) {
+          for (const v of lk.screenShares.values()) {
+            if (v?.videoTrack) { hasActiveVideo = true; break; }
+          }
+        }
+        const screenShareActive = hasActiveVideo && !screenShareHidden;
+        // 채팅 폭 — 화면 공유 시에만 고정 380px로 축소 (자료/공유 영역에 더 많은 공간 확보)
+        const chatWrapClass = screenShareActive
+          ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle'
+          : 'flex-1 flex flex-col min-h-0 min-w-0';
+        return (
+          <div className="flex flex-1 overflow-hidden relative">
+            {/* 자료 패널 — 항상 마운트 */}
+            <DocumentPanel
+              files={meetingFiles}
+              getUrl={getMeetingFileUrl}
+              meetingId={id}
+              messages={messages}
+              onViewerChange={setMaterialViewerActive}
+              mobileOpen={mobileDocOpen}
+              onMobileClose={() => setMobileDocOpen(false)}
+              currentUserId={user?.id}
+              isAdmin={user?.role === 'admin'}
+              meetingCreatedBy={meeting?.created_by}
+              onDeleteFile={handleDeleteFile}
+            />
 
-        {/* 채팅 영역 */}
-        <ChatArea
-          messages={messages}
-          onSend={handleSend}
-          disabled={meeting.status === 'completed'}
-          aiThinking={aiThinking}
-          onFileUpload={handleFileUpload}
-          onImportUrl={handleImportUrl}
-          autoIntervene={aiAutoIntervene}
-          aiError={aiError}
-          // LiveKit 음성 회의 통합 — 참여 중일 때 큰 마이크 버튼이 mute 토글로 동작
-          voiceConnected={lk.connected}
-          voiceMuted={lk.muted}
-          onVoiceToggleMute={lk.toggleMute}
-          voiceLocalStream={lk.localStream}
-        />
-      </div>
+            {/* 채팅 영역 — 항상 마운트, 화면 공유 시에만 폭 축소 */}
+            <div className={chatWrapClass}>
+              <ChatArea
+                messages={messages}
+                onSend={handleSend}
+                disabled={meeting.status === 'completed'}
+                aiThinking={aiThinking}
+                onFileUpload={handleFileUpload}
+                onImportUrl={handleImportUrl}
+                autoIntervene={aiAutoIntervene}
+                aiError={aiError}
+                voiceConnected={lk.connected}
+                voiceMuted={lk.muted}
+                onVoiceToggleMute={lk.toggleMute}
+                voiceLocalStream={lk.localStream}
+              />
+            </div>
+
+            {/* 화면 공유 overlay — DocumentPanel 자리부터 채팅 좌측 경계까지 덮음.
+                ChatArea(340~380px)는 우측에 그대로 노출 → 화면 공유 중에도 채팅 가능.
+                ScreenShareView가 어떤 사유로 null을 반환하더라도 아래 DocumentPanel
+                이 그대로 보이므로 사용자에게는 빈 화면이 발생하지 않음. */}
+            {screenShareActive && (
+              <div className="absolute top-0 bottom-0 left-0 right-[340px] md:right-[380px] z-20 flex flex-col bg-bg-primary border-r border-border-subtle">
+                <ScreenShareView
+                  inline
+                  screenShares={lk.screenShares}
+                  localIdentity={user?.id}
+                  onStopLocal={lk.stopScreenShare}
+                  onClose={() => setScreenShareHidden(true)}
+                  meetingId={id}
+                  messages={messages}
+                  following={following}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
