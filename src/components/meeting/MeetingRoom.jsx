@@ -2073,13 +2073,16 @@ export default function MeetingRoom() {
     autoIntervene: aiAutoIntervene && !materialViewerActive,
   });
 
-  // AI 인사
+  // AI 인사 — meeting 객체/messages 배열 ref가 아닌 안정적 값(id/status/length)만 deps로
   const greetedRef = useRef(false);
+  const meetingId = meeting?.id;
+  const meetingStatus = meeting?.status;
+  const messagesLen = messages.length;
+  const hasAnyAi = messages.some((m) => m.is_ai);
   useEffect(() => {
-    if (greetedRef.current || !meeting || meeting.status !== 'active') return;
-    const hasAiMessage = messages.some((m) => m.is_ai);
-    if (hasAiMessage) { greetedRef.current = true; return; }
-    if (messages.length === 0 && !greetedRef.current) {
+    if (greetedRef.current || !meetingId || meetingStatus !== 'active') return;
+    if (hasAnyAi) { greetedRef.current = true; return; }
+    if (messagesLen === 0 && !greetedRef.current) {
       const checkTimer = setTimeout(() => {
         greetedRef.current = true;
         // store에서 최신 meeting 데이터를 가져옴 (클로저 stale 방지)
@@ -2110,7 +2113,7 @@ export default function MeetingRoom() {
       }, 2000);
       return () => clearTimeout(checkTimer);
     }
-  }, [meeting, messages, sendMessage]);
+  }, [meetingId, meetingStatus, messagesLen, hasAnyAi, sendMessage, meeting, id]);
 
   // 파일 업로드 핸들러 (ChatArea에서 호출) — Storage+DB에 영구 저장
   const handleFileUpload = useCallback(async (file) => {
@@ -2377,9 +2380,9 @@ export default function MeetingRoom() {
 
         {/* 우측 액션: 모바일 = 아이콘 전용 32px, 데스크톱 = 라벨 동반 */}
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          {/* LiveKit 음성 회의 참여/나가기 — 진행 중 회의에서만 노출
+          {/* LiveKit 음성 회의 참여/나가기 — 회의방 안에 있으면 항상 노출 (완료 회의 제외)
               모바일은 아이콘 전용, 데스크톱은 라벨 포함 */}
-          {meeting.status === 'active' && (
+          {meeting.status !== 'completed' && (
             <>
               <div className="md:hidden">
                 <VoiceJoinButton

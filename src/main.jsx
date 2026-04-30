@@ -4,6 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
 
+// react-pdf 워커가 컴포넌트 언마운트 시 "Worker was terminated"를 unhandled로 던짐.
+// 사용자 경험에는 영향 없는 정상 동작이므로 console만 정리.
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = String(e?.reason?.message || e?.reason || '');
+  if (msg.includes('Worker was terminated') || msg.includes('Transport destroyed')) {
+    e.preventDefault();
+  }
+});
+
 // iOS Safari viewport 높이 보정
 //   100vh / 100dvh 가 첫 로드 시 URL 바 영역을 잘못 포함하는 케이스 회피.
 //   visualViewport.height 를 직접 측정해 --app-h CSS 변수로 주입.
