@@ -21,6 +21,7 @@ import { useToastStore } from '@/stores/toastStore';
 import SummaryAgendaList from './SummaryAgendaList';
 import MeetingMetaBar from './MeetingMetaBar';
 import MeetingParticipants from './MeetingParticipants';
+import PresentationSessions from './PresentationSessions';
 import MeetingFeedback from './MeetingFeedback';
 import MeetingScoreBadge from './MeetingScoreBadge';
 import MeetingSummaryPrintable from './MeetingSummaryPrintable';
@@ -516,6 +517,9 @@ export default function MeetingSummary() {
           aiCounts={stats.aiCounts}
         />
       )}
+
+      {/* 화면 공유 발표 세션 — 메시지 metadata.during_screen_share 가 있을 때만 표시 (없으면 null) */}
+      <PresentationSessions messages={messages} />
 
       {/* 4섹션 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
