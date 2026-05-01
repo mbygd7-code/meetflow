@@ -1,9 +1,12 @@
 // ScreenShareButton — 화면 공유 시작/중지 토글
 // 상태:
-//   미연결: disabled + "음성 회의 참여 후 가능"
 //   미지원 환경: disabled + "이 브라우저에서는 지원되지 않음"
 //   시작 가능: 보라 모니터 아이콘 + (옵션 팝오버)
 //   공유 중: 빨강 + "공유 중지"
+//
+// 음성 룸 미연결 상태에서도 활성화 — 클릭 시 useLiveKitVoice.startScreenShare 가
+// 자동으로 룸에 join (mute) 후 화면 공유를 시작함. 사용자는 "음성 참여" 단계를
+// 별도로 거치지 않아도 됨. (connected prop은 호환성 위해 유지)
 
 import { useState, useRef, useEffect } from 'react';
 import { Monitor, MonitorX } from 'lucide-react';
@@ -33,12 +36,12 @@ export default function ScreenShareButton({
     return () => document.removeEventListener('mousedown', onClick);
   }, [popoverOpen]);
 
-  const disabled = !connected || !supported;
+  // 음성 미참여여도 클릭 시 자동 join 후 공유 시작 → connected 게이트 제거.
+  // 미지원 브라우저(getDisplayMedia 없음)만 비활성화 유지.
+  const disabled = !supported;
   const disabledTitle = !supported
     ? '이 브라우저에서는 화면 공유를 지원하지 않습니다 (데스크톱 Chrome/Edge/Firefox에서 사용 가능)'
-    : !connected
-      ? '음성 회의 참여 후 화면 공유가 가능합니다'
-      : '';
+    : '';
 
   const iconSize = iconOnly ? 16 : (size === 'sm' ? 12 : 14);
   const baseClass = iconOnly

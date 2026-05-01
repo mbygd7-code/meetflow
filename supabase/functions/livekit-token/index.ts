@@ -156,10 +156,15 @@ serve(async (req) => {
     // ── 5) 사용자 표시 이름 조회 (LiveKit Participant.name 으로 사용 → UI 친화적) ──
     const { data: profile2 } = await adminSb
       .from('users')
-      .select('name, avatar_color')
+      .select('name, email, avatar_color')
       .eq('id', userId)
       .maybeSingle();
-    const displayName = profile2?.name || userData.user.email?.split('@')[0] || '참가자';
+    // userData 라는 미정의 변수 참조 버그 수정 — 이 함수는 JWT 직접 디코드만 하므로
+    // auth.getUser() 결과(userData)가 없음. profile2 의 email 로 fallback.
+    const displayName =
+      profile2?.name ||
+      profile2?.email?.split('@')[0] ||
+      '참가자';
 
     // ── 6) LiveKit AccessToken 발급 ──
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {

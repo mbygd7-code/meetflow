@@ -76,3 +76,23 @@ verify_jwt = false
 # Google Docs/Sheets/Slides URL → PDF 자동 변환 (서버측에서 사용자 JWT 직접 검증)
 [functions.import-google-doc]
 verify_jwt = false
+
+# Office 파일(.pptx/.docx/.xlsx 등) → PDF 자동 변환
+[functions.office-to-pdf]
+verify_jwt = false
+
+# LiveKit 토큰 발급 (서버측에서 사용자 JWT 직접 검증)
+[functions.livekit-token]
+verify_jwt = false
+
+# 서비스 사용량 로깅
+[functions.service-usage-log]
+verify_jwt = false
+
+# 빌링 동기화 (관리자 또는 cron)
+[functions.billing-sync]
+verify_jwt = false
+
+# 구글 캘린더 이벤트 삭제
+[functions.gcal-delete-event]
+verify_jwt = false
