@@ -2594,7 +2594,11 @@ export default function MeetingRoom() {
                   onClose={() => setScreenShareHidden(true)}
                   meetingId={id}
                   messages={messages}
-                  following={following}
+                  // following 은 DocumentPanel 스코프 안의 useViewerSync 변수.
+                  //   MeetingRoom 스코프엔 없으므로 직접 참조하면 ReferenceError → 회의방 크래시.
+                  //   화면 공유 위 드로잉의 라이브 readOnly 마운트 기능은 일단 비활성 (false).
+                  //   필요 시 useViewerSync 를 MeetingRoom 으로 끌어올려 DocumentPanel 에 prop 으로 내리는 리팩터링으로 복구.
+                  following={false}
                 />
               </div>
             )}
