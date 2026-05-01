@@ -5,7 +5,7 @@
 // - 본인이 공유 중일 때는 무한 거울 회피 — 메인에 본인 트랙은 안 띄우고 안내 메시지
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MonitorX, X, Pencil } from 'lucide-react';
+import { MonitorX, X, Pencil, Maximize2, Minimize2, Expand } from 'lucide-react';
 import DrawingOverlay from './DrawingOverlay';
 
 function ScreenVideo({ track, muted = true, className = '', onClick }) {
@@ -47,6 +47,11 @@ export default function ScreenShareView({
   meetingId = null,
   messages = [],
   following = false,
+  // 채팅 패널 숨김/표시 토글 — 부모에서 chatHidden 상태 관리
+  //   toggleChat: () => void  (제공 시 헤더에 "채팅 숨김/표시" 버튼 노출)
+  //   chatHidden: bool        (현재 채팅이 숨겨져 있는지 — 버튼 아이콘 분기)
+  toggleChat,
+  chatHidden = false,
 }) {
   // Map → 배열 (videoTrack 있는 것만)
   const list = useMemo(() => {
@@ -74,6 +79,39 @@ export default function ScreenShareView({
   const [toolbarHost, setToolbarHost] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const videoWrapRef = useRef(null);
+  // 브라우저 풀스크린 — F 키 또는 버튼으로 토글. 화면 영역을 모니터 전체로 확대.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await videoWrapRef.current?.requestFullscreen?.();
+      } else {
+        await document.exitFullscreen?.();
+      }
+    } catch (e) {
+      console.warn('[ScreenShareView] fullscreen toggle failed:', e?.message);
+    }
+  };
+  // F 키 단축키 — 풀스크린 토글 (입력 포커스 시엔 무시)
+  useEffect(() => {
+    if (!inline) return;
+    const onKey = (e) => {
+      if (e.key !== 'f' && e.key !== 'F') return;
+      const t = e.target;
+      const tag = t?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return;
+      e.preventDefault();
+      toggleFullscreen();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inline]);
 
   // 비디오 wrap 크기 추적 → DrawingOverlay width/height 동기화 (resize/zoom 즉시 반영)
   useEffect(() => {
@@ -166,6 +204,30 @@ export default function ScreenShareView({
                 {drawingActive ? '드로잉 종료' : '드로잉'}
               </button>
             </>
+          )}
+          {/* 채팅 숨김 토글 — 패널 폭 확장으로 화면 더 크게 보기 */}
+          {inline && typeof toggleChat === 'function' && (
+            <button
+              type="button"
+              onClick={toggleChat}
+              className="p-1.5 text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary rounded-md transition-colors"
+              title={chatHidden ? '채팅 다시 표시' : '채팅 숨기고 화면 크게 보기'}
+              aria-label="채팅 표시 토글"
+            >
+              {chatHidden ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          )}
+          {/* 브라우저 풀스크린 토글 — 모니터 전체로 확대 (F 키 단축) */}
+          {inline && (
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="p-1.5 text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary rounded-md transition-colors"
+              title={isFullscreen ? '풀스크린 종료 (F)' : '전체 화면 (F)'}
+              aria-label="풀스크린 토글"
+            >
+              <Expand size={14} />
+            </button>
           )}
           {main.isLocal && onStopLocal && (
             <button

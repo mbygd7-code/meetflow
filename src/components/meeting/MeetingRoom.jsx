@@ -29,6 +29,7 @@ import ScreenShareButton from './ScreenShareButton';
 import ScreenShareView from './ScreenShareView';
 import VoicePanel from './VoicePanel';
 import VoiceJoinIntroModal, { shouldShowVoiceIntro } from './VoiceJoinIntroModal';
+import ScreenShareInviteModal from './ScreenShareInviteModal';
 import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 import { getSourceMeta } from '@/lib/googleDocsUrl';
@@ -1924,12 +1925,21 @@ export default function MeetingRoom() {
   const lk = useLiveKitVoice(id);
   // 화면 공유 패널 숨김 상태 — X 버튼으로 임시 닫기 가능 (트랙은 유지). 새 공유 시작 시 자동 reopen.
   const [screenShareHidden, setScreenShareHidden] = useState(false);
+  // 화면 공유 시 채팅 패널 숨김 — 화면을 풀폭으로 확장해서 글씨/UI 더 크게 보기
+  //   ScreenShareView 헤더의 토글 버튼으로 제어. 새 공유 시작 시 false 초기화.
+  const [chatHiddenDuringShare, setChatHiddenDuringShare] = useState(false);
   const prevScreenShareCountRef = useRef(0);
   useEffect(() => {
     const cur = lk.screenShares?.size || 0;
     const prev = prevScreenShareCountRef.current;
-    if (cur > prev) setScreenShareHidden(false); // 새 공유자 증가 → 패널 다시 표시
-    if (cur === 0) setScreenShareHidden(false);  // 모두 종료 → 다음 공유 시 다시 표시되도록 리셋
+    if (cur > prev) {
+      setScreenShareHidden(false); // 새 공유자 증가 → 패널 다시 표시
+      setChatHiddenDuringShare(false); // 채팅 숨김 모드도 리셋 (사용자가 다시 결정하게)
+    }
+    if (cur === 0) {
+      setScreenShareHidden(false);  // 모두 종료 → 다음 공유 시 다시 표시되도록 리셋
+      setChatHiddenDuringShare(false);
+    }
     prevScreenShareCountRef.current = cur;
   }, [lk.screenShares]);
 
@@ -1944,15 +1954,22 @@ export default function MeetingRoom() {
   // lk 객체는 매 렌더 새로 만들어져 채널 핸들러 클로저가 stale 됨 → ref 로 최신 보관
   const lkRef = useRef(lk);
   useEffect(() => { lkRef.current = lk; }, [lk]);
+  // 화면 공유 합류 모달 — { presenterName } | null
+  //   다른 참가자가 공유 시작 시 모달 노출 → "참여하고 보기" 클릭 시 lk.join (mute) 후 자동 표시
+  const [shareInvite, setShareInvite] = useState(null);
   useEffect(() => {
     if (!id) return;
     const ch = supabase.channel(`lk-signal:${id}`, { config: { broadcast: { self: false } } });
-    ch.on('broadcast', { event: 'screen-share:start' }, () => {
-      // 이미 룸에 연결돼 있으면 별도 처리 불필요 — TrackSubscribed 가 알아서 화면 트랙 잡음
+    ch.on('broadcast', { event: 'screen-share:start' }, ({ payload }) => {
+      // 이미 룸에 연결돼 있으면 모달 불필요 — TrackSubscribed 가 알아서 화면 트랙 잡음
       const cur = lkRef.current;
       if (!cur || cur.connected || cur.connecting) return;
-      // 자동 join (mute 기본). 실패해도 무시 (이미 join 시도 중일 수 있음)
-      cur.join().catch(() => {});
+      // 합류 의사 확인 모달 노출 (자동 join 대신 사용자 확인)
+      setShareInvite({ presenterName: payload?.presenterName || '참가자' });
+    });
+    ch.on('broadcast', { event: 'screen-share:stop' }, () => {
+      // 발표자가 종료 → 아직 모달이 열려 있으면 자동 dismiss (열 가치 없음)
+      setShareInvite(null);
     });
     ch.subscribe();
     lkSignalChannelRef.current = ch;
@@ -1962,23 +1979,40 @@ export default function MeetingRoom() {
     };
   }, [id]);
 
-  // 본인이 공유 시작 시 → 시그널 broadcast 해서 다른 참가자들이 자동 join 하게 함
+  // 본인이 공유 시작/종료 시 → 시그널 broadcast 해서 다른 참가자에게 알림
   const wasLocalScreenSharingRef = useRef(false);
   useEffect(() => {
     const was = wasLocalScreenSharingRef.current;
     const now = lk.localScreenSharing;
     wasLocalScreenSharingRef.current = now;
+    const ch = lkSignalChannelRef.current;
+    if (!ch) return;
     if (!was && now) {
-      const ch = lkSignalChannelRef.current;
-      if (ch) {
-        try {
-          ch.send({ type: 'broadcast', event: 'screen-share:start', payload: {} });
-        } catch (e) {
-          console.warn('[lk-signal] broadcast failed:', e?.message);
-        }
+      try {
+        ch.send({
+          type: 'broadcast',
+          event: 'screen-share:start',
+          payload: { presenterName: user?.name || '참가자' },
+        });
+      } catch (e) {
+        console.warn('[lk-signal] broadcast start failed:', e?.message);
       }
+    } else if (was && !now) {
+      try {
+        ch.send({ type: 'broadcast', event: 'screen-share:stop', payload: {} });
+      } catch {}
     }
-  }, [lk.localScreenSharing]);
+  }, [lk.localScreenSharing, user?.name]);
+
+  // 모달 액션 핸들러
+  const handleShareInviteAccept = useCallback(() => {
+    setShareInvite(null);
+    // lk.join() — 마이크 음소거 기본. screenShareSupported 무관 (수신만)
+    lk.join().catch((e) => console.warn('[shareInvite] join failed:', e?.message));
+  }, [lk]);
+  const handleShareInviteDecline = useCallback(() => {
+    setShareInvite(null);
+  }, []);
 
   // ── milo-analyze warmup ping ──
   // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
@@ -2341,9 +2375,39 @@ export default function MeetingRoom() {
   };
 
   const handleSend = async (content, opts = {}) => {
+    // 화면 공유 활성 시 메타데이터에 발표 컨텍스트 자동 첨부
+    //   → 회의록 요약/AI 분석 시 "○○ 발표 중에 나눈 대화" 로 그룹핑 가능
+    //   - presenter   : 현재 발표자 identity (LiveKit 식별자 = users.id)
+    //   - presenters  : 다중 발표자 케이스 대비 식별자 배열
+    //   - presenter_name : 표시용 이름
+    let mergedMeta = opts.metadata || null;
+    try {
+      const shares = lk.screenShares;
+      if (shares && shares.size > 0) {
+        const presenters = [];
+        let firstName = null;
+        shares.forEach((v) => {
+          if (v?.videoTrack && v?.identity) {
+            presenters.push(v.identity);
+            if (!firstName) firstName = v.name || null;
+          }
+        });
+        if (presenters.length > 0) {
+          mergedMeta = {
+            ...(mergedMeta || {}),
+            during_screen_share: {
+              presenters,
+              presenter: presenters[0],
+              presenter_name: firstName,
+              ts: Date.now(),
+            },
+          };
+        }
+      }
+    } catch {}
     await sendMessage(content, {
       agendaId: currentAgenda?.id,
-      metadata: opts.metadata || null,
+      metadata: mergedMeta,
     });
   };
 
@@ -2574,6 +2638,15 @@ export default function MeetingRoom() {
         />
       )}
 
+      {/* 다른 참가자가 화면 공유 시작 → 합류 여부 확인 모달 */}
+      {shareInvite && (
+        <ScreenShareInviteModal
+          presenterName={shareInvite.presenterName}
+          onAccept={handleShareInviteAccept}
+          onDecline={handleShareInviteDecline}
+        />
+      )}
+
       {/* ═══ 메인: 자료 패널 + 채팅 ═══
           ※ 안전 정책: DocumentPanel/ChatArea는 항상 마운트. 화면 공유 활성 시
             ScreenShareView를 absolute overlay로 그 위에 덮어 표시 (자료 패널 자리만,
@@ -2588,10 +2661,14 @@ export default function MeetingRoom() {
           }
         }
         const screenShareActive = hasActiveVideo && !screenShareHidden;
-        // 채팅 폭 — 화면 공유 시에만 고정 380px로 축소 (자료/공유 영역에 더 많은 공간 확보)
-        const chatWrapClass = screenShareActive
+        // 채팅 폭 — 화면 공유 시 380px로 축소 (자료/공유 영역에 더 많은 공간 확보)
+        //   chatHiddenDuringShare = true: 채팅을 완전히 숨겨 화면 공유 영역을 풀폭으로 확장
+        const chatVisibleDuringShare = screenShareActive && !chatHiddenDuringShare;
+        const chatWrapClass = chatVisibleDuringShare
           ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle'
-          : 'flex-1 flex flex-col min-h-0 min-w-0';
+          : screenShareActive
+            ? 'hidden'  // 채팅 숨김 모드 — 풀폭 화면 공유
+            : 'flex-1 flex flex-col min-h-0 min-w-0';
         return (
           <div className="flex flex-1 overflow-hidden relative">
             {/* 자료 패널 — 항상 마운트 */}
@@ -2632,7 +2709,9 @@ export default function MeetingRoom() {
                 ScreenShareView가 어떤 사유로 null을 반환하더라도 아래 DocumentPanel
                 이 그대로 보이므로 사용자에게는 빈 화면이 발생하지 않음. */}
             {screenShareActive && (
-              <div className="absolute top-0 bottom-0 left-0 right-[340px] md:right-[380px] z-20 flex flex-col bg-bg-primary border-r border-border-subtle">
+              <div className={`absolute top-0 bottom-0 left-0 z-20 flex flex-col bg-bg-primary ${
+                chatHiddenDuringShare ? 'right-0' : 'right-[340px] md:right-[380px] border-r border-border-subtle'
+              }`}>
                 <ScreenShareView
                   inline
                   screenShares={lk.screenShares}
@@ -2646,6 +2725,8 @@ export default function MeetingRoom() {
                   //   화면 공유 위 드로잉의 라이브 readOnly 마운트 기능은 일단 비활성 (false).
                   //   필요 시 useViewerSync 를 MeetingRoom 으로 끌어올려 DocumentPanel 에 prop 으로 내리는 리팩터링으로 복구.
                   following={false}
+                  toggleChat={() => setChatHiddenDuringShare((v) => !v)}
+                  chatHidden={chatHiddenDuringShare}
                 />
               </div>
             )}
