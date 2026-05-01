@@ -30,6 +30,7 @@ import ScreenShareView from './ScreenShareView';
 import VoicePanel from './VoicePanel';
 import VoiceJoinIntroModal, { shouldShowVoiceIntro } from './VoiceJoinIntroModal';
 import ScreenShareInviteModal from './ScreenShareInviteModal';
+import ChatMiniWidget from './ChatMiniWidget';
 import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 import { getSourceMeta } from '@/lib/googleDocsUrl';
@@ -1928,6 +1929,11 @@ export default function MeetingRoom() {
   // 화면 공유 시 채팅 패널 숨김 — 화면을 풀폭으로 확장해서 글씨/UI 더 크게 보기
   //   ScreenShareView 헤더의 토글 버튼으로 제어. 새 공유 시작 시 false 초기화.
   const [chatHiddenDuringShare, setChatHiddenDuringShare] = useState(false);
+  // ChatArea portal targets — 단일 ChatArea 인스턴스가 포지션만 바뀌도록 (state 보존):
+  //   - defaultChatHost : 외부 기본 위치 (대부분의 시간)
+  //   - embeddedChatHostInShare : 발표자 본인 시점일 때 ScreenShareView 안 우측 슬롯
+  const [defaultChatHost, setDefaultChatHost] = useState(null);
+  const [embeddedChatHostInShare, setEmbeddedChatHostInShare] = useState(null);
   const prevScreenShareCountRef = useRef(0);
   useEffect(() => {
     const cur = lk.screenShares?.size || 0;
@@ -2661,14 +2667,21 @@ export default function MeetingRoom() {
           }
         }
         const screenShareActive = hasActiveVideo && !screenShareHidden;
-        // 채팅 폭 — 화면 공유 시 380px로 축소 (자료/공유 영역에 더 많은 공간 확보)
-        //   chatHiddenDuringShare = true: 채팅을 완전히 숨겨 화면 공유 영역을 풀폭으로 확장
-        const chatVisibleDuringShare = screenShareActive && !chatHiddenDuringShare;
-        const chatWrapClass = chatVisibleDuringShare
-          ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle'
-          : screenShareActive
-            ? 'hidden'  // 채팅 숨김 모드 — 풀폭 화면 공유
-            : 'flex-1 flex flex-col min-h-0 min-w-0';
+        // 발표자 본인 시점 — ScreenShareView 안에 채팅을 임베드하기 위해 외부 채팅 영역은 숨김
+        const isPresentingMyself = screenShareActive && !!lk.localScreenSharing;
+        // 채팅 폭 결정:
+        //   - 발표자 본인: 외부 영역 숨김 (채팅은 ScreenShareView 안으로 portal)
+        //   - 화면 공유 + 채팅 표시: 380px 축소
+        //   - 화면 공유 + 채팅 숨김 토글: 외부 영역 숨김
+        //   - 화면 공유 비활성: 일반 채팅 영역 (flex-1)
+        const chatVisibleDuringShare = screenShareActive && !chatHiddenDuringShare && !isPresentingMyself;
+        const chatWrapClass = isPresentingMyself
+          ? 'hidden'  // 발표자 본인: portal 로 ScreenShareView 안으로 이동
+          : chatVisibleDuringShare
+            ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle'
+            : screenShareActive
+              ? 'hidden'  // 채팅 숨김 모드 — 풀폭 화면 공유
+              : 'flex-1 flex flex-col min-h-0 min-w-0';
         return (
           <div className="flex flex-1 overflow-hidden relative">
             {/* 자료 패널 — 항상 마운트 */}
@@ -2686,8 +2699,15 @@ export default function MeetingRoom() {
               onDeleteFile={handleDeleteFile}
             />
 
-            {/* 채팅 영역 — 항상 마운트, 화면 공유 시에만 폭 축소 */}
-            <div className={chatWrapClass}>
+            {/* 채팅 영역 — 항상 마운트, 화면 공유 시에만 폭 축소.
+                발표자 본인 시점일 땐 hidden (아래 ScreenShareView 안으로 portal). */}
+            <div ref={setDefaultChatHost} className={chatWrapClass} />
+
+            {/* ChatArea 단일 인스턴스 — portal target 에 따라 위치만 바뀜
+                (state/스크롤/입력/STT 보존). target 우선순위:
+                  1) ScreenShareView 안 채팅 슬롯 (발표자 본인 시점일 때)
+                  2) 외부 기본 위치 (defaultChatHost) */}
+            {(embeddedChatHostInShare || defaultChatHost) && createPortal(
               <ChatArea
                 messages={messages}
                 onSend={handleSend}
@@ -2701,16 +2721,18 @@ export default function MeetingRoom() {
                 voiceMuted={lk.muted}
                 onVoiceToggleMute={lk.toggleMute}
                 voiceLocalStream={lk.localStream}
-              />
-            </div>
+              />,
+              (isPresentingMyself && embeddedChatHostInShare) ? embeddedChatHostInShare : defaultChatHost
+            )}
 
-            {/* 화면 공유 overlay — DocumentPanel 자리부터 채팅 좌측 경계까지 덮음.
-                ChatArea(340~380px)는 우측에 그대로 노출 → 화면 공유 중에도 채팅 가능.
-                ScreenShareView가 어떤 사유로 null을 반환하더라도 아래 DocumentPanel
-                이 그대로 보이므로 사용자에게는 빈 화면이 발생하지 않음. */}
+            {/* 화면 공유 overlay */}
             {screenShareActive && (
               <div className={`absolute top-0 bottom-0 left-0 z-20 flex flex-col bg-bg-primary ${
-                chatHiddenDuringShare ? 'right-0' : 'right-[340px] md:right-[380px] border-r border-border-subtle'
+                isPresentingMyself
+                  ? 'right-0'  // 발표자 본인: 채팅이 ScreenShareView 안으로 들어감
+                  : chatHiddenDuringShare
+                    ? 'right-0'
+                    : 'right-[340px] md:right-[380px] border-r border-border-subtle'
               }`}>
                 <ScreenShareView
                   inline
@@ -2720,13 +2742,19 @@ export default function MeetingRoom() {
                   onClose={() => setScreenShareHidden(true)}
                   meetingId={id}
                   messages={messages}
-                  // following 은 DocumentPanel 스코프 안의 useViewerSync 변수.
-                  //   MeetingRoom 스코프엔 없으므로 직접 참조하면 ReferenceError → 회의방 크래시.
-                  //   화면 공유 위 드로잉의 라이브 readOnly 마운트 기능은 일단 비활성 (false).
-                  //   필요 시 useViewerSync 를 MeetingRoom 으로 끌어올려 DocumentPanel 에 prop 으로 내리는 리팩터링으로 복구.
+                  // following 은 DocumentPanel 스코프 안의 변수 — 안전상 false 고정 (이전 fix 유지)
                   following={false}
-                  toggleChat={() => setChatHiddenDuringShare((v) => !v)}
+                  // 발표자 본인 시점엔 채팅 숨김 토글 의미 없음(이미 임베드) — 버튼 노출 X
+                  toggleChat={isPresentingMyself ? undefined : () => setChatHiddenDuringShare((v) => !v)}
                   chatHidden={chatHiddenDuringShare}
+                  // 발표자 본인 시점일 때만 chat host 콜백 활성화 (다른 사람 발표일 땐 null)
+                  onEmbeddedChatHost={isPresentingMyself ? setEmbeddedChatHostInShare : null}
+                  // 풀스크린 floating mini-chat — viewer 시점일 때만. 발표자 본인은 임베드된 ChatArea 가 풀스크린에 따라옴
+                  miniChatWidget={
+                    !isPresentingMyself ? (
+                      <ChatMiniWidget messages={messages} currentUserId={user?.id} />
+                    ) : null
+                  }
                 />
               </div>
             )}
