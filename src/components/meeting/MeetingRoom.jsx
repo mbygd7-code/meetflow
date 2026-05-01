@@ -1933,6 +1933,53 @@ export default function MeetingRoom() {
     prevScreenShareCountRef.current = cur;
   }, [lk.screenShares]);
 
+  // ── LiveKit 자동 join 시그널 채널 ──
+  // 화면 공유는 LiveKit 룸 안의 트랙. 다른 참가자가 룸에 join 안 되어 있으면 publish 된
+  // 트랙을 못 받음. 따라서 발표자가 공유 시작할 때 Supabase Realtime 으로 신호를 보내고,
+  // 룸에 미연결인 참가자들이 받아 자동 join (mute) 하도록 한다.
+  // - 채널: lk-signal:<meetingId>
+  // - 이벤트: screen-share:start (payload 없음)
+  // - 자동 join 은 마이크 muted 상태 → 의도치 않게 들리지 않음 (안전)
+  const lkSignalChannelRef = useRef(null);
+  // lk 객체는 매 렌더 새로 만들어져 채널 핸들러 클로저가 stale 됨 → ref 로 최신 보관
+  const lkRef = useRef(lk);
+  useEffect(() => { lkRef.current = lk; }, [lk]);
+  useEffect(() => {
+    if (!id) return;
+    const ch = supabase.channel(`lk-signal:${id}`, { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'screen-share:start' }, () => {
+      // 이미 룸에 연결돼 있으면 별도 처리 불필요 — TrackSubscribed 가 알아서 화면 트랙 잡음
+      const cur = lkRef.current;
+      if (!cur || cur.connected || cur.connecting) return;
+      // 자동 join (mute 기본). 실패해도 무시 (이미 join 시도 중일 수 있음)
+      cur.join().catch(() => {});
+    });
+    ch.subscribe();
+    lkSignalChannelRef.current = ch;
+    return () => {
+      try { supabase.removeChannel(ch); } catch {}
+      lkSignalChannelRef.current = null;
+    };
+  }, [id]);
+
+  // 본인이 공유 시작 시 → 시그널 broadcast 해서 다른 참가자들이 자동 join 하게 함
+  const wasLocalScreenSharingRef = useRef(false);
+  useEffect(() => {
+    const was = wasLocalScreenSharingRef.current;
+    const now = lk.localScreenSharing;
+    wasLocalScreenSharingRef.current = now;
+    if (!was && now) {
+      const ch = lkSignalChannelRef.current;
+      if (ch) {
+        try {
+          ch.send({ type: 'broadcast', event: 'screen-share:start', payload: {} });
+        } catch (e) {
+          console.warn('[lk-signal] broadcast failed:', e?.message);
+        }
+      }
+    }
+  }, [lk.localScreenSharing]);
+
   // ── milo-analyze warmup ping ──
   // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
   // 실패하며 브라우저에 CORS 에러로 보임. 회의방 진입 즉시 ping 보내 함수 깨움.
