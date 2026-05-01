@@ -13,6 +13,41 @@ function fmtDuration(min) {
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
 }
 
+// 메시지를 발표자별 연속 세션으로 그룹핑 — PresentationSessions 와 동일 로직 (PDF 전용 단순 버전)
+//   - 메타데이터 없으면 빈 배열 반환 (안전)
+//   - PresentationSessions.jsx 의 groupByPresenter 와 의도적으로 분리:
+//     PDF 는 외부 컴포넌트 import 시 SSR/PDF 캡처 시점 이슈 회피 위해 자체 함수 사용.
+function groupPresentations(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const groups = [];
+  let cur = null;
+  for (const m of messages) {
+    if (!m) continue;
+    const ds = m.metadata?.during_screen_share;
+    const presenter = ds?.presenter;
+    if (presenter) {
+      if (cur && cur.presenter === presenter) {
+        cur.messages.push(m);
+        if (m.created_at) cur.end_at = m.created_at;
+      } else {
+        if (cur) groups.push(cur);
+        cur = {
+          presenter,
+          presenter_name: ds?.presenter_name || '발표자',
+          start_at: m.created_at || null,
+          end_at: m.created_at || null,
+          messages: [m],
+        };
+      }
+    } else if (cur) {
+      groups.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) groups.push(cur);
+  return groups;
+}
+
 const A4_W = 794;   // 96dpi 기준 약 210mm
 const A4_H = 1123;  // 297mm
 const PAD  = 36;    // ~9.5mm 외부 여백 (html2pdf 마진과 별개로 내부 여유)
@@ -40,7 +75,7 @@ const Chip = ({ label, value }) => (
 
 const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
   // meetingScore prop은 더 이상 PDF에 포함하지 않음 (평가 뱃지 제거 요청)
-  { meeting, summary, stats },
+  { meeting, summary, stats, messages = [] },
   ref
 ) {
   if (!meeting) return null;
@@ -50,6 +85,9 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
   const actions = summary?.action_items || [];
   const agendas = meeting.agendas || [];
   const insight = summary?.milo_insights || '';
+  // 화면 공유 발표 세션 — messages metadata 기반. 없으면 빈 배열 → 섹션 자체 미렌더
+  const presentations = groupPresentations(messages);
+  const MAX_PRESENTATIONS = 4;
 
   // ── 각 섹션 최대 항목 수 제한 (A4 overflow 방지) ──
   const MAX_ACTIONS = 8;
@@ -136,6 +174,57 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
             MILO 인사이트
           </div>
           {truncatedInsight}
+        </section>
+      )}
+
+      {/* ═══ 2.5. 화면 공유 발표 세션 (있을 때만) ═══ */}
+      {presentations.length > 0 && (
+        <section style={{ marginBottom: 12 }}>
+          <SectionTitle count={presentations.length}>화면 공유 발표</SectionTitle>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {presentations.slice(0, MAX_PRESENTATIONS).map((p, i) => {
+              const start = safeFormatDate(p.start_at, 'HH:mm', '-');
+              const end = safeFormatDate(p.end_at, 'HH:mm', '-');
+              let durMin = 0;
+              try {
+                if (p.start_at && p.end_at) {
+                  const ms = new Date(p.end_at) - new Date(p.start_at);
+                  if (Number.isFinite(ms)) {
+                    const m = Math.round(ms / 60000);
+                    if (m > 0 && m < 1440) durMin = m;
+                  }
+                }
+              } catch {}
+              return (
+                <li
+                  key={`${p.presenter}-${i}`}
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    fontSize: 10.5,
+                    padding: '2px 0',
+                    color: '#18181b',
+                  }}
+                >
+                  <span style={{ color: '#a855f7', fontWeight: 700, flexShrink: 0 }}>▸</span>
+                  <span style={{ fontWeight: 600, color: '#18181b', flexShrink: 0 }}>
+                    {p.presenter_name}
+                  </span>
+                  <span style={{ color: '#52525b' }}>
+                    {start} ~ {end}
+                    {durMin > 0 && ` · ${durMin}분`}
+                    {' · '}
+                    {p.messages.length}건
+                  </span>
+                </li>
+              );
+            })}
+            {presentations.length > MAX_PRESENTATIONS && (
+              <li style={{ fontSize: 9, color: '#71717a', fontStyle: 'italic', paddingLeft: 12 }}>
+                외 {presentations.length - MAX_PRESENTATIONS}건 더
+              </li>
+            )}
+          </ul>
         </section>
       )}
 
