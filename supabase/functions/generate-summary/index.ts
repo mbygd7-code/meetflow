@@ -22,6 +22,45 @@ const AI_EMPLOYEE_MAP: Record<string, string> = {
 const NAME_TO_ID: Record<string, string> = {};
 for (const [id, name] of Object.entries(AI_EMPLOYEE_MAP)) NAME_TO_ID[name] = id;
 
+// 메시지의 metadata.during_screen_share 를 기반으로 발표자별 연속 세션 추출.
+// 메타가 전혀 없으면 빈 배열 반환 (기존 회의는 영향 없음).
+function extractPresentations(messages: any[]): Array<{
+  presenter: string;
+  presenter_name: string;
+  start_at: string | null;
+  end_at: string | null;
+  message_count: number;
+}> {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const groups: any[] = [];
+  let cur: any = null;
+  for (const m of messages) {
+    if (!m) continue;
+    const ds = m.metadata?.during_screen_share;
+    const presenter = ds?.presenter;
+    if (presenter) {
+      if (cur && cur.presenter === presenter) {
+        cur.message_count += 1;
+        if (m.created_at) cur.end_at = m.created_at;
+      } else {
+        if (cur) groups.push(cur);
+        cur = {
+          presenter,
+          presenter_name: ds?.presenter_name || '발표자',
+          start_at: m.created_at || null,
+          end_at: m.created_at || null,
+          message_count: 1,
+        };
+      }
+    } else if (cur) {
+      groups.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) groups.push(cur);
+  return groups;
+}
+
 // 회의에서 가장 활발히 응답한 전문가 TOP N 선정
 //   - ai_employee 필드 우선 (정확도↑)
 //   - 없으면 content의 [코틀러] 같은 프리픽스로 폴백
@@ -52,8 +91,9 @@ function buildRagDocument(opts: {
   agendas: any[];
   summary: any;
   participants: string[];
+  presentations?: Array<{ presenter_name: string; message_count: number; start_at: string | null; end_at: string | null }>;
 }): string {
-  const { meetingTitle, meetingDate, agendas, summary, participants } = opts;
+  const { meetingTitle, meetingDate, agendas, summary, participants, presentations } = opts;
   const lines: string[] = [];
   lines.push(`# 회의: ${meetingTitle || '(제목 없음)'}`);
   lines.push(`일시: ${meetingDate}`);
@@ -64,6 +104,23 @@ function buildRagDocument(opts: {
     lines.push('## 어젠다');
     for (let i = 0; i < agendas.length; i++) {
       lines.push(`${i + 1}. ${agendas[i].title}`);
+    }
+    lines.push('');
+  }
+
+  // 화면 공유 발표 (있을 때만 — RAG 검색 시 "○○ 발표 회의" 키워드 매칭에 도움)
+  if (presentations && presentations.length > 0) {
+    lines.push('## 화면 공유 발표');
+    for (const p of presentations) {
+      let durMin = 0;
+      try {
+        if (p.start_at && p.end_at) {
+          const ms = new Date(p.end_at).getTime() - new Date(p.start_at).getTime();
+          const m = Math.round(ms / 60000);
+          if (m > 0 && m < 1440) durMin = m;
+        }
+      } catch {}
+      lines.push(`- ${p.presenter_name} (${p.message_count}건 대화${durMin > 0 ? `, ${durMin}분` : ''})`);
     }
     lines.push('');
   }
@@ -191,13 +248,45 @@ serve(async (req) => {
       )
     );
 
+    // 화면 공유 발표 세션 추출 (metadata.during_screen_share 있는 경우만)
+    const presentations = extractPresentations(messages);
+
+    // 트랜스크립트 — 화면 공유 중 메시지엔 [/ 화면 공유: <발표자>] 마커 추가
+    //   AI 가 어떤 발화가 어느 발표 동안 나왔는지 인식할 수 있게 함
     const transcript = (messages || [])
-      .map((m: any) => `[${m.user?.name || (m.is_ai ? 'Milo' : '참가자')}] ${m.content}`)
+      .map((m: any) => {
+        const speaker = m.user?.name || (m.is_ai ? 'Milo' : '참가자');
+        const ds = m.metadata?.during_screen_share;
+        const shareTag = ds?.presenter_name ? ` / 화면공유: ${ds.presenter_name}` : '';
+        return `[${speaker}${shareTag}] ${m.content}`;
+      })
       .join('\n');
 
     const agendaList = (agendas || [])
       .map((a: any, i: number) => `${i + 1}. ${a.title}`)
       .join('\n');
+
+    // 발표 세션 요약 — 있을 때만 prompt 에 별도 섹션으로 추가 (없으면 빈 문자열 → 미렌더)
+    const presentationSection = presentations.length > 0
+      ? `\n### 화면 공유 발표 세션 (${presentations.length}건)
+${presentations.map((p, i) => {
+  let durMin = 0;
+  try {
+    if (p.start_at && p.end_at) {
+      const ms = new Date(p.end_at).getTime() - new Date(p.start_at).getTime();
+      const m = Math.round(ms / 60000);
+      if (m > 0 && m < 1440) durMin = m;
+    }
+  } catch {}
+  return `${i + 1}. ${p.presenter_name} — ${p.message_count}건 대화 (소요 ${durMin}분)`;
+}).join('\n')}
+
+위 발표 세션 동안 오간 대화는 트랜스크립트에서 \`/ 화면공유: <발표자명>\` 마커로 표시되어 있다.
+요약 시 발표 컨텍스트를 고려하여:
+- 발표 중 결정된 사항은 발표자명을 owner 또는 detail 에 자연스럽게 포함
+- milo_insights 에 발표별 핵심을 1~2문장 언급 (있을 때만)
+`
+      : '';
 
     const prompt = `## 회의 전체 기록
 
@@ -206,7 +295,7 @@ ${agendaList || '(등록된 어젠다 없음)'}
 
 ### 대화 참가자 (실제 발언자)
 ${participantNames.length ? participantNames.join(', ') : '(없음)'}
-
+${presentationSection}
 ### 대화 기록
 ${transcript || '(대화 내용 없음)'}
 
@@ -294,6 +383,7 @@ ${transcript || '(대화 내용 없음)'}
           agendas: agendas || [],
           summary,
           participants: participantNames,
+          presentations,  // 화면 공유 발표 세션 (있을 때만 섹션 포함)
         });
 
         // 3) 대상 전문가 선정 (TOP 2) + Milo는 항상 포함

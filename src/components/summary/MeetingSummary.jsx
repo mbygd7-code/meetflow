@@ -628,6 +628,7 @@ export default function MeetingSummary() {
         summary={summary}
         stats={stats}
         meetingScore={meetingScore}
+        messages={messages}
       />
 
       {/* 하단 액션 — PDF에 포함되지 않음 */}
