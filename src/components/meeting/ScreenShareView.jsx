@@ -52,6 +52,12 @@ export default function ScreenShareView({
   //   chatHidden: bool        (현재 채팅이 숨겨져 있는지 — 버튼 아이콘 분기)
   toggleChat,
   chatHidden = false,
+  // 발표자 본인 시점일 때 우측 영역에 채팅 패널을 임베드하기 위한 콜백 ref.
+  //   부모(MeetingRoom)가 div 노드를 받아 createPortal 의 target 으로 사용.
+  //   발표자 본인 시점일 때만 호출(노드 전달), 그 외엔 null 호출(해제).
+  onEmbeddedChatHost,
+  // 풀스크린 시 floating mini-chat 위젯 (옵션 C). element 형태로 전달받아 풀스크린 컨테이너 안에 렌더.
+  miniChatWidget = null,
 }) {
   // Map → 배열 (videoTrack 있는 것만)
   const list = useMemo(() => {
@@ -257,21 +263,36 @@ export default function ScreenShareView({
       {/* 메인 비디오 영역 */}
       <div ref={videoWrapRef} className="flex-1 min-h-0 relative bg-black flex items-center justify-center">
         {main.isLocal ? (
-          // 본인 공유 — 무한 거울 회피: 작은 미리보기 + 안내
-          <div className="flex flex-col items-center gap-3 text-txt-secondary">
-            <div className="px-4 py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs font-semibold">
-              ● 내 화면을 다른 참가자에게 공유하고 있습니다
+          // 본인 공유 시점 — 좌측: 작은 미리보기 + 안내 / 우측: 채팅 호스트 슬롯
+          //   ScreenShareView 내부 빈 공간(60%)에 채팅을 임베드하여 발표자도 실시간 피드백 확인.
+          //   부모(MeetingRoom)가 createPortal 로 ChatArea 단일 인스턴스를 이 슬롯으로 보냄.
+          <div className="flex w-full h-full">
+            {/* 좌측 — 본인 미리보기 + 안내 (40%) */}
+            <div className="w-[40%] min-w-[260px] flex flex-col items-center justify-center gap-3 text-txt-secondary border-r border-border-divider/40 px-4 py-3">
+              <div className="px-4 py-2 rounded-md bg-status-error/10 border border-status-error/30 text-status-error text-xs font-semibold">
+                ● 내 화면을 다른 참가자에게 공유하고 있습니다
+              </div>
+              <div className="w-full max-w-[360px] aspect-video rounded-md overflow-hidden border border-border-default shadow-md bg-bg-tertiary">
+                <ScreenVideo
+                  track={main.videoTrack}
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <p className="text-[11px] text-txt-muted text-center px-2 leading-relaxed">
+                작게 표시되는 것은 본인 미리보기예요.<br />
+                다른 참가자는 큰 화면으로 봅니다.
+              </p>
             </div>
-            <div className="w-[40%] max-w-[480px] aspect-video rounded-md overflow-hidden border border-border-default shadow-md bg-bg-tertiary">
-              <ScreenVideo
-                track={main.videoTrack}
-                muted
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <p className="text-[11px] text-txt-muted">
-              (작게 표시되는 것은 본인 미리보기 — 다른 참가자는 큰 화면으로 봅니다)
-            </p>
+            {/* 우측 — 채팅 호스트 슬롯 (60%). MeetingRoom 의 ChatArea 가 portal 로 들어옴 */}
+            <div
+              ref={(node) => {
+                if (typeof onEmbeddedChatHost === 'function') {
+                  onEmbeddedChatHost(node);
+                }
+              }}
+              className="flex-1 min-w-0 min-h-0 flex flex-col bg-bg-primary"
+            />
           </div>
         ) : (
           <ScreenVideo
@@ -279,6 +300,14 @@ export default function ScreenShareView({
             muted={false}
             className="max-w-full max-h-full object-contain"
           />
+        )}
+
+        {/* 풀스크린 floating mini-chat — 풀스크린 element 안쪽에 마운트되어
+            브라우저 풀스크린 시에도 함께 보임. 일반 모드/발표자 본인 시점엔 부모가 null 전달. */}
+        {miniChatWidget && isFullscreen && (
+          <div className="absolute right-3 bottom-3 z-30 pointer-events-auto">
+            {miniChatWidget}
+          </div>
         )}
 
         {/* 드로잉 오버레이 — inline 모드에서만 활성화. PDF/이미지와 동일 패턴.
