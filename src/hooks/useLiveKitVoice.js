@@ -21,7 +21,19 @@
 //   - 회의방 언마운트 시 자동 leave (cleanup)
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
+import { Room, RoomEvent, Track, ConnectionState, ScreenSharePresets } from 'livekit-client';
+
+// 화면 공유 화질 프리셋 — UI 에서 사용자가 선택. 정적 자료(슬라이드/문서)에 최적화된 1080p 가 기본.
+//   - low    : 720p · 15fps · ~1Mbps  (네트워크 약함 / 슬라이드만)
+//   - medium : 1080p · 15fps · ~3Mbps (권장 — 글씨 선명도 + 합리적 비트레이트)
+//   - high   : 1440p · 30fps · ~6Mbps (영상/시연 + 좋은 네트워크)
+//
+// LiveKit ScreenSharePresets 의 resolution 객체 그대로 활용. (codec 은 Room publishDefaults 에서 VP9 설정)
+const SCREEN_SHARE_QUALITY = {
+  low:    { resolution: ScreenSharePresets.h720fps15.resolution },
+  medium: { resolution: ScreenSharePresets.h1080fps15.resolution },
+  high:   { resolution: ScreenSharePresets.h1440fps30.resolution },
+};
 import { supabase } from '@/lib/supabase';
 import { logLiveKitSession } from '@/lib/serviceUsage';
 
@@ -137,6 +149,12 @@ export function useLiveKitVoice(meetingId) {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+        },
+        // 화면 공유 publish 기본값 — 텍스트/세부 표현 선명도 우선
+        //   videoCodec: VP9 — 같은 비트레이트에 더 선명 (Chrome/Edge 지원, 미지원 시 자동 fallback)
+        //   screenShareEncoding: 화질별 비트레이트는 startScreenShare 시 동적 설정
+        publishDefaults: {
+          videoCodec: 'vp9',
         },
       });
 
@@ -400,10 +418,13 @@ export function useLiveKitVoice(meetingId) {
 
   // === 화면 공유 시작/중지 ===
   // 사용자 클릭 핸들러 안에서 호출되어야 함 (getDisplayMedia는 user gesture 필요)
-  // audio: true → 시스템 오디오 함께 캡처 (브라우저별 지원 다름)
+  // 옵션:
+  //   - audio: true → 시스템 오디오 함께 캡처 (브라우저별 지원 다름)
+  //   - quality: 'low' | 'medium' | 'high' (기본 'medium' = 1080p15)
+  //
   // 룸 미연결 상태면 자동으로 join 후 화면 공유 시작 → 사용자 UX 상 음성과 분리.
   // 자동 join은 mute 상태로 진행 (muted 초기값 true).
-  const startScreenShare = useCallback(async ({ audio = false } = {}) => {
+  const startScreenShare = useCallback(async ({ audio = false, quality = 'medium' } = {}) => {
     if (!screenShareSupported) {
       setScreenShareError('이 브라우저에서는 화면 공유를 지원하지 않습니다');
       return;
@@ -424,7 +445,16 @@ export function useLiveKitVoice(meetingId) {
     }
     setScreenShareError(null);
     try {
-      await room.localParticipant.setScreenShareEnabled(true, { audio });
+      const preset = SCREEN_SHARE_QUALITY[quality] || SCREEN_SHARE_QUALITY.medium;
+      // captureOptions:
+      //   - resolution: 화질 프리셋 (저/중/고)
+      //   - contentHint: 'detail' — 텍스트/세부 표현 우선 (글씨 선명도 ↑, 동영상은 떨어질 수 있음)
+      //     'motion' (동영상 우선) 으로 바꾸려면 quality='high' 케이스에서 분기 가능
+      await room.localParticipant.setScreenShareEnabled(true, {
+        audio,
+        resolution: preset.resolution,
+        contentHint: 'detail',
+      });
     } catch (err) {
       // 사용자가 권한 다이얼로그 취소 → NotAllowedError → 무음 처리
       if (err?.name !== 'NotAllowedError' && err?.name !== 'AbortError') {

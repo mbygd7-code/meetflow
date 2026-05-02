@@ -15,13 +15,15 @@ export default function ScreenShareButton({
   connected = false,           // LiveKit 룸 연결 여부
   sharing = false,              // 본인이 현재 공유 중
   supported = true,             // getDisplayMedia 지원 환경 여부
-  onStart,                      // ({ audio: bool }) => void
+  onStart,                      // ({ audio: bool, quality: 'low'|'medium'|'high' }) => void
   onStop,
   size = 'sm',                  // 'sm' | 'md'
   iconOnly = false,             // 모바일 헤더용
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [withAudio, setWithAudio] = useState(false);
+  // 화질 — 'medium' (1080p) 기본. 사용자가 네트워크/콘텐츠에 맞게 선택.
+  const [quality, setQuality] = useState('medium');
   const popRef = useRef(null);
 
   // 외부 클릭 시 팝오버 닫기
@@ -86,9 +88,40 @@ export default function ScreenShareButton({
       </button>
 
       {popoverOpen && !disabled && (
-        <div className="absolute right-0 top-full mt-1.5 z-30 bg-bg-secondary border border-border-default rounded-md shadow-lg overflow-hidden min-w-[220px]">
+        <div className="absolute right-0 top-full mt-1.5 z-30 bg-bg-secondary border border-border-default rounded-md shadow-lg overflow-hidden min-w-[260px]">
+          {/* 화질 선택 — 라디오 3개 */}
           <div className="p-3 border-b border-border-divider">
-            <p className="text-[11px] font-semibold text-txt-primary mb-2">화면 공유 옵션</p>
+            <p className="text-[11px] font-semibold text-txt-primary mb-2">화질</p>
+            <div className="space-y-1">
+              {[
+                { val: 'low', label: '기본', spec: '720p · 가벼움' },
+                { val: 'medium', label: '고화질', spec: '1080p · 권장 ★' },
+                { val: 'high', label: '최고화질', spec: '1440p · 무거움' },
+              ].map((opt) => (
+                <label
+                  key={opt.val}
+                  className={`flex items-center gap-2 cursor-pointer text-[11px] px-1.5 py-1 rounded transition-colors ${
+                    quality === opt.val ? 'bg-brand-purple/10' : 'hover:bg-bg-tertiary/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="screen-quality"
+                    checked={quality === opt.val}
+                    onChange={() => setQuality(opt.val)}
+                    className="accent-brand-purple"
+                  />
+                  <span className="text-txt-primary font-medium">{opt.label}</span>
+                  <span className="text-[10px] text-txt-muted ml-auto">{opt.spec}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-txt-muted mt-2 leading-relaxed">
+              네트워크 약하면 기본, 자료 글씨 위주면 고화질 권장
+            </p>
+          </div>
+          {/* 시스템 오디오 옵션 */}
+          <div className="p-3 border-b border-border-divider">
             <label className="flex items-center gap-2 cursor-pointer text-[11px] text-txt-secondary">
               <input
                 type="checkbox"
@@ -99,14 +132,14 @@ export default function ScreenShareButton({
               <span>시스템 오디오 함께 공유</span>
             </label>
             <p className="text-[10px] text-txt-muted mt-1.5 leading-relaxed">
-              체크 후 시작 → 브라우저에서 화면/창/탭을 선택하세요
+              시작 후 브라우저에서 화면/창/탭을 선택하세요
             </p>
           </div>
           <button
             type="button"
             onClick={() => {
               setPopoverOpen(false);
-              onStart?.({ audio: withAudio });
+              onStart?.({ audio: withAudio, quality });
             }}
             className="w-full px-3 py-2 text-xs font-semibold text-white bg-brand-purple hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
           >
