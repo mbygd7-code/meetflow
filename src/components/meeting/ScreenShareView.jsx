@@ -95,10 +95,20 @@ export default function ScreenShareView({
   // ── 발표 집중 모드 시 Ctrl+wheel 줌 (영상 영역 내부) ──
   // CSS transform: scale 로 영상 비율 유지하며 확대. 1.0~3.0 사이.
   const [contentZoom, setContentZoom] = useState(1);
-  // focusMode 종료 시 줌 리셋 (자연스러운 UX)
+  // 줌 후 가려진 영역을 드래그로 이동 (pan) — translate transform 으로 적용
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const panStartRef = useRef(null); // { mouseX, mouseY, offsetX, offsetY }
+  // focusMode 또는 줌 1배 복귀 시 pan/zoom 리셋
   useEffect(() => {
-    if (!focusMode) setContentZoom(1);
+    if (!focusMode) {
+      setContentZoom(1);
+      setPanOffset({ x: 0, y: 0 });
+    }
   }, [focusMode]);
+  useEffect(() => {
+    if (contentZoom === 1) setPanOffset({ x: 0, y: 0 });
+  }, [contentZoom]);
+
   // 비디오 wrap 에 wheel 리스너 — focusMode + Ctrl/Cmd 키일 때만 줌
   useEffect(() => {
     const el = videoWrapRef.current;
@@ -116,6 +126,44 @@ export default function ScreenShareView({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [focusMode]);
+
+  // 드래그로 pan — 줌 1배 초과 시에만 활성. window 단위 mousemove/up 으로 부드러운 이동
+  const onPanMouseDown = (e) => {
+    if (!focusMode || contentZoom === 1) return;
+    if (e.button !== 0) return; // 좌클릭만
+    panStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      offsetX: panOffset.x,
+      offsetY: panOffset.y,
+    };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev) => {
+      const start = panStartRef.current;
+      if (!start) return;
+      const dx = ev.clientX - start.mouseX;
+      const dy = ev.clientY - start.mouseY;
+      // 줌 배율을 고려한 max offset — 너무 멀리 못 가게 제한
+      // 컨테이너의 절반 폭 × (zoom-1) 만큼 이동 가능
+      const el = videoWrapRef.current;
+      const maxX = el ? (el.clientWidth * (contentZoom - 1)) / 2 : 1000;
+      const maxY = el ? (el.clientHeight * (contentZoom - 1)) / 2 : 1000;
+      const nextX = Math.max(-maxX, Math.min(maxX, start.offsetX + dx));
+      const nextY = Math.max(-maxY, Math.min(maxY, start.offsetY + dy));
+      setPanOffset({ x: nextX, y: nextY });
+    };
+    const onUp = () => {
+      panStartRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  };
 
   // ── 별도 창(Document Picture-in-Picture) 분리 ──
   //   onExpandWindow 클릭 시 별도 창으로 video 트랙만 분리.
@@ -360,11 +408,14 @@ export default function ScreenShareView({
         </div>
       </div>
 
-      {/* 메인 비디오 영역 — focusMode 시 Ctrl+wheel 줌 활성. overflow-hidden 으로 줌 시 잘림 방지 */}
+      {/* 메인 비디오 영역
+          - focusMode + Ctrl+wheel = 줌
+          - 줌 > 1배 + 드래그 = 이동(pan) — 가려진 영역 보기
+          - 큰 컬러 커서: viewer 시점일 때만 video 영역에 적용 (발표자 본인 영역 X) */}
       <div
         ref={videoWrapRef}
+        onMouseDown={onPanMouseDown}
         className="flex-1 min-h-0 relative bg-black flex items-center justify-center overflow-hidden"
-        style={focusMode && contentZoom !== 1 ? { cursor: 'zoom-in' } : undefined}
       >
         {main.isLocal ? (
           // 본인 공유 시점 — 좌측: 작은 미리보기 + 안내 / 우측: 채팅 호스트 슬롯
@@ -399,27 +450,34 @@ export default function ScreenShareView({
             />
           </div>
         ) : (
-          // viewer — focusMode 시 Ctrl+wheel 줌 transform 적용 (영상 비율 유지)
+          // viewer — focusMode 시 Ctrl+wheel 줌 + 드래그 pan transform 적용 (영상 비율 유지)
+          //   cursor: 큰 주황 화살표 (CSS SVG inline) — 줌 > 1 시 grab 커서로 전환 (드래그 안내)
+          //   pan 진행 중엔 document.body.cursor 가 grabbing 으로 강제됨
           <div
             className="flex items-center justify-center w-full h-full"
-            style={focusMode && contentZoom !== 1 ? {
-              transform: `scale(${contentZoom})`,
-              transition: 'transform 0.1s ease-out',
-            } : undefined}
+            style={{
+              cursor: focusMode && contentZoom > 1
+                ? 'grab'
+                : "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\"><path d=\"M4 4 L26 14 L15 16 L12 26 Z\" fill=\"%23FF902F\" stroke=\"%23ffffff\" stroke-width=\"2\" stroke-linejoin=\"round\"/></svg>') 4 4, auto",
+              ...(focusMode && contentZoom !== 1 ? {
+                transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${contentZoom})`,
+                transition: panStartRef.current ? 'none' : 'transform 0.1s ease-out',
+              } : null),
+            }}
           >
             <ScreenVideo
               track={main.videoTrack}
               muted={false}
-              className="max-w-full max-h-full object-contain"
+              className="max-w-full max-h-full object-contain pointer-events-none"
             />
           </div>
         )}
 
-        {/* 줌 상태 표시 — focusMode 시 우측 상단에 현재 배율 (1.0배 아닐 때만) */}
+        {/* 줌 상태 표시 — focusMode 시 우측 상단에 현재 배율 + 조작 안내 */}
         {focusMode && contentZoom > 1 && (
           <div className="absolute top-3 right-3 z-30 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-sm text-white text-[11px] font-semibold pointer-events-none">
             {Math.round(contentZoom * 100)}%
-            <span className="ml-1.5 text-white/60 font-normal">Ctrl+휠</span>
+            <span className="ml-1.5 text-white/60 font-normal">Ctrl+휠 · 드래그 이동</span>
           </div>
         )}
 
