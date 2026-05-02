@@ -14,62 +14,11 @@ import { useState, useMemo } from 'react';
 import { MonitorPlay, ChevronDown, ChevronUp, MessageSquare, Clock } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import { safeFormatDate } from '@/utils/formatters';
-
-/**
- * 메시지를 발표자 단위 연속 세션으로 그룹핑.
- * 같은 발표자 메시지가 연달아 오면 한 그룹, 발표 없는 메시지가 끼어들면 끊는다.
- */
-function groupByPresenter(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return [];
-  const groups = [];
-  let current = null;
-  for (const m of messages) {
-    if (!m) continue;
-    const ds = m.metadata?.during_screen_share;
-    const presenter = ds?.presenter;
-
-    if (presenter) {
-      if (current && current.presenter === presenter) {
-        // 같은 발표자 — 그룹에 추가
-        current.messages.push(m);
-        if (m.created_at) current.end_at = m.created_at;
-      } else {
-        // 발표자 전환(또는 시작) — 이전 그룹 마감 후 새 그룹 시작
-        if (current) groups.push(current);
-        current = {
-          presenter,
-          presenter_name: ds?.presenter_name || '발표자',
-          start_at: m.created_at || null,
-          end_at: m.created_at || null,
-          messages: [m],
-        };
-      }
-    } else if (current) {
-      // 발표 없는 메시지가 끼어듦 → 그룹 종료
-      groups.push(current);
-      current = null;
-    }
-  }
-  if (current) groups.push(current);
-  return groups;
-}
-
-function durationMinutes(start, end) {
-  if (!start || !end) return 0;
-  try {
-    const ms = new Date(end) - new Date(start);
-    if (!Number.isFinite(ms)) return 0;
-    const min = Math.round(ms / 60000);
-    // 24h 초과는 timestamp 이상치로 보고 0 (다른 통계 계산과 동일 가드)
-    return min > 0 && min < 1440 ? min : 0;
-  } catch {
-    return 0;
-  }
-}
+import { groupPresentations, presentationDurationMinutes } from '@/utils/presentations';
 
 export default function PresentationSessions({ messages = [] }) {
   const [openIdx, setOpenIdx] = useState(null); // 펼친 세션 인덱스 (한 번에 하나만)
-  const sessions = useMemo(() => groupByPresenter(messages), [messages]);
+  const sessions = useMemo(() => groupPresentations(messages), [messages]);
 
   // 발표 메타가 전혀 없으면 컴포넌트 자체를 그리지 않음 → 기존 회의록 영향 0
   if (sessions.length === 0) return null;
@@ -87,7 +36,7 @@ export default function PresentationSessions({ messages = [] }) {
       <ul className="divide-y divide-border-divider">
         {sessions.map((s, i) => {
           const open = openIdx === i;
-          const durMin = durationMinutes(s.start_at, s.end_at);
+          const durMin = presentationDurationMinutes(s.start_at, s.end_at);
           return (
             <li key={`${s.presenter}-${i}`}>
               <button

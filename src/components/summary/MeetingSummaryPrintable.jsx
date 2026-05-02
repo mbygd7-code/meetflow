@@ -4,6 +4,7 @@
 
 import { forwardRef } from 'react';
 import { safeFormatDate } from '@/utils/formatters';
+import { groupPresentations, presentationDurationMinutes } from '@/utils/presentations';
 
 function fmtDuration(min) {
   if (!min || min <= 0) return '-';
@@ -11,41 +12,6 @@ function fmtDuration(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
-}
-
-// 메시지를 발표자별 연속 세션으로 그룹핑 — PresentationSessions 와 동일 로직 (PDF 전용 단순 버전)
-//   - 메타데이터 없으면 빈 배열 반환 (안전)
-//   - PresentationSessions.jsx 의 groupByPresenter 와 의도적으로 분리:
-//     PDF 는 외부 컴포넌트 import 시 SSR/PDF 캡처 시점 이슈 회피 위해 자체 함수 사용.
-function groupPresentations(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return [];
-  const groups = [];
-  let cur = null;
-  for (const m of messages) {
-    if (!m) continue;
-    const ds = m.metadata?.during_screen_share;
-    const presenter = ds?.presenter;
-    if (presenter) {
-      if (cur && cur.presenter === presenter) {
-        cur.messages.push(m);
-        if (m.created_at) cur.end_at = m.created_at;
-      } else {
-        if (cur) groups.push(cur);
-        cur = {
-          presenter,
-          presenter_name: ds?.presenter_name || '발표자',
-          start_at: m.created_at || null,
-          end_at: m.created_at || null,
-          messages: [m],
-        };
-      }
-    } else if (cur) {
-      groups.push(cur);
-      cur = null;
-    }
-  }
-  if (cur) groups.push(cur);
-  return groups;
 }
 
 const A4_W = 794;   // 96dpi 기준 약 210mm
@@ -185,16 +151,7 @@ const MeetingSummaryPrintable = forwardRef(function MeetingSummaryPrintable(
             {presentations.slice(0, MAX_PRESENTATIONS).map((p, i) => {
               const start = safeFormatDate(p.start_at, 'HH:mm', '-');
               const end = safeFormatDate(p.end_at, 'HH:mm', '-');
-              let durMin = 0;
-              try {
-                if (p.start_at && p.end_at) {
-                  const ms = new Date(p.end_at) - new Date(p.start_at);
-                  if (Number.isFinite(ms)) {
-                    const m = Math.round(ms / 60000);
-                    if (m > 0 && m < 1440) durMin = m;
-                  }
-                }
-              } catch {}
+              const durMin = presentationDurationMinutes(p.start_at, p.end_at);
               return (
                 <li
                   key={`${p.presenter}-${i}`}
