@@ -1439,9 +1439,13 @@ export default function CompletedMeetingView({ meeting }) {
       <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border-divider">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button
-            onClick={() => navigate('/meetings')}
+            onClick={() => {
+              // 앱 내부에서 이동해 온 경우 뒤로가기, 직접 진입이면 회의 목록
+              if (location.key && location.key !== 'default') navigate(-1);
+              else navigate('/meetings');
+            }}
             className="p-1.5 text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors shrink-0"
-            title="회의 목록으로"
+            title="뒤로"
           >
             <X size={18} />
           </button>

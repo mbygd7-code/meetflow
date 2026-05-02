@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   CheckCircle2, MessageCircle, PauseCircle, ListTodo, Sparkles, ArrowLeft,
   Loader, Clock, Users, MessageSquare,
   ChevronDown, ChevronUp, Check, RefreshCw, AlertCircle,
-  Quote, Trash2, Download,
+  Quote, Trash2, Download, History,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -129,6 +129,12 @@ export default function MeetingSummary() {
   const printableRef = useRef(null);
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
+  const location = useLocation();
+  // 앱 내부에서 이동해 온 경우(키가 'default'가 아님) 뒤로가기, 직접 진입이면 회의록 목록으로
+  const handleBack = () => {
+    if (location.key && location.key !== 'default') navigate(-1);
+    else navigate('/summaries');
+  };
   const isAdmin = useAuthStore((s) => s.isAdmin?.() || false);
   const [deleting, setDeleting] = useState(false);
 
@@ -384,13 +390,14 @@ export default function MeetingSummary() {
   if (!summary) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        <Link
-          to="/summaries"
+        <button
+          type="button"
+          onClick={handleBack}
           className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4 transition-colors"
         >
           <ArrowLeft size={16} />
-          회의록 목록으로
-        </Link>
+          뒤로
+        </button>
         <div className="mb-4">
           <div className="flex items-center gap-3 mb-2 flex-wrap">
             <h1 className="text-2xl font-semibold text-txt-primary">{meeting.title}</h1>
@@ -426,13 +433,14 @@ export default function MeetingSummary() {
   return (
     <div className="p-3 md:p-6 max-w-5xl mx-auto">
       {/* 상단 네비 — PDF 내보내기 대상에서 제외 */}
-      <Link
-        to="/summaries"
+      <button
+        type="button"
+        onClick={handleBack}
         className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-3 md:mb-4 transition-colors"
       >
         <ArrowLeft size={16} />
-        회의록 목록으로
-      </Link>
+        뒤로
+      </button>
 
       {/* PDF 캡처 대상 시작 — 하단 액션바 전까지 */}
       <div ref={contentRef}>
@@ -445,12 +453,22 @@ export default function MeetingSummary() {
           <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
             {meeting.status === 'completed' ? '완료' : meeting.status}
           </Badge>
-          {meeting.status === 'completed' && (
-            <div className="ml-auto flex items-center gap-3">
-              <MeetingFeedback meetingId={meeting.id} />
-              {meetingScore && <MeetingScoreBadge score={meetingScore} />}
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={() => navigate(`/meetings/${meeting.id}?history=1`)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 hover:border-brand-purple/40 transition-colors"
+              title="이 회의의 완료 뷰(히스토리)로 이동"
+            >
+              <History size={15} strokeWidth={2.4} />
+              <span>히스토리</span>
+            </button>
+            {meeting.status === 'completed' && (
+              <>
+                <MeetingFeedback meetingId={meeting.id} />
+                {meetingScore && <MeetingScoreBadge score={meetingScore} />}
+              </>
+            )}
+          </div>
         </div>
 
         {/* 모바일: 제목(줄바꿈 허용) + 하단에 완료 뱃지·평가·피드백 */}
@@ -462,14 +480,22 @@ export default function MeetingSummary() {
             <Badge variant={meeting.status === 'completed' ? 'success' : 'outline'}>
               {meeting.status === 'completed' ? '완료' : meeting.status}
             </Badge>
-            {meeting.status === 'completed' && (
-              <>
-                <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => navigate(`/meetings/${meeting.id}?history=1`)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 transition-colors"
+                title="히스토리"
+              >
+                <History size={13} strokeWidth={2.4} />
+                <span>히스토리</span>
+              </button>
+              {meeting.status === 'completed' && (
+                <>
                   <MeetingFeedback meetingId={meeting.id} compact />
                   {meetingScore && <MeetingScoreBadge score={meetingScore} compact />}
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

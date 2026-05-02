@@ -15,6 +15,7 @@ const PAGE_TITLES = {
   // /tasks 는 /members 로 redirect (App.jsx) — 매핑 제거
   '/members': '멤버·태스크',
   '/summaries': '회의록',
+  '/notifications': '알림',
   '/settings': '설정',
   '/admin': '관리자 대시보드',
 };

@@ -325,14 +325,17 @@ function AiEmployeeCard({ employee, isActive, onToggle, onExpand, isExpanded }) 
 
 // ── STT 서비스 선택 ──
 function SttSelect() {
+  // 기본값 'web-speech' — 무료/즉시 사용 가능. ChatArea fallback 과 통일.
   const [provider, setProvider] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'google'; } catch { return 'google'; }
+    try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
   });
   const handleChange = (e) => {
     const val = e.target.value;
     setProvider(val);
     const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
     localStorage.setItem('meetflow_integrations', JSON.stringify({ ...saved, sttProvider: val }));
+    // ChatArea 등 다른 컴포넌트가 즉시 반영되도록 브로드캐스트
+    try { window.dispatchEvent(new CustomEvent('meetflow:stt-provider-change', { detail: { provider: val } })); } catch {}
   };
   return (
     <div>
@@ -860,6 +863,14 @@ export default function SettingsPage() {
         return;
       }
 
+      // localStorage 백업값 — DB에 값 없을 때 fallback
+      const saved = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}');
+      // Notion API key / Gcal connected / Notif / GcalSync 는 DB 컬럼 없으므로 항상 localStorage 사용
+      if (saved.notionApiKey) setNotionApiKey(saved.notionApiKey);
+      if (saved.gcalSync) setGcalSync(saved.gcalSync);
+      if (saved.notif) setNotif(saved.notif);
+      setGcalConnected(!!saved.gcalConnected);
+
       try {
         // 유저가 속한 팀 찾기 (팀 없는 사용자 대응: maybeSingle)
         const { data: membership } = await supabase
@@ -870,9 +881,14 @@ export default function SettingsPage() {
           .maybeSingle();
 
         if (!membership) {
-          setSlackStatus('disconnected');
-          setNotionStatus('disconnected');
-          setGcalStatus('disconnected');
+          // 팀 없음 → localStorage 만 확인
+          const sCh = saved.slackChannel || '';
+          const nDb = saved.notionDbId || '';
+          setSlackChannel(sCh);
+          setNotionDbId(nDb);
+          setSlackStatus(sCh ? 'connected' : 'disconnected');
+          setNotionStatus(nDb ? 'connected' : 'disconnected');
+          setGcalStatus(saved.gcalConnected ? 'connected' : 'disconnected');
           return;
         }
 
@@ -885,21 +901,25 @@ export default function SettingsPage() {
           .eq('id', membership.team_id)
           .maybeSingle();
 
-        if (team) {
-          setSlackChannel(team.slack_channel_id || '');
-          setNotionDbId(team.notion_database_id || '');
-          setSlackStatus(team.slack_channel_id ? 'connected' : 'disconnected');
-          setNotionStatus(team.notion_database_id ? 'connected' : 'disconnected');
-        } else {
-          setSlackStatus('disconnected');
-          setNotionStatus('disconnected');
-        }
+        // DB 우선, 없으면 localStorage fallback
+        const sCh = (team?.slack_channel_id) || saved.slackChannel || '';
+        const nDb = (team?.notion_database_id) || saved.notionDbId || '';
+        setSlackChannel(sCh);
+        setNotionDbId(nDb);
+        setSlackStatus(sCh ? 'connected' : 'disconnected');
+        setNotionStatus(nDb ? 'connected' : 'disconnected');
       } catch (err) {
         console.error('[SettingsPage] 팀 설정 로드 실패:', err);
-        setSlackStatus('disconnected');
-        setNotionStatus('disconnected');
+        // 에러 시에도 localStorage fallback
+        const sCh = saved.slackChannel || '';
+        const nDb = saved.notionDbId || '';
+        setSlackChannel(sCh);
+        setNotionDbId(nDb);
+        setSlackStatus(sCh ? 'connected' : 'disconnected');
+        setNotionStatus(nDb ? 'connected' : 'disconnected');
       }
-      setGcalStatus('disconnected'); // Google Calendar은 별도 OAuth 필요
+      // Google Calendar 는 DB 컬럼 없음 → localStorage 만 사용
+      setGcalStatus(saved.gcalConnected ? 'connected' : 'disconnected');
     }
 
     loadTeamSettings();

@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   X, Calendar, User, FileText, AlertCircle, Clock, MessageSquare,
   CheckSquare, Square, Plus, Trash2, Edit2, Save, ChevronDown, History,
@@ -37,10 +38,8 @@ export default function TaskDetailPanel({
   const { user: authUser } = useAuthStore();
   const user = currentUser || authUser;
   const addToast = useToastStore((s) => s.addToast);
+  const navigate = useNavigate();
   const { comments, loading, addComment, updateComment, deleteComment, toggleReaction, acknowledgeComment } = useTaskComments(task?.id);
-
-  const priority = PRIORITY_MAP[task?.priority] || PRIORITY_MAP.medium;
-  const status = STATUS_MAP[task?.status] || STATUS_MAP.todo;
 
   const assignee = useMemo(
     () => members.find((m) => m.id === task?.assignee_id),
@@ -83,13 +82,22 @@ export default function TaskDetailPanel({
   );
   const canChangeStatus = canEdit || onStatusChange;
 
-  // 히스토리 열기 — 태스크가 속한 회의의 완료 회의 뷰로 이동
+  // 히스토리 열기 — 같은 탭으로 이동 (브라우저 뒤로가기 시 태스크 상세로 복귀)
   const handleOpenHistory = () => {
     if (!task.meeting_id) {
       addToast('이 태스크는 연결된 회의가 없어요', 'info', 2500);
       return;
     }
-    window.open(`/meetings/${task.meeting_id}?history=1`, '_blank', 'noopener,noreferrer');
+    navigate(`/meetings/${task.meeting_id}?history=1`);
+  };
+
+  // 회의록 열기 — 같은 탭으로 이동 (브라우저 뒤로가기 시 태스크 상세로 복귀)
+  const handleOpenSummary = () => {
+    if (!task.meeting_id) {
+      addToast('이 태스크는 연결된 회의가 없어요', 'info', 2500);
+      return;
+    }
+    navigate(`/summaries/${task.meeting_id}`);
   };
 
   return createPortal(
@@ -104,31 +112,29 @@ export default function TaskDetailPanel({
       <aside className="absolute right-0 top-0 bottom-0 w-full max-w-[520px] bg-bg-secondary border-l border-border-default shadow-2xl flex flex-col pointer-events-auto animate-in slide-in-from-right duration-200 overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-divider bg-bg-primary/30 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${priority.bg} ${priority.color} ${priority.border}`}>
-              {priority.label}
-            </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-tertiary border border-border-subtle text-txt-primary">
-              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-              {status.label}
-            </span>
-            {task.ai_suggested && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-purple/10 text-brand-purple border border-brand-purple/20">
-                <Sparkles size={11} /> AI
-              </span>
+          <div className="flex items-center gap-1 min-w-0">
+            {task.meeting_id && (
+              <>
+                <button
+                  onClick={handleOpenSummary}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-orange bg-brand-orange/10 border border-brand-orange/25 hover:bg-brand-orange/15 hover:border-brand-orange/40 transition-colors"
+                  title="이 태스크가 나온 회의의 회의록으로 이동"
+                >
+                  <FileText size={15} strokeWidth={2.4} />
+                  <span>회의록</span>
+                </button>
+                <button
+                  onClick={handleOpenHistory}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 hover:border-brand-purple/40 transition-colors"
+                  title="이 태스크가 나온 회의의 완료 뷰(히스토리)로 이동"
+                >
+                  <History size={15} strokeWidth={2.4} />
+                  <span>히스토리</span>
+                </button>
+              </>
             )}
           </div>
           <div className="flex items-center gap-1">
-            {task.meeting_id && (
-              <button
-                onClick={handleOpenHistory}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-brand-purple bg-brand-purple/10 border border-brand-purple/25 hover:bg-brand-purple/15 hover:border-brand-purple/40 transition-colors"
-                title="이 태스크가 나온 회의의 완료 뷰(히스토리)로 이동"
-              >
-                <History size={15} strokeWidth={2.4} />
-                <span>히스토리</span>
-              </button>
-            )}
             <button
               onClick={onClose}
               className="p-2 rounded-md text-txt-muted hover:bg-bg-tertiary transition-colors"

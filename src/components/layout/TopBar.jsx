@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/themeStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useNavigate } from 'react-router-dom';
 import { useTaskStore } from '@/stores/taskStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { useSidebar, useCommandPalette } from './Layout';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -55,6 +56,8 @@ export default function TopBar() {
   const activeMeeting = activeMeetingId ? meetings.find((m) => m.id === activeMeetingId) : null;
   const showActiveMeetingBar = activeMeeting?.status === 'active' && !pathname.startsWith('/meetings/');
   const { tasks } = useTaskStore();
+  // 미읽음 알림 수 — bell 배지에 표시. notifications 변동 시 리렌더되도록 직접 셀렉트.
+  const unreadCount = useNotificationStore((s) => s.notifications.filter((n) => !n.read_at).length);
   const { setSidebarOpen } = useSidebar();
   const palette = useCommandPalette();
   const [editOpen, setEditOpen] = useState(false);
@@ -203,9 +206,25 @@ export default function TopBar() {
             <Search size={17} strokeWidth={2} />
             <kbd className="hidden lg:inline text-[10px] text-txt-muted bg-bg-tertiary border border-border-subtle rounded px-1.5 py-0.5 font-mono leading-none">⌘K</kbd>
           </button>
-          <button className="relative p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors">
+          <button
+            type="button"
+            onClick={() => navigate('/notifications')}
+            className="relative p-2 rounded-full text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+            title={unreadCount > 0 ? `읽지 않은 알림 ${unreadCount}건` : '알림'}
+            aria-label="알림"
+          >
             <Bell size={17} strokeWidth={2} />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand-orange" />
+            {unreadCount > 0 && (
+              unreadCount < 10 ? (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-brand-orange text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount}
+                </span>
+              ) : (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[16px] px-1 rounded-full bg-brand-orange text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )
+            )}
           </button>
           <button
             onClick={toggleTheme}

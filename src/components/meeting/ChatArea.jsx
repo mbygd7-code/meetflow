@@ -115,10 +115,28 @@ export default function ChatArea({
     return () => window.removeEventListener('meetflow:drawing-tag', handler);
   }, [voiceMode]);
 
-  // STT 설정 읽기 (state로 관리하여 설정 변경 즉시 반영)
-  const [sttProvider] = useState(() => {
+  // STT 설정 읽기 (state로 관리 + storage / custom event 리슨하여 설정 변경 즉시 반영)
+  const [sttProvider, setSttProvider] = useState(() => {
     try { return JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech'; } catch { return 'web-speech'; }
   });
+  useEffect(() => {
+    const reread = () => {
+      try {
+        const v = JSON.parse(localStorage.getItem('meetflow_integrations') || '{}').sttProvider || 'web-speech';
+        setSttProvider(v);
+      } catch {}
+    };
+    const onCustom = (e) => {
+      if (e?.detail?.provider) setSttProvider(e.detail.provider);
+      else reread();
+    };
+    window.addEventListener('meetflow:stt-provider-change', onCustom);
+    window.addEventListener('storage', reread); // 다른 탭에서 변경된 경우
+    return () => {
+      window.removeEventListener('meetflow:stt-provider-change', onCustom);
+      window.removeEventListener('storage', reread);
+    };
+  }, []);
 
   // STT provider 는 사용자 설정 그대로 유지 — LiveKit 활성이어도 강제 변환 X.
   //   web-speech: Chrome 무료 STT, 자체 마이크 사용 (LiveKit publish 와 동시 캡처 OK)
