@@ -94,9 +94,10 @@ export default function ScreenShareButton({
             <p className="text-[11px] font-semibold text-txt-primary mb-2">화질</p>
             <div className="space-y-1">
               {[
-                { val: 'low', label: '기본', spec: '720p · 가벼움' },
-                { val: 'medium', label: '고화질', spec: '1080p · 권장 ★' },
-                { val: 'high', label: '최고화질', spec: '1440p · 무거움' },
+                { val: 'low', label: '기본', spec: '720p 15fps' },
+                { val: 'medium', label: '고화질', spec: '1080p 15fps · 권장 ★' },
+                { val: 'high', label: '최고화질', spec: '1080p 30fps · 영상' },
+                { val: 'native', label: '원본', spec: '모니터 native · 무거움' },
               ].map((opt) => (
                 <label
                   key={opt.val}

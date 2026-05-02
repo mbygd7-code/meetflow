@@ -24,15 +24,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, ConnectionState, ScreenSharePresets } from 'livekit-client';
 
 // 화면 공유 화질 프리셋 — UI 에서 사용자가 선택. 정적 자료(슬라이드/문서)에 최적화된 1080p 가 기본.
-//   - low    : 720p · 15fps · ~1Mbps  (네트워크 약함 / 슬라이드만)
-//   - medium : 1080p · 15fps · ~3Mbps (권장 — 글씨 선명도 + 합리적 비트레이트)
-//   - high   : 1440p · 30fps · ~6Mbps (영상/시연 + 좋은 네트워크)
+//   - low    : 720p · 15fps  (네트워크 약함 / 슬라이드만)
+//   - medium : 1080p · 15fps (권장 — 글씨 선명도 + 합리적 비트레이트)
+//   - high   : 1080p · 30fps (영상/시연 — 30fps 로 더 부드러움)
+//   - native : 원본 해상도   (모니터 native, 4K/1440p 등 그대로. 좋은 네트워크 필요)
 //
-// LiveKit ScreenSharePresets 의 resolution 객체 그대로 활용. (codec 은 Room publishDefaults 에서 VP9 설정)
+// livekit-client 2.18 의 ScreenSharePresets 사용 가능 키 (참고):
+//   h360fps3 / h360fps15 / h720fps5 / h720fps15 / h720fps30
+//   h1080fps15 / h1080fps30 / original
+// (h1440fps30 같은 키는 신버전 SDK 만 존재 → 사용 불가)
 const SCREEN_SHARE_QUALITY = {
   low:    { resolution: ScreenSharePresets.h720fps15.resolution },
   medium: { resolution: ScreenSharePresets.h1080fps15.resolution },
-  high:   { resolution: ScreenSharePresets.h1440fps30.resolution },
+  high:   { resolution: ScreenSharePresets.h1080fps30.resolution },
+  native: { resolution: ScreenSharePresets.original.resolution },
 };
 import { supabase } from '@/lib/supabase';
 import { logLiveKitSession } from '@/lib/serviceUsage';
