@@ -112,7 +112,10 @@ export function useViewerSync(meetingId) {
             },
           },
         });
-      } catch {}
+      } catch (e) {
+        // token 만료 / 채널 미연결 등 — 디버깅 로그만 남김 (사용자 차단 X)
+        console.warn('[useViewerSync] viewer:state send failed:', e?.message || e);
+      }
     });
     // 동기화 응답 수신 — 라이브 ON 일 때만 적용
     ch.on('broadcast', { event: 'viewer:state' }, ({ payload }) => {
@@ -147,7 +150,10 @@ export function useViewerSync(meetingId) {
           },
         },
       });
-    } catch {}
+    } catch (e) {
+      // token 만료 / 채널 미연결 등 — 디버깅 로그만 남김 (사용자 차단 X)
+      console.warn(`[useViewerSync] broadcast '${event}' failed:`, e?.message || e);
+    }
   }, []);
 
   // 라이브 OFF → ON 전환 시: "현재 라이브 상태 알려줘" 요청
