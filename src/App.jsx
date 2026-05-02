@@ -6,6 +6,7 @@ import { useThemeStore } from '@/stores/themeStore';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useAiTeamStore } from '@/stores/aiTeamStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 
 import Layout from '@/components/layout/Layout';
 import LoginPage from '@/pages/LoginPage';
@@ -19,6 +20,7 @@ import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 import TokenUsagePage from '@/pages/TokenUsagePage';
 import MembersPage from '@/pages/MembersPage';
+import NotificationsPage from '@/pages/NotificationsPage';
 
 function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
@@ -47,6 +49,8 @@ export default function App() {
   const initTasks = useTaskStore((s) => s.init);
   const loadKnowledgeFiles = useAiTeamStore((s) => s.loadKnowledgeFiles);
   const loadAiOverridesFromDB = useAiTeamStore((s) => s.loadFromDB);
+  const initNotifications = useNotificationStore((s) => s.init);
+  const cleanupNotifications = useNotificationStore((s) => s.cleanup);
   const cleanupMeetings = useMeetingStore((s) => s.cleanup);
   const cleanupTasks = useTaskStore((s) => s.cleanup);
 
@@ -63,12 +67,14 @@ export default function App() {
       initTasks();
       loadKnowledgeFiles();
       loadAiOverridesFromDB();
+      initNotifications();
     }
     return () => {
       cleanupMeetings();
       cleanupTasks();
+      cleanupNotifications();
     };
-  }, [loading, initMeetings, initTasks, loadKnowledgeFiles, cleanupMeetings, cleanupTasks]);
+  }, [loading, initMeetings, initTasks, loadKnowledgeFiles, cleanupMeetings, cleanupTasks, initNotifications, cleanupNotifications]);
 
   return (
     <Routes>
@@ -88,6 +94,7 @@ export default function App() {
         <Route path="/members" element={<MembersPage />} />
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
         <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />
