@@ -80,6 +80,13 @@ export default function ScreenShareView({
     }
   }, [list, mainIdentity]);
 
+  // 메인 발표자 도출 — useEffect 들이 main.videoTrack 을 참조하기 위해 일찍 계산.
+  //   list 비어있을 수 있으므로 null safety 적용 (이후 early return 으로 빈 케이스 처리).
+  const main = list.length > 0
+    ? (list.find((s) => s.identity === mainIdentity) || list[list.length - 1])
+    : null;
+  const others = main ? list.filter((s) => s.identity !== main.identity) : [];
+
   // 드로잉 모드 + 캔버스 크기 추적 (inline 모드에서만 활용)
   const [drawingActive, setDrawingActive] = useState(false);
   const [toolbarHost, setToolbarHost] = useState(null);
@@ -241,8 +248,7 @@ export default function ScreenShareView({
     );
   }
 
-  const main = list.find((s) => s.identity === mainIdentity) || list[list.length - 1];
-  const others = list.filter((s) => s.identity !== main.identity);
+  // (main, others 는 위쪽에서 일찍 계산 — useEffect 가 main 을 참조하므로 TDZ 회피)
 
   // 컨테이너 클래스 — inline 모드는 부모 flex의 자식으로 자료 패널 자리 차지,
   // 그렇지 않으면 기존 absolute overlay 동작 (legacy 호환)
