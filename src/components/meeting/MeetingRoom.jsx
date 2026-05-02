@@ -1905,6 +1905,14 @@ export default function MeetingRoom() {
     window.addEventListener('meetflow:drawing-tag', handler);
     return () => window.removeEventListener('meetflow:drawing-tag', handler);
   }, []);
+
+  // 발표 집중 모드 — 화면 공유 헤더의 Maximize2 버튼으로 토글.
+  //   ON 시: LNB 최소화 + 음성 참가자 스트립(VoicePanel) 숨김 + Ctrl+wheel 줌 활성화.
+  //   채팅창은 그대로 유지. 새 공유 시작 시 false 초기화.
+  //   ※ 아래 setSidebarForceMinimized useEffect 가 이 state 를 deps 로 참조하므로
+  //     반드시 useEffect 보다 먼저 선언 (TDZ 회피).
+  const [presentationFocusMode, setPresentationFocusMode] = useState(false);
+
   useEffect(() => {
     if (typeof setSidebarForceMinimized !== 'function') return;
     // materialViewerActive 또는 발표 집중 모드 시 LNB 최소화
@@ -1927,10 +1935,6 @@ export default function MeetingRoom() {
   const lk = useLiveKitVoice(id);
   // 화면 공유 패널 숨김 상태 — X 버튼으로 임시 닫기 가능 (트랙은 유지). 새 공유 시작 시 자동 reopen.
   const [screenShareHidden, setScreenShareHidden] = useState(false);
-  // 발표 집중 모드 — 화면 공유 헤더의 Maximize2 버튼으로 토글.
-  //   ON 시: LNB 최소화 + 음성 참가자 스트립(VoicePanel) 숨김 + Ctrl+wheel 줌 활성화.
-  //   채팅창은 그대로 유지 (사용자 요구). 새 공유 시작 시 false 초기화.
-  const [presentationFocusMode, setPresentationFocusMode] = useState(false);
   // ChatArea portal targets — 단일 ChatArea 인스턴스가 포지션만 바뀌도록 (state 보존):
   //   - defaultChatHost : 외부 기본 위치 (대부분의 시간)
   //   - embeddedChatHostInShare : 발표자 본인 시점일 때 ScreenShareView 안 우측 슬롯
