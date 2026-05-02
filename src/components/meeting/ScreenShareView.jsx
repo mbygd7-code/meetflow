@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonitorX, X, Pencil, Maximize2, Minimize2, Expand } from 'lucide-react';
 import DrawingOverlay from './DrawingOverlay';
+// Note: 별도 창 분리는 Document Picture-in-Picture API 사용 (Chrome/Edge 116+).
+// 일반 브라우저 풀스크린 API 는 더 이상 사용하지 않음 (사용자 요구로 별도 창 분리 방식 채택).
 
 function ScreenVideo({ track, muted = true, className = '', onClick }) {
   const ref = useRef(null);
@@ -47,20 +49,15 @@ export default function ScreenShareView({
   meetingId = null,
   messages = [],
   following = false,
-  // 채팅 패널 숨김/표시 토글 — 부모에서 chatHidden 상태 관리
-  //   toggleChat: () => void  (제공 시 헤더에 "채팅 숨김/표시" 버튼 노출)
-  //   chatHidden: bool        (현재 채팅이 숨겨져 있는지 — 버튼 아이콘 분기)
-  toggleChat,
-  chatHidden = false,
+  // 발표 집중 모드 — 부모에서 focusMode 상태 관리
+  //   focusMode=true: LNB 최소화 + VoicePanel 숨김 + Ctrl+wheel 줌 활성. 채팅은 그대로.
+  //   onToggleFocusMode 미제공 시 버튼 미노출 (발표자 본인은 의미 없음).
+  focusMode = false,
+  onToggleFocusMode,
   // 발표자 본인 시점일 때 우측 영역에 채팅 패널을 임베드하기 위한 콜백 ref.
   //   부모(MeetingRoom)가 div 노드를 받아 createPortal 의 target 으로 사용.
   //   발표자 본인 시점일 때만 호출(노드 전달), 그 외엔 null 호출(해제).
   onEmbeddedChatHost,
-  // 풀스크린 시 floating mini-chat 위젯 (옵션 C). element 형태로 전달받아 풀스크린 컨테이너 안에 렌더.
-  miniChatWidget = null,
-  // 채팅 숨김 상태에서 새 메시지 도착 카운트 표시용 — 부모에서 messages 전달
-  //   chatHidden=true 일 때만 카운트 활성. 사용자가 다시 채팅 펼치면 부모가 리셋.
-  //   (간단히 위젯 내부에서 토글 시점 기준으로 메시지 수 변화로 추정)
 }) {
   // Map → 배열 (videoTrack 있는 것만)
   const list = useMemo(() => {
@@ -88,57 +85,114 @@ export default function ScreenShareView({
   const [toolbarHost, setToolbarHost] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const videoWrapRef = useRef(null);
-  // 채팅 숨김 상태에서 도착한 새 메시지 카운트 — 사용자가 채팅 다시 펼치면 0 으로 리셋
-  //   토글이 OFF→ON (chatHidden true 가 되는 순간) 시점의 messages.length 를 기준선으로 잡음
-  const [hiddenSinceCount, setHiddenSinceCount] = useState(null);
+  // ── 발표 집중 모드 시 Ctrl+wheel 줌 (영상 영역 내부) ──
+  // CSS transform: scale 로 영상 비율 유지하며 확대. 1.0~3.0 사이.
+  const [contentZoom, setContentZoom] = useState(1);
+  // focusMode 종료 시 줌 리셋 (자연스러운 UX)
   useEffect(() => {
-    if (chatHidden) {
-      // 채팅 숨김 시작 — 현재 메시지 수 기준선 기록
-      if (hiddenSinceCount == null) {
-        setHiddenSinceCount(messages?.length || 0);
-      }
-    } else {
-      // 채팅 다시 보임 — 카운트 리셋
-      if (hiddenSinceCount != null) setHiddenSinceCount(null);
-    }
-  }, [chatHidden, messages?.length, hiddenSinceCount]);
-  const hiddenNewMsgCount = chatHidden && hiddenSinceCount != null
-    ? Math.max(0, (messages?.length || 0) - hiddenSinceCount)
-    : 0;
+    if (!focusMode) setContentZoom(1);
+  }, [focusMode]);
+  // 비디오 wrap 에 wheel 리스너 — focusMode + Ctrl/Cmd 키일 때만 줌
+  useEffect(() => {
+    const el = videoWrapRef.current;
+    if (!el || !focusMode) return;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = 0.1;
+      setContentZoom((z) => {
+        const next = e.deltaY < 0 ? z + step : z - step;
+        return Math.max(1, Math.min(3, +next.toFixed(2)));
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [focusMode]);
 
-  // 브라우저 풀스크린 — F 키 또는 버튼으로 토글. 화면 영역을 모니터 전체로 확대.
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // ── 별도 창(Document Picture-in-Picture) 분리 ──
+  //   onExpandWindow 클릭 시 별도 창으로 video 트랙만 분리.
+  //   Chrome/Edge 116+ 지원. Firefox/Safari 미지원 시 안내 메시지.
+  //   별도 창엔 video element 만 (드로잉/채팅 X). 본 창은 그대로.
+  const [pipWindow, setPipWindow] = useState(null);
+  const pipWindowRef = useRef(null);
+  pipWindowRef.current = pipWindow;
+  const supportsDocPiP = typeof window !== 'undefined' && !!window.documentPictureInPicture;
+
+  // PiP 창에서 video 에 track attach — main.videoTrack 변경/창 변경 시 재attach
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
-  const toggleFullscreen = async () => {
+    if (!pipWindow || !main?.videoTrack) return;
+    const win = pipWindow;
+    const videoEl = win.document.querySelector('video[data-pip-video]');
+    if (!videoEl) return;
     try {
-      if (!document.fullscreenElement) {
-        await videoWrapRef.current?.requestFullscreen?.();
-      } else {
-        await document.exitFullscreen?.();
-      }
+      main.videoTrack.attach(videoEl);
     } catch (e) {
-      console.warn('[ScreenShareView] fullscreen toggle failed:', e?.message);
+      console.warn('[ScreenShareView] PiP video attach failed:', e?.message);
+    }
+    return () => {
+      try { main.videoTrack.detach(videoEl); } catch {}
+    };
+  }, [pipWindow, main?.videoTrack]);
+
+  const openInPipWindow = async () => {
+    if (!supportsDocPiP) {
+      alert('이 브라우저는 별도 창 분리를 지원하지 않습니다. Chrome/Edge 116+ 에서 사용하세요.');
+      return;
+    }
+    if (pipWindow) {
+      // 이미 열려 있으면 포커스
+      try { pipWindow.focus(); } catch {}
+      return;
+    }
+    try {
+      const win = await window.documentPictureInPicture.requestWindow({
+        width: 960,
+        height: 540,
+      });
+      // PiP 창 기본 스타일 + video 마운트 슬롯
+      const styleEl = win.document.createElement('style');
+      styleEl.textContent = `
+        body { margin: 0; padding: 0; background: #000; height: 100vh; overflow: hidden; }
+        .pip-root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        video { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .hint { position: fixed; top: 8px; left: 8px; color: rgba(255,255,255,0.6); font: 11px sans-serif; pointer-events: none; }
+      `;
+      win.document.head.appendChild(styleEl);
+      const root = win.document.createElement('div');
+      root.className = 'pip-root';
+      root.innerHTML = `
+        <video data-pip-video autoplay playsinline></video>
+        <div class="hint">드로잉은 본 창에서만 가능합니다</div>
+      `;
+      win.document.body.appendChild(root);
+      // 사용자가 창 닫으면 cleanup
+      win.addEventListener('pagehide', () => {
+        setPipWindow(null);
+      });
+      setPipWindow(win);
+    } catch (e) {
+      console.warn('[ScreenShareView] open PiP window failed:', e?.message);
+      alert('별도 창 열기에 실패했습니다: ' + (e?.message || '알 수 없는 오류'));
     }
   };
-  // F 키 단축키 — 풀스크린 토글 (입력 포커스 시엔 무시)
+
+  const closePipWindow = () => {
+    if (pipWindow) {
+      try { pipWindow.close(); } catch {}
+      setPipWindow(null);
+    }
+  };
+
+  // 컴포넌트 언마운트 시 PiP 창 자동 정리 (메모리 누수 방지)
   useEffect(() => {
-    if (!inline) return;
-    const onKey = (e) => {
-      if (e.key !== 'f' && e.key !== 'F') return;
-      const t = e.target;
-      const tag = t?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return;
-      e.preventDefault();
-      toggleFullscreen();
+    return () => {
+      const win = pipWindowRef.current;
+      if (win) {
+        try { win.close(); } catch {}
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inline]);
+  }, []);
 
   // 비디오 wrap 크기 추적 → DrawingOverlay width/height 동기화 (resize/zoom 즉시 반영)
   useEffect(() => {
@@ -232,37 +286,45 @@ export default function ScreenShareView({
               </button>
             </>
           )}
-          {/* 채팅 숨김 토글 — 패널 폭 확장으로 화면 더 크게 보기.
-              현재 상태를 시각적으로 강조: 숨김 중이면 보라색 배경으로 active 표시. */}
-          {inline && typeof toggleChat === 'function' && (
+          {/* 발표 집중 모드 토글 — LNB 최소화 + 음성 참가자 숨김 + Ctrl+wheel 줌 활성.
+              채팅창은 그대로 유지 (사용자 요구). active 시 보라색 배경. */}
+          {inline && typeof onToggleFocusMode === 'function' && (
             <button
               type="button"
-              onClick={toggleChat}
-              className={`p-1.5 rounded-md transition-colors relative ${
-                chatHidden
+              onClick={onToggleFocusMode}
+              className={`p-1.5 rounded-md transition-colors ${
+                focusMode
                   ? 'text-white bg-brand-purple'
                   : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
               }`}
-              title={chatHidden ? '채팅 다시 표시' : '채팅 숨기고 화면 크게 보기'}
-              aria-label="채팅 표시 토글"
-              aria-pressed={chatHidden}
+              title={focusMode
+                ? '집중 모드 종료'
+                : '발표 집중 모드 (LNB·음성패널 숨김, Ctrl+휠 줌)'}
+              aria-label="발표 집중 모드 토글"
+              aria-pressed={focusMode}
             >
-              {chatHidden ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              {chatHidden && hiddenNewMsgCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-status-error text-white text-[9px] font-bold flex items-center justify-center">
-                  {hiddenNewMsgCount > 9 ? '9+' : hiddenNewMsgCount}
-                </span>
-              )}
+              {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
           )}
-          {/* 브라우저 풀스크린 토글 — 모니터 전체로 확대 (F 키 단축) */}
+          {/* 별도 창 — Document PiP 로 video 만 분리. 본 창은 그대로 (공유+채팅 유지).
+              별도 창엔 드로잉 X (서비스 창에서만 가능). */}
           {inline && (
             <button
               type="button"
-              onClick={toggleFullscreen}
-              className="p-1.5 text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary rounded-md transition-colors"
-              title={isFullscreen ? '풀스크린 종료 (F)' : '전체 화면 (F)'}
-              aria-label="풀스크린 토글"
+              onClick={pipWindow ? closePipWindow : openInPipWindow}
+              className={`p-1.5 rounded-md transition-colors ${
+                pipWindow
+                  ? 'text-white bg-brand-purple'
+                  : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
+              }`}
+              title={pipWindow
+                ? '별도 창 닫기'
+                : (supportsDocPiP
+                    ? '별도 창으로 분리 (자유 리사이즈)'
+                    : '이 브라우저는 미지원 (Chrome/Edge 116+)')}
+              aria-label="별도 창 분리"
+              aria-pressed={!!pipWindow}
+              disabled={!supportsDocPiP && !pipWindow}
             >
               <Expand size={14} />
             </button>
@@ -292,8 +354,12 @@ export default function ScreenShareView({
         </div>
       </div>
 
-      {/* 메인 비디오 영역 */}
-      <div ref={videoWrapRef} className="flex-1 min-h-0 relative bg-black flex items-center justify-center">
+      {/* 메인 비디오 영역 — focusMode 시 Ctrl+wheel 줌 활성. overflow-hidden 으로 줌 시 잘림 방지 */}
+      <div
+        ref={videoWrapRef}
+        className="flex-1 min-h-0 relative bg-black flex items-center justify-center overflow-hidden"
+        style={focusMode && contentZoom !== 1 ? { cursor: 'zoom-in' } : undefined}
+      >
         {main.isLocal ? (
           // 본인 공유 시점 — 좌측: 작은 미리보기 + 안내 / 우측: 채팅 호스트 슬롯
           //   ScreenShareView 내부 빈 공간(60%)에 채팅을 임베드하여 발표자도 실시간 피드백 확인.
@@ -327,38 +393,35 @@ export default function ScreenShareView({
             />
           </div>
         ) : (
-          <ScreenVideo
-            track={main.videoTrack}
-            muted={false}
-            className="max-w-full max-h-full object-contain"
-          />
-        )}
-
-        {/* 풀스크린 floating mini-chat — 풀스크린 element 안쪽에 마운트되어
-            브라우저 풀스크린 시에도 함께 보임. 일반 모드/발표자 본인 시점엔 부모가 null 전달. */}
-        {miniChatWidget && isFullscreen && (
-          <div className="absolute right-3 bottom-3 z-30 pointer-events-auto">
-            {miniChatWidget}
+          // viewer — focusMode 시 Ctrl+wheel 줌 transform 적용 (영상 비율 유지)
+          <div
+            className="flex items-center justify-center w-full h-full"
+            style={focusMode && contentZoom !== 1 ? {
+              transform: `scale(${contentZoom})`,
+              transition: 'transform 0.1s ease-out',
+            } : undefined}
+          >
+            <ScreenVideo
+              track={main.videoTrack}
+              muted={false}
+              className="max-w-full max-h-full object-contain"
+            />
           </div>
         )}
 
-        {/* 채팅 숨김 상태에서 floating "채팅 보기" 복구 버튼 — 사용자가 토글을 잊어도 항상 복구 가능.
-            풀스크린 모드에선 mini-chat 이 그 역할을 하므로 일반 모드에서만 노출. */}
-        {chatHidden && typeof toggleChat === 'function' && !isFullscreen && (
-          <button
-            type="button"
-            onClick={toggleChat}
-            className="absolute right-3 bottom-3 z-30 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-purple text-white shadow-lg hover:opacity-90 transition-opacity text-[12px] font-semibold"
-            title="채팅 다시 보기"
-          >
-            <Minimize2 size={14} strokeWidth={2.4} />
-            채팅 보기
-            {hiddenNewMsgCount > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-status-error text-white text-[10px] font-bold flex items-center justify-center">
-                {hiddenNewMsgCount > 99 ? '99+' : hiddenNewMsgCount}
-              </span>
-            )}
-          </button>
+        {/* 줌 상태 표시 — focusMode 시 우측 상단에 현재 배율 (1.0배 아닐 때만) */}
+        {focusMode && contentZoom > 1 && (
+          <div className="absolute top-3 right-3 z-30 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-sm text-white text-[11px] font-semibold pointer-events-none">
+            {Math.round(contentZoom * 100)}%
+            <span className="ml-1.5 text-white/60 font-normal">Ctrl+휠</span>
+          </div>
+        )}
+
+        {/* PiP 별도 창이 열려있을 때 안내 — 본 창의 비디오 영역 위에 약하게 표시 */}
+        {pipWindow && !main.isLocal && (
+          <div className="absolute top-3 left-3 z-30 px-2.5 py-1 rounded-md bg-brand-purple/80 backdrop-blur-sm text-white text-[11px] font-semibold pointer-events-none">
+            ⤢ 별도 창에서 보고 있습니다
+          </div>
         )}
 
         {/* 드로잉 오버레이 — inline 모드에서만 활성화. PDF/이미지와 동일 패턴.

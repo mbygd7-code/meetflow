@@ -1907,9 +1907,10 @@ export default function MeetingRoom() {
   }, []);
   useEffect(() => {
     if (typeof setSidebarForceMinimized !== 'function') return;
-    setSidebarForceMinimized(materialViewerActive);
+    // materialViewerActive 또는 발표 집중 모드 시 LNB 최소화
+    setSidebarForceMinimized(materialViewerActive || presentationFocusMode);
     return () => setSidebarForceMinimized(false);
-  }, [materialViewerActive, setSidebarForceMinimized]);
+  }, [materialViewerActive, presentationFocusMode, setSidebarForceMinimized]);
   // docPanelExpanded 제거 — DocumentPanel은 항상 표시되며 리사이저로 폭 조절
   // 회의 자료 — DB + Storage 기반 (useMeetingFiles 훅)
   const {
@@ -1926,9 +1927,10 @@ export default function MeetingRoom() {
   const lk = useLiveKitVoice(id);
   // 화면 공유 패널 숨김 상태 — X 버튼으로 임시 닫기 가능 (트랙은 유지). 새 공유 시작 시 자동 reopen.
   const [screenShareHidden, setScreenShareHidden] = useState(false);
-  // 화면 공유 시 채팅 패널 숨김 — 화면을 풀폭으로 확장해서 글씨/UI 더 크게 보기
-  //   ScreenShareView 헤더의 토글 버튼으로 제어. 새 공유 시작 시 false 초기화.
-  const [chatHiddenDuringShare, setChatHiddenDuringShare] = useState(false);
+  // 발표 집중 모드 — 화면 공유 헤더의 Maximize2 버튼으로 토글.
+  //   ON 시: LNB 최소화 + 음성 참가자 스트립(VoicePanel) 숨김 + Ctrl+wheel 줌 활성화.
+  //   채팅창은 그대로 유지 (사용자 요구). 새 공유 시작 시 false 초기화.
+  const [presentationFocusMode, setPresentationFocusMode] = useState(false);
   // ChatArea portal targets — 단일 ChatArea 인스턴스가 포지션만 바뀌도록 (state 보존):
   //   - defaultChatHost : 외부 기본 위치 (대부분의 시간)
   //   - embeddedChatHostInShare : 발표자 본인 시점일 때 ScreenShareView 안 우측 슬롯
@@ -1940,11 +1942,11 @@ export default function MeetingRoom() {
     const prev = prevScreenShareCountRef.current;
     if (cur > prev) {
       setScreenShareHidden(false); // 새 공유자 증가 → 패널 다시 표시
-      setChatHiddenDuringShare(false); // 채팅 숨김 모드도 리셋 (사용자가 다시 결정하게)
+      setPresentationFocusMode(false); // 발표 집중 모드 리셋 (사용자가 다시 결정하게)
     }
     if (cur === 0) {
       setScreenShareHidden(false);  // 모두 종료 → 다음 공유 시 다시 표시되도록 리셋
-      setChatHiddenDuringShare(false);
+      setPresentationFocusMode(false);
     }
     prevScreenShareCountRef.current = cur;
   }, [lk.screenShares]);
@@ -2623,8 +2625,9 @@ export default function MeetingRoom() {
       {/* 어젠다 바 */}
       <AgendaBar agendas={meeting.agendas || []} activeId={currentAgenda?.id} onSelect={setActiveAgendaId} />
 
-      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 모드 라디오 패널 */}
-      {lk.connected && (
+      {/* LiveKit 음성 회의 활성 시 — 참가자 그리드 + 모드 라디오 패널.
+          발표 집중 모드일 땐 숨김 (화면 공유에 더 많은 공간 확보). */}
+      {lk.connected && !presentationFocusMode && (
         <VoicePanel
           participants={lk.participants}
           activeSpeakers={lk.activeSpeakers}
@@ -2669,20 +2672,15 @@ export default function MeetingRoom() {
         const screenShareActive = hasActiveVideo && !screenShareHidden;
         // 발표자 본인 시점 — ScreenShareView 안에 채팅을 임베드하기 위해 외부 채팅 영역은 숨김
         const isPresentingMyself = screenShareActive && !!lk.localScreenSharing;
-        // 채팅 폭 결정:
+        // 채팅 폭 결정 (발표 집중 모드와 무관하게 채팅은 항상 표시):
         //   - 발표자 본인: 외부 영역 숨김 (채팅은 ScreenShareView 안으로 portal)
-        //   - 화면 공유 + 채팅 표시: 380px 축소 + ml-auto (필수: DocumentPanel collapsed 시
-        //     채팅이 sidebar 옆으로 붙어 오버레이에 가려지는 버그 방지. ml-auto 로 우측 끝 정렬)
-        //   - 화면 공유 + 채팅 숨김 토글: 외부 영역 숨김
+        //   - 화면 공유 중(viewer): 380px 축소 + ml-auto (DocumentPanel collapsed 시 위치 정렬)
         //   - 화면 공유 비활성: 일반 채팅 영역 (flex-1)
-        const chatVisibleDuringShare = screenShareActive && !chatHiddenDuringShare && !isPresentingMyself;
         const chatWrapClass = isPresentingMyself
           ? 'hidden'  // 발표자 본인: portal 로 ScreenShareView 안으로 이동
-          : chatVisibleDuringShare
+          : screenShareActive
             ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle ml-auto'
-            : screenShareActive
-              ? 'hidden'  // 채팅 숨김 모드 — 풀폭 화면 공유
-              : 'flex-1 flex flex-col min-h-0 min-w-0';
+            : 'flex-1 flex flex-col min-h-0 min-w-0';
         return (
           <div className="flex flex-1 overflow-hidden relative">
             {/* 자료 패널 — 항상 마운트 */}
@@ -2726,14 +2724,12 @@ export default function MeetingRoom() {
               (isPresentingMyself && embeddedChatHostInShare) ? embeddedChatHostInShare : defaultChatHost
             )}
 
-            {/* 화면 공유 overlay */}
+            {/* 화면 공유 overlay — 발표자 본인은 채팅 임베드, viewer 는 우측 채팅 380px 유지 */}
             {screenShareActive && (
               <div className={`absolute top-0 bottom-0 left-0 z-20 flex flex-col bg-bg-primary ${
                 isPresentingMyself
                   ? 'right-0'  // 발표자 본인: 채팅이 ScreenShareView 안으로 들어감
-                  : chatHiddenDuringShare
-                    ? 'right-0'
-                    : 'right-[340px] md:right-[380px] border-r border-border-subtle'
+                  : 'right-[340px] md:right-[380px] border-r border-border-subtle'
               }`}>
                 <ScreenShareView
                   inline
@@ -2745,17 +2741,11 @@ export default function MeetingRoom() {
                   messages={messages}
                   // following 은 DocumentPanel 스코프 안의 변수 — 안전상 false 고정 (이전 fix 유지)
                   following={false}
-                  // 발표자 본인 시점엔 채팅 숨김 토글 의미 없음(이미 임베드) — 버튼 노출 X
-                  toggleChat={isPresentingMyself ? undefined : () => setChatHiddenDuringShare((v) => !v)}
-                  chatHidden={chatHiddenDuringShare}
+                  // 발표 집중 모드 토글 — 발표자 본인은 의미 없음(채팅은 어차피 임베드)
+                  focusMode={presentationFocusMode}
+                  onToggleFocusMode={isPresentingMyself ? undefined : () => setPresentationFocusMode((v) => !v)}
                   // 발표자 본인 시점일 때만 chat host 콜백 활성화 (다른 사람 발표일 땐 null)
                   onEmbeddedChatHost={isPresentingMyself ? setEmbeddedChatHostInShare : null}
-                  // 풀스크린 floating mini-chat — viewer 시점일 때만. 발표자 본인은 임베드된 ChatArea 가 풀스크린에 따라옴
-                  miniChatWidget={
-                    !isPresentingMyself ? (
-                      <ChatMiniWidget messages={messages} currentUserId={user?.id} />
-                    ) : null
-                  }
                 />
               </div>
             )}
