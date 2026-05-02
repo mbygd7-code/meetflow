@@ -2671,14 +2671,15 @@ export default function MeetingRoom() {
         const isPresentingMyself = screenShareActive && !!lk.localScreenSharing;
         // 채팅 폭 결정:
         //   - 발표자 본인: 외부 영역 숨김 (채팅은 ScreenShareView 안으로 portal)
-        //   - 화면 공유 + 채팅 표시: 380px 축소
+        //   - 화면 공유 + 채팅 표시: 380px 축소 + ml-auto (필수: DocumentPanel collapsed 시
+        //     채팅이 sidebar 옆으로 붙어 오버레이에 가려지는 버그 방지. ml-auto 로 우측 끝 정렬)
         //   - 화면 공유 + 채팅 숨김 토글: 외부 영역 숨김
         //   - 화면 공유 비활성: 일반 채팅 영역 (flex-1)
         const chatVisibleDuringShare = screenShareActive && !chatHiddenDuringShare && !isPresentingMyself;
         const chatWrapClass = isPresentingMyself
           ? 'hidden'  // 발표자 본인: portal 로 ScreenShareView 안으로 이동
           : chatVisibleDuringShare
-            ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle'
+            ? 'shrink-0 w-[340px] md:w-[380px] flex flex-col min-h-0 min-w-0 border-l border-border-subtle ml-auto'
             : screenShareActive
               ? 'hidden'  // 채팅 숨김 모드 — 풀폭 화면 공유
               : 'flex-1 flex flex-col min-h-0 min-w-0';
