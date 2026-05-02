@@ -58,6 +58,9 @@ export default function ScreenShareView({
   onEmbeddedChatHost,
   // 풀스크린 시 floating mini-chat 위젯 (옵션 C). element 형태로 전달받아 풀스크린 컨테이너 안에 렌더.
   miniChatWidget = null,
+  // 채팅 숨김 상태에서 새 메시지 도착 카운트 표시용 — 부모에서 messages 전달
+  //   chatHidden=true 일 때만 카운트 활성. 사용자가 다시 채팅 펼치면 부모가 리셋.
+  //   (간단히 위젯 내부에서 토글 시점 기준으로 메시지 수 변화로 추정)
 }) {
   // Map → 배열 (videoTrack 있는 것만)
   const list = useMemo(() => {
@@ -85,6 +88,24 @@ export default function ScreenShareView({
   const [toolbarHost, setToolbarHost] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const videoWrapRef = useRef(null);
+  // 채팅 숨김 상태에서 도착한 새 메시지 카운트 — 사용자가 채팅 다시 펼치면 0 으로 리셋
+  //   토글이 OFF→ON (chatHidden true 가 되는 순간) 시점의 messages.length 를 기준선으로 잡음
+  const [hiddenSinceCount, setHiddenSinceCount] = useState(null);
+  useEffect(() => {
+    if (chatHidden) {
+      // 채팅 숨김 시작 — 현재 메시지 수 기준선 기록
+      if (hiddenSinceCount == null) {
+        setHiddenSinceCount(messages?.length || 0);
+      }
+    } else {
+      // 채팅 다시 보임 — 카운트 리셋
+      if (hiddenSinceCount != null) setHiddenSinceCount(null);
+    }
+  }, [chatHidden, messages?.length, hiddenSinceCount]);
+  const hiddenNewMsgCount = chatHidden && hiddenSinceCount != null
+    ? Math.max(0, (messages?.length || 0) - hiddenSinceCount)
+    : 0;
+
   // 브라우저 풀스크린 — F 키 또는 버튼으로 토글. 화면 영역을 모니터 전체로 확대.
   const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
@@ -211,16 +232,27 @@ export default function ScreenShareView({
               </button>
             </>
           )}
-          {/* 채팅 숨김 토글 — 패널 폭 확장으로 화면 더 크게 보기 */}
+          {/* 채팅 숨김 토글 — 패널 폭 확장으로 화면 더 크게 보기.
+              현재 상태를 시각적으로 강조: 숨김 중이면 보라색 배경으로 active 표시. */}
           {inline && typeof toggleChat === 'function' && (
             <button
               type="button"
               onClick={toggleChat}
-              className="p-1.5 text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary rounded-md transition-colors"
+              className={`p-1.5 rounded-md transition-colors relative ${
+                chatHidden
+                  ? 'text-white bg-brand-purple'
+                  : 'text-txt-muted hover:text-brand-purple hover:bg-bg-tertiary'
+              }`}
               title={chatHidden ? '채팅 다시 표시' : '채팅 숨기고 화면 크게 보기'}
               aria-label="채팅 표시 토글"
+              aria-pressed={chatHidden}
             >
               {chatHidden ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {chatHidden && hiddenNewMsgCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-status-error text-white text-[9px] font-bold flex items-center justify-center">
+                  {hiddenNewMsgCount > 9 ? '9+' : hiddenNewMsgCount}
+                </span>
+              )}
             </button>
           )}
           {/* 브라우저 풀스크린 토글 — 모니터 전체로 확대 (F 키 단축) */}
@@ -308,6 +340,25 @@ export default function ScreenShareView({
           <div className="absolute right-3 bottom-3 z-30 pointer-events-auto">
             {miniChatWidget}
           </div>
+        )}
+
+        {/* 채팅 숨김 상태에서 floating "채팅 보기" 복구 버튼 — 사용자가 토글을 잊어도 항상 복구 가능.
+            풀스크린 모드에선 mini-chat 이 그 역할을 하므로 일반 모드에서만 노출. */}
+        {chatHidden && typeof toggleChat === 'function' && !isFullscreen && (
+          <button
+            type="button"
+            onClick={toggleChat}
+            className="absolute right-3 bottom-3 z-30 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-purple text-white shadow-lg hover:opacity-90 transition-opacity text-[12px] font-semibold"
+            title="채팅 다시 보기"
+          >
+            <Minimize2 size={14} strokeWidth={2.4} />
+            채팅 보기
+            {hiddenNewMsgCount > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-status-error text-white text-[10px] font-bold flex items-center justify-center">
+                {hiddenNewMsgCount > 99 ? '99+' : hiddenNewMsgCount}
+              </span>
+            )}
+          </button>
         )}
 
         {/* 드로잉 오버레이 — inline 모드에서만 활성화. PDF/이미지와 동일 패턴.
