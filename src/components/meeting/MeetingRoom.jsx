@@ -2750,6 +2750,8 @@ export default function MeetingRoom() {
                   onToggleFocusMode={isPresentingMyself ? undefined : () => setPresentationFocusMode((v) => !v)}
                   // 발표자 본인 시점일 때만 chat host 콜백 활성화 (다른 사람 발표일 땐 null)
                   onEmbeddedChatHost={isPresentingMyself ? setEmbeddedChatHostInShare : null}
+                  // 멀티커서 sync 용 본인 정보 (id/name/color)
+                  currentUser={user ? { id: user.id, name: user.name, color: user.avatar_color } : null}
                 />
               </div>
             )}

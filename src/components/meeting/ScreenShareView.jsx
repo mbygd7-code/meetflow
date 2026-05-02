@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MonitorX, X, Pencil, Maximize2, Minimize2, Expand } from 'lucide-react';
 import DrawingOverlay from './DrawingOverlay';
+import { supabase } from '@/lib/supabase';
 // Note: 별도 창 분리는 Document Picture-in-Picture API 사용 (Chrome/Edge 116+).
 // 일반 브라우저 풀스크린 API 는 더 이상 사용하지 않음 (사용자 요구로 별도 창 분리 방식 채택).
 
@@ -58,6 +59,9 @@ export default function ScreenShareView({
   //   부모(MeetingRoom)가 div 노드를 받아 createPortal 의 target 으로 사용.
   //   발표자 본인 시점일 때만 호출(노드 전달), 그 외엔 null 호출(해제).
   onEmbeddedChatHost,
+  // 본인 정보 — 멀티커서 sync 시 본인 식별/이름/색상 표시용
+  //   { id, name, color } 형태. 미제공 시 cursor sync 비활성.
+  currentUser = null,
 }) {
   // Map → 배열 (videoTrack 있는 것만)
   const list = useMemo(() => {
@@ -264,6 +268,83 @@ export default function ScreenShareView({
     return () => ro.disconnect();
   }, [inline]);
 
+  // ── 멀티커서 동기화 (모든 참가자 마우스 위치 공유) ──
+  //   목적: 발표자/시청자 누구든 화면 위에 마우스를 올리면 다른 참가자들에게 큰 컬러 커서로 표시.
+  //   "여기 봐주세요" 같은 협업적 포인팅에 유용. Figma/Google Meet 멀티커서 패턴.
+  //
+  //   채널: sc-cursor:<meetingId> — 별도 Supabase 채널 (라이브 게이트와 무관)
+  //   페이로드: { id, x, y, name, color }  x/y 는 videoWrapRef 기준 0~1 정규화
+  //   5초 동안 신규 메시지 없으면 자동 만료 (1초마다 정리)
+  const [remoteScreenCursors, setRemoteScreenCursors] = useState({});
+  const screenCursorChRef = useRef(null);
+  const cursorSendThrottleRef = useRef(0);
+
+  useEffect(() => {
+    if (!meetingId) return;
+    const ch = supabase.channel(`sc-cursor:${meetingId}`, {
+      config: { broadcast: { self: false } },
+    });
+    ch.on('broadcast', { event: 'cursor' }, ({ payload }) => {
+      if (!payload?.id) return;
+      setRemoteScreenCursors((prev) => ({
+        ...prev,
+        [payload.id]: { ...payload, ts: Date.now() },
+      }));
+    });
+    ch.subscribe();
+    screenCursorChRef.current = ch;
+    return () => {
+      try { supabase.removeChannel(ch); } catch {}
+      screenCursorChRef.current = null;
+    };
+  }, [meetingId]);
+
+  // 5초 만료 정리 (1초 주기)
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemoteScreenCursors((prev) => {
+        const now = Date.now();
+        const next = {};
+        let changed = false;
+        for (const [id, c] of Object.entries(prev)) {
+          if (now - c.ts < 5000) next[id] = c;
+          else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // 로컬 마우스 이동 → 50ms 스로틀 broadcast
+  const onCursorMoveBroadcast = (e) => {
+    if (!currentUser?.id) return;
+    const ch = screenCursorChRef.current;
+    if (!ch) return;
+    const now = Date.now();
+    if (now - cursorSendThrottleRef.current < 50) return;
+    cursorSendThrottleRef.current = now;
+    const el = videoWrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    try {
+      ch.send({
+        type: 'broadcast',
+        event: 'cursor',
+        payload: {
+          id: currentUser.id,
+          x, y,
+          name: currentUser.name || '참가자',
+          color: currentUser.color || '#FF902F',
+        },
+      });
+    } catch {}
+  };
+
   // legacy(absolute overlay) 모드에서는 list 비면 null로 fallback (렌더 안 함).
   // inline 모드에서는 null 반환 시 부모(absolute overlay 컨테이너)가 빈 박스로
   // DocumentPanel을 가릴 위험이 있어 항상 placeholder 렌더 → 안전.
@@ -411,10 +492,12 @@ export default function ScreenShareView({
       {/* 메인 비디오 영역
           - focusMode + Ctrl+wheel = 줌
           - 줌 > 1배 + 드래그 = 이동(pan) — 가려진 영역 보기
-          - 큰 컬러 커서: viewer 시점일 때만 video 영역에 적용 (발표자 본인 영역 X) */}
+          - 큰 컬러 커서: viewer 시점일 때만 video 영역에 적용 (발표자 본인 영역 X)
+          - 멀티커서 sync: onCursorMoveBroadcast 가 모든 참가자에게 마우스 위치 broadcast */}
       <div
         ref={videoWrapRef}
         onMouseDown={onPanMouseDown}
+        onMouseMove={onCursorMoveBroadcast}
         className="flex-1 min-h-0 relative bg-black flex items-center justify-center overflow-hidden"
       >
         {main.isLocal ? (
@@ -480,6 +563,50 @@ export default function ScreenShareView({
             <span className="ml-1.5 text-white/60 font-normal">Ctrl+휠 · 드래그 이동</span>
           </div>
         )}
+
+        {/* 멀티커서 오버레이 — 다른 참가자들의 마우스 위치 표시.
+            큰(36×36) 컬러 화살표 + 이름 라벨. videoWrapRef 기준 정규화 좌표.
+            본인 자신은 표시 안 함 (자기 OS 커서가 이미 보임). */}
+        {Object.entries(remoteScreenCursors).map(([id, c]) => {
+          if (currentUser?.id && id === currentUser.id) return null;
+          return (
+            <div
+              key={id}
+              className="absolute z-30 pointer-events-none transition-[left,top] duration-100 ease-linear"
+              style={{
+                left: `${(c.x ?? 0) * 100}%`,
+                top: `${(c.y ?? 0) * 100}%`,
+                transform: 'translate(-4px, -4px)',
+              }}
+            >
+              {/* 36×36 SVG 화살표 — 큰 컬러 커서 */}
+              <svg
+                width="36"
+                height="36"
+                viewBox="0 0 36 36"
+                style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }}
+              >
+                <path
+                  d="M4 4 L30 16 L17 18 L14 30 Z"
+                  fill={c.color || '#FF902F'}
+                  stroke="#ffffff"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {/* 이름 라벨 */}
+              <span
+                className="absolute left-7 top-5 text-[11px] font-semibold text-white px-2 py-0.5 rounded whitespace-nowrap"
+                style={{
+                  backgroundColor: c.color || '#FF902F',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                }}
+              >
+                {c.name || '참가자'}
+              </span>
+            </div>
+          );
+        })}
 
         {/* PiP 별도 창이 열려있을 때 안내 — 본 창의 비디오 영역 위에 약하게 표시 */}
         {pipWindow && !main.isLocal && (
