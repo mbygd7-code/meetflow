@@ -163,10 +163,13 @@ export default function ChatArea({
     }
   }, [voiceMuted, voiceConnected, sttSupported, isListening, startSTT, stopSTT]);
 
-  // LiveKit 참여/종료 전환 시 입력 모드 자동 전환
-  //   - voiceConnected: false → true 전환 시 voiceMode = true (음성 입력)
-  //   - voiceConnected: true → false 전환 시 voiceMode = false (텍스트)
-  // ref 패턴으로 isListening/stopSTT stale closure 회피
+  // LiveKit 룸 종료 시 입력 모드 정리
+  //   - voiceConnected: true → false 전환 시 voiceMode = false (음성 의미 없음)
+  //
+  // ※ false → true (룸 입장) 시 voiceMode 자동 ON 은 의도적으로 제거함:
+  //    화면 공유 합류 모달 등 "보기만 하려고 입장" 케이스에서 텍스트 입력창이 사라져
+  //    혼란을 주는 문제. voiceMode 는 사용자가 + 메뉴에서 명시적으로 켜는 것으로 통일.
+  //    Space 키 PTT / 마이크 토글은 텍스트 모드에서도 동작하므로 음성 통화 자체엔 영향 X.
   const prevVoiceConnectedRef = useRef(voiceConnected);
   const isListeningRef = useRef(isListening);
   const stopSTTRef = useRef(stopSTT);
@@ -175,9 +178,7 @@ export default function ChatArea({
   useEffect(() => {
     const prev = prevVoiceConnectedRef.current;
     prevVoiceConnectedRef.current = voiceConnected;
-    if (!prev && voiceConnected) {
-      setVoiceMode(true);
-    } else if (prev && !voiceConnected) {
+    if (prev && !voiceConnected) {
       setVoiceMode(false);
       if (isListeningRef.current) stopSTTRef.current?.();
     }
