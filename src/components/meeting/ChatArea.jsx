@@ -6,6 +6,33 @@ import { useAuthStore } from '@/stores/authStore';
 import { AI_EMPLOYEES } from '@/stores/aiTeamStore';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { parseGoogleDocsUrl } from '@/lib/googleDocsUrl';
+import { Clock as ClockIcon } from 'lucide-react';
+
+// 회의 시작 카운트다운 — 큰 글씨 시:분:초 풀뷰 (채팅창 빈 영역에 표시)
+function formatCountdownLong(s) {
+  if (s == null || s < 0) return '';
+  const sec = s % 60;
+  const m = Math.floor(s / 60) % 60;
+  const h = Math.floor(s / 3600);
+  if (h > 0) return `${h}시간 ${m}분 ${sec}초`;
+  return `${m}분 ${sec}초`;
+}
+function PreMeetingCountdownView({ secondsLeft, threshold = 600 }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center gap-3 text-txt-secondary px-6">
+      <div className="w-14 h-14 rounded-full bg-brand-purple/10 flex items-center justify-center">
+        <ClockIcon size={28} className="text-brand-purple" strokeWidth={2} />
+      </div>
+      <p className="text-2xl md:text-3xl font-bold text-txt-primary tabular-nums tracking-tight">
+        {formatCountdownLong(secondsLeft)}
+      </p>
+      <p className="text-sm text-txt-muted text-center max-w-xs leading-relaxed">
+        회의 시작 <strong className="text-txt-secondary">{Math.floor(threshold / 60)}분 전</strong>부터 채팅이 활성화돼요.<br />
+        잠시만 기다려주세요.
+      </p>
+    </div>
+  );
+}
 
 export default function ChatArea({
   messages, onSend, disabled, aiThinking, onFileUpload, onImportUrl, autoIntervene = true, aiError = null,
@@ -16,6 +43,10 @@ export default function ChatArea({
   onVoiceToggleMute,
   // LiveKit MediaStream — 주입되면 STT 가 자체 getUserMedia 안 하고 이 스트림 그대로 분기 사용
   voiceLocalStream = null,
+  // 회의 시작 전 카운트다운 — { secondsLeft, threshold }
+  //   secondsLeft > threshold (10분 초과): 빈 메시지 영역에 큰 카운트다운 표시 + 입력 비활성
+  //   secondsLeft <= threshold (10분 이내): 평소처럼 채팅 가능 (헤더 작은 배지는 부모가 표시)
+  preMeetingCountdown = null,
 }) {
   const [input, setInput] = useState('');
   const [quotedMessage, setQuotedMessage] = useState(null);
@@ -181,13 +212,13 @@ export default function ChatArea({
     }
   }, [voiceMuted, voiceConnected, sttSupported, isListening, startSTT, stopSTT]);
 
-  // LiveKit 룸 종료 시 입력 모드 정리
-  //   - voiceConnected: true → false 전환 시 voiceMode = false (음성 의미 없음)
+  // LiveKit 룸 입퇴장 시 입력 모드 자동 동기화
+  //   - false → true (룸 입장)   : voiceMode = true  (음성 입력 UI 자동 ON)
+  //   - true  → false (룸 종료)  : voiceMode = false + STT 정리
   //
-  // ※ false → true (룸 입장) 시 voiceMode 자동 ON 은 의도적으로 제거함:
-  //    화면 공유 합류 모달 등 "보기만 하려고 입장" 케이스에서 텍스트 입력창이 사라져
-  //    혼란을 주는 문제. voiceMode 는 사용자가 + 메뉴에서 명시적으로 켜는 것으로 통일.
-  //    Space 키 PTT / 마이크 토글은 텍스트 모드에서도 동작하므로 음성 통화 자체엔 영향 X.
+  // ⚠️ 부작용 주의: 화면 공유 합류 모달 등 "보기만 하려고 입장" 케이스에서도
+  //    텍스트 입력창이 음성 모드로 바뀜. 사용자가 옵션 A 명시적으로 선택한 동작.
+  //    필요 시 LiveKit join 호출에 intent 플래그 추가하여 분기 가능.
   const prevVoiceConnectedRef = useRef(voiceConnected);
   const isListeningRef = useRef(isListening);
   const stopSTTRef = useRef(stopSTT);
@@ -196,7 +227,11 @@ export default function ChatArea({
   useEffect(() => {
     const prev = prevVoiceConnectedRef.current;
     prevVoiceConnectedRef.current = voiceConnected;
-    if (prev && !voiceConnected) {
+    if (!prev && voiceConnected) {
+      // 룸 입장 → 음성 입력 모드 자동 진입 (큰 마이크 UI 표시)
+      setVoiceMode(true);
+    } else if (prev && !voiceConnected) {
+      // 룸 종료 → 음성 모드 해제 + STT 정리
       setVoiceMode(false);
       if (isListeningRef.current) stopSTTRef.current?.();
     }
@@ -328,9 +363,17 @@ export default function ChatArea({
         className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-6 py-5 space-y-5 [overscroll-behavior:contain] [-webkit-overflow-scrolling:touch]"
       >
         {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-txt-muted text-sm">
-            첫 메시지를 보내 회의를 시작하세요
-          </div>
+          // 회의 시작 10분 초과 시 카운트다운 풀뷰 — 그 외엔 기존 안내문
+          preMeetingCountdown && preMeetingCountdown.secondsLeft > preMeetingCountdown.threshold ? (
+            <PreMeetingCountdownView
+              secondsLeft={preMeetingCountdown.secondsLeft}
+              threshold={preMeetingCountdown.threshold}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-txt-muted text-sm">
+              첫 메시지를 보내 회의를 시작하세요
+            </div>
+          )
         ) : (
           messages.map((m) => (
             // 시스템 공지(입장/퇴장 등) — 중앙 정렬 배너 + 문맥 아이콘
@@ -636,7 +679,11 @@ export default function ChatArea({
                     });
                   }
                 }}
-                placeholder="의견을 입력하세요..."
+                placeholder={
+                  preMeetingCountdown && preMeetingCountdown.secondsLeft > preMeetingCountdown.threshold
+                    ? `회의 시작 ${Math.floor(preMeetingCountdown.threshold / 60)}분 전부터 메시지를 보낼 수 있어요`
+                    : '의견을 입력하세요...'
+                }
                 rows={1}
                 disabled={disabled}
                 className="flex-1 min-w-0 bg-transparent text-sm text-txt-primary placeholder:text-txt-muted resize-none focus:outline-none py-2 max-h-32"
