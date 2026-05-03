@@ -202,6 +202,12 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
     // 직접 요청 감지 ("~해줘", "~찾아줘" 등)
     const isDirectRequest = MILO_INTERVENTION_TRIGGERS.REQUEST?.test(afterQuote);
 
+    // 명시적 다중 호출 여부 — @멘션 / 직접요청 시 사용자가 의도한 호출이므로
+    //   1. specialists cap 을 2명으로 허용 (자동 개입은 1명만)
+    //   2. Phase 1 종합 단계 활성화 (자동 개입은 1명이므로 종합 자체가 불가능)
+    //   3. Milo 코멘트 노출 (자동 개입에서 전문가가 응답할 땐 Milo 침묵)
+    const isExplicitMultiCall = mentioned || directEmployeeMention || isDirectRequest;
+
     // 자동 개입 OFF → **명시적 @멘션만** 허용
     // (isDirectRequest("해줘/어떤/왜..." 등)는 너무 광범위해서 OFF 의도에 반함 — 제외)
     if (!autoIntervene && !mentioned && !directEmployeeMention) {
@@ -424,6 +430,15 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           lastInterventionRef.current = performance.now();
           interventionCountRef.current += 1;
           lastRespondingEmployeeRef.current = result.ai_employee || 'milo';
+
+          // 자동 개입 1 응답 정책:
+          //   Milo가 전문가에게 위임한 경우 (selected_specialists 있음) 자동 개입에서는
+          //   Milo 자신의 코멘트는 침묵 → 전문가 1명 응답만 노출 → 1 발화 = 1 응답.
+          //   명시 호출(@멘션·요청)은 사용자 의도 존중하여 Milo 코멘트도 함께 노출.
+          const miloDelegatedToSpec = (result?.selected_specialists || [])
+            .some((id) => id && id !== 'milo' && AI_EMPLOYEES.find((e) => e.id === id));
+          const suppressMiloAutoIntervene = !isExplicitMultiCall && miloDelegatedToSpec;
+
           // 세션 저장
           if (meetingId) saveSessionState(meetingId, {
             compressedContext: compressedContextRef.current,
@@ -435,10 +450,19 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
           if (result._harnessError) {
             onError?.({ message: result.response_text, type: result._harnessError, employeeId: result.ai_employee });
           }
-          try {
-            onRespond?.(result);
-          } catch (respondErr) {
-            console.error('[useMilo] Milo onRespond error:', respondErr);
+          if (!suppressMiloAutoIntervene) {
+            try {
+              onRespond?.(result);
+            } catch (respondErr) {
+              console.error('[useMilo] Milo onRespond error:', respondErr);
+            }
+          } else {
+            logOrchestrationStep({
+              meetingId,
+              step: 'conductor_silent_auto_intervene',
+              employees: (result?.selected_specialists || []).slice(0, 1),
+              orchestrationVersion: 'parallel_v1',
+            });
           }
         }
 
@@ -451,7 +475,9 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
             const miloSelected = (result?.selected_specialists || [])
               .filter((id) => id && id !== 'milo' && AI_EMPLOYEES.find((e) => e.id === id));
             if (miloSelected.length > 0) {
-              specialists = miloSelected.slice(0, 2); // Milo가 선별한 전문가
+              // 자동 개입: 1명 강제 / 명시 호출(@멘션·요청): 최대 2명
+              const cap = isExplicitMultiCall ? 2 : 1;
+              specialists = miloSelected.slice(0, cap);
             } else if (mentioned || directEmployeeMention) {
               // @Milo 호출인데 선별이 없으면 키워드 기반 fallback (최대 1명)
               specialists = routedEmployees.filter((id) => id !== 'milo').slice(0, 1);
@@ -610,6 +636,9 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
                   specResult.milo_synthesis_id = synthesisGroupId;
                   lastRespondingEmployeeRef.current = specId;
                   successfulSpecs.push({ specId, response_text: specResult.response_text, employeeName: emp?.nameKo || specId });
+                  // 전문가 응답도 cap 카운트에 포함 (이전엔 Milo 응답만 카운트되어 어젠다당 무제한 응답 가능했음)
+                  // 명시 호출(@멘션·요청)은 useEffect 상단의 cap 우회 if 가 이미 막아주므로 안전.
+                  interventionCountRef.current += 1;
                   try {
                     onRespond?.(specResult);
                   } catch (respondErr) {
@@ -629,8 +658,11 @@ export function useMilo({ messages, agenda, onRespond, onThinking, onError, meet
               // 효과: 전문가들의 답을 통합한 결론 한줄평을 Milo가 마지막에 추가
               // ════════════════════════════════════════════════════════════════
               const SYNTHESIZE_ENABLED = import.meta.env.VITE_PHASE1_SYNTHESIZE !== 'false';
+              // 자동 개입에서는 specialists 1명 강제이므로 successfulSpecs.length>=2 불가능 (이중 안전).
+              // 명시 호출(@멘션·요청)에서만 종합 의미 있음 — 가독성·안전 가드.
+              const allowSynthesis = SYNTHESIZE_ENABLED && isExplicitMultiCall;
 
-              if (SYNTHESIZE_ENABLED && successfulSpecs.length >= 2 && CLAUDE_API_ENABLED) {
+              if (allowSynthesis && successfulSpecs.length >= 2 && CLAUDE_API_ENABLED) {
                 // 사용자 개입 재확인
                 const currentMsgs3 = messagesRef.current;
                 const synthesizeInterrupted = currentMsgs3.length > msgCountAtStart &&
@@ -727,6 +759,8 @@ ${successfulSpecs.map((s) => `- @${s.employeeName}: ${(s.response_text || '').re
                       });
                       onThinking?.(false, null);
                       lastRespondingEmployeeRef.current = 'milo';
+                      // 스트리밍 종합 응답도 cap 카운트에 포함 (DB INSERT는 milo-stream Edge Function이 직접 처리)
+                      interventionCountRef.current += 1;
                       // milo-stream Edge Function이 DB INSERT + Broadcast 모두 처리 → 추가 onRespond 불필요
                     } catch (streamErr) {
                       onThinking?.(false, null);
@@ -799,6 +833,8 @@ ${successfulSpecs.map((s) => `- @${s.employeeName}: ${(s.response_text || '').re
                       synthResult.orchestration_version = 'parallel_synthesize_v1';
                       synthResult.milo_synthesis_id = synthesisGroupId;
                       lastRespondingEmployeeRef.current = 'milo';
+                      // 종합 응답도 cap 카운트에 포함 — 어젠다당 진짜 N회 제한 작동
+                      interventionCountRef.current += 1;
                       try {
                         onRespond?.(synthResult);
                       } catch (err) {
