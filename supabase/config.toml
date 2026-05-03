@@ -96,3 +96,8 @@ verify_jwt = false
 # 구글 캘린더 이벤트 삭제
 [functions.gcal-delete-event]
 verify_jwt = false
+
+# Milo 첫 인사 메시지 (회의 active 전환 시 1회만 INSERT)
+# 다중 클라 race 차단: SELECT pre-check + DB unique index (migration 050)
+[functions.milo-greeting]
+verify_jwt = false
