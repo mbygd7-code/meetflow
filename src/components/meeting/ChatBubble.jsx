@@ -29,55 +29,10 @@ const REACTIONS = [
   { key: 'heart', icon: Heart, label: '하트' },
 ];
 
-// AI 메시지에서 선택 가능한 액션 항목 추출
-// 다양한 형태의 번호/리스트를 모두 감지
-function extractActionItems(content) {
-  if (!content) return [];
-
-  // 질문/선택 요청이 있는지 먼저 확인
-  const hasQuestion = /할까요|하시겠|선택해|골라|확인해|진행할|어느|어떤.*할|중\s.*선택|명시되면|알려주|우선순위/i.test(content);
-  if (!hasQuestion) return [];
-
-  const items = [];
-  let match;
-
-  // 순서대로 시도 — 첫 번째 매칭되는 패턴 사용
-  const patterns = [
-    // "N단계: 제목"
-    { re: /(\d+단계)\s*[:：]\s*(.+?)(?=\n|$)/g, fmt: (m) => ({ label: m[1], title: m[2] }) },
-    // "① 제목" "② 제목" (원형 번호)
-    { re: /([①②③④⑤⑥⑦⑧⑨⑩])\s*(.+?)(?=\n|$)/g, fmt: (m) => ({ label: m[1], title: m[2] }) },
-    // "N) 제목" or "(N) 제목"
-    { re: /\(?(\d+)\)\s*(.+?)(?=\n|$)/g, fmt: (m) => ({ label: `${m[1]}`, title: m[2] }) },
-    // "N. **제목**: 설명" or "N. 제목: 설명"
-    { re: /^\s*(\d+)\.\s+\**([^*:\n]+?)\**\s*[:：]/gm, fmt: (m) => ({ label: `${m[1]}`, title: m[2] }) },
-    // "N. 제목" (줄 시작, 콜론 없이)
-    { re: /^\s*(\d+)\.\s+\**(.+?)\**\s*(?=\n|$)/gm, fmt: (m) => ({ label: `${m[1]}`, title: m[2] }) },
-    // "- 제목" 불릿 리스트 (최소 2개)
-    { re: /^\s*[-•]\s+(.+?)(?=\n|$)/gm, fmt: (m, i) => ({ label: `${i + 1}`, title: m[1] }) },
-  ];
-
-  for (const { re, fmt } of patterns) {
-    re.lastIndex = 0;
-    const found = [];
-    let idx = 0;
-    while ((match = re.exec(content)) !== null) {
-      const item = fmt(match, idx);
-      const title = item.title.trim().replace(/\*\*/g, '').replace(/^\s*[-•]\s*/, '');
-      // 너무 긴 설명이나 빈 항목 제외
-      if (title && title.length > 1 && title.length < 60) {
-        found.push({ ...item, title });
-      }
-      idx++;
-    }
-    if (found.length >= 2) {
-      items.push(...found.slice(0, 6)); // 최대 6개
-      break;
-    }
-  }
-
-  return items;
-}
+// 액션 버튼은 이제 message.metadata.actions (AI가 명시한 메타데이터) 기반으로만 렌더됨.
+// 기존 본문 텍스트에서 자동으로 번호/리스트를 추출하던 extractActionItems() 함수는 제거됨.
+// 이유: 모든 번호 리스트(1단계/2단계/① 등)를 선택지로 오인하여 노이즈 발생, ai_type 무시.
+// 새 정책: milo-analyze 도구의 actions 필드에 AI가 명시적으로 채운 경우만 표시.
 
 export default function ChatBubble({ message, currentUserId, onQuote, onReact, onActionClick, onMention, reactions = {}, readonly = false }) {
   const [copied, setCopied] = useState(false);
@@ -427,25 +382,38 @@ export default function ChatBubble({ message, currentUserId, onQuote, onReact, o
               );
             })()}
           </div>
-          {/* AI 액션 버튼 (단계 선택) */}
+          {/* AI 액션 버튼 — message.metadata.actions (AI가 명시한 메타데이터)만 표시
+              kind 별 시각 구분: choice(기본) / confirm(진하게) / follow_up(옅게)
+              클릭 시 action.value 를 사용자 메시지로 전송 (AI가 의도한 자연스러운 문장) */}
           {isAi && !readonly && (() => {
-            const actions = extractActionItems(displayContent);
-            if (actions.length === 0) return null;
+            const actions = Array.isArray(message.metadata?.actions) ? message.metadata.actions : [];
+            // 1개 이하면 버튼 의미 없음 — 안 표시
+            if (actions.length < 2) return null;
             return (
               <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {actions.map((action, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onActionClick?.(`${action.title} 선택합니다. 바로 진행해주세요`);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-brand-purple/30 bg-white/50 text-txt-primary hover:bg-white/70 hover:border-brand-purple/50 transition-all shadow-sm backdrop-blur-sm"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-brand-purple text-white flex items-center justify-center text-[10px] font-bold shrink-0">{i + 1}</span>
-                    {action.title.length > 20 ? action.title.slice(0, 20) + '…' : action.title}
-                  </button>
-                ))}
+                {actions.map((action, i) => {
+                  const kindClass =
+                    action.kind === 'confirm'
+                      ? 'border-brand-purple/50 bg-brand-purple/15 font-bold'
+                      : action.kind === 'follow_up'
+                        ? 'border-brand-purple/20 bg-white/30 opacity-90'
+                        : 'border-brand-purple/30 bg-white/50';
+                  const label = (action.label || '').toString();
+                  return (
+                    <button
+                      key={i}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onActionClick?.(action.value);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${kindClass} text-txt-primary hover:bg-white/70 hover:border-brand-purple/60 transition-all shadow-sm backdrop-blur-sm`}
+                      title={action.value}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-brand-purple text-white flex items-center justify-center text-[10px] font-bold shrink-0">{i + 1}</span>
+                      {label.length > 24 ? label.slice(0, 24) + '…' : label}
+                    </button>
+                  );
+                })}
               </div>
             );
           })()}

@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2, Loader2 } from 'lucide-react';
+import { X, Square, Sparkles, Zap, ZapOff, FileText, FolderOpen, ChevronLeft, ChevronRight, AlertTriangle, Minus, Maximize2, GripVertical, Search, ZoomIn, ZoomOut, Pencil, Download, LogOut, ChevronsLeftRight, Menu, Trash2, Loader2, Clock } from 'lucide-react';
 import { getFileTypeBadge, getFileExt } from '@/lib/fileTypeBadge';
 import { clearSessionState } from '@/lib/harness';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +35,26 @@ import { useLiveKitVoice } from '@/hooks/useLiveKitVoice';
 import { Document as PdfDocument, Page as PdfPage } from 'react-pdf';
 import { getSourceMeta } from '@/lib/googleDocsUrl';
 import { embeddableUrl, getHostnameForDisplay } from '@/lib/embeddableUrl';
+
+// ── 회의 시작 전 카운트다운 포맷 헬퍼 ──
+//   short: 헤더 작은 배지용 — "5분", "3시간 20분", "45초"
+//   long: 채팅창 큰 카운트다운용 — "9분 30초", "1시간 5분 20초"
+function formatRemainingShort(s) {
+  if (s == null || s < 0) return '';
+  if (s < 60) return `${s}초`;
+  if (s < 3600) return `${Math.floor(s / 60)}분`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+}
+function formatRemainingLong(s) {
+  if (s == null || s < 0) return '';
+  const sec = s % 60;
+  const m = Math.floor(s / 60) % 60;
+  const h = Math.floor(s / 3600);
+  if (h > 0) return `${h}시간 ${m}분 ${sec}초`;
+  return `${m}분 ${sec}초`;
+}
 
 // ── 파일 썸네일 카드 (갤러리 스타일 — 이미지 유동 / 문서 고정) ──
 // canDelete=true 이면 우상단에 삭제(X) 버튼 노출 — onDelete 콜백은 confirm 후 호출됨.
@@ -1851,7 +1871,7 @@ function DocumentPanel({
 export default function MeetingRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getById, endMeeting } = useMeeting();
+  const { getById, endMeeting, startMeeting } = useMeeting();
   const setActiveMeetingId = useMeetingStore((s) => s.setActiveMeetingId);
   const setSummaryGeneratingId = useMeetingStore((s) => s.setSummaryGeneratingId);
   const addToast = useToastStore((s) => s.addToast);
@@ -1863,6 +1883,39 @@ export default function MeetingRoom() {
   const isCreator = !!(meeting?.created_by && user?.id && meeting.created_by === user.id);
   // 자동개입 토글 권한 — 회의 요청자(생성자) 또는 관리자만 제어 가능
   const canToggleAutoIntervene = isCreator || user?.role === 'admin';
+
+  // ── 회의 시간 전 처리 (sceduled_at 기반) ──
+  // 1초 간격으로 now 갱신 → 카운트다운/모달/게이트 모두 자동 업데이트.
+  // 회의가 active/completed 인 경우엔 useless 하지만 1초 setInterval은 부담 적음.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const PRE_MEETING_CHAT_THRESHOLD_S = 600; // 10분
+  const scheduledAtMs = meeting?.scheduled_at ? new Date(meeting.scheduled_at).getTime() : null;
+  const secondsToScheduled = scheduledAtMs
+    ? Math.max(0, Math.floor((scheduledAtMs - now) / 1000))
+    : null;
+  // 회의 시간 전 상태 — 예정(scheduled) 이고 시작 시각까지 시간이 남아 있음
+  const isPreMeeting = meeting?.status === 'scheduled'
+    && secondsToScheduled !== null
+    && secondsToScheduled > 0;
+  const chatBlockedByPreMeeting = isPreMeeting && secondsToScheduled > PRE_MEETING_CHAT_THRESHOLD_S;
+  const showHeaderCountdown = isPreMeeting && secondsToScheduled <= PRE_MEETING_CHAT_THRESHOLD_S;
+
+  // 진입 시 한 번만 모달 표시 — useRef 로 latch
+  const [preMeetingModal, setPreMeetingModal] = useState(null); // 'creator' | 'attendee' | null
+  const preMeetingModalShownRef = useRef(false);
+  useEffect(() => {
+    if (preMeetingModalShownRef.current) return;
+    if (!meeting || meeting.status !== 'scheduled') return;
+    if (!scheduledAtMs) return;
+    if (secondsToScheduled === null || secondsToScheduled <= 0) return;
+    preMeetingModalShownRef.current = true;
+    setPreMeetingModal(isCreator ? 'creator' : 'attendee');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meeting?.id, meeting?.status, scheduledAtMs, isCreator]);
   const [activeAgendaId, setActiveAgendaId] = useState(null);
   const [aiThinking, setAiThinking] = useState(null);
   const [polls, setPolls] = useState([]);
@@ -2026,15 +2079,28 @@ export default function MeetingRoom() {
     setShareInvite(null);
   }, []);
 
-  // ── milo-analyze warmup ping ──
-  // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 timeout 으로
-  // 실패하며 브라우저에 CORS 에러로 보임. 회의방 진입 즉시 ping 보내 함수 깨움.
+  // ── Edge Function warmup ping (콜드스타트 회피) ──
+  // Edge Function 이 일정 시간 호출 없으면 cold start 발생 → 첫 AI 호출이 0.5~1.5초 지연.
+  // 회의방 진입 즉시 + 5분마다 ping 보내 함수를 warm 상태로 유지.
+  // milo-analyze 와 milo-stream 모두 ping (Phase 1.5 종합 응답에 사용).
   // 응답 기다리지 않음 (fire-and-forget). 실패해도 무시 (실제 AI 호출 시 retry 함).
   useEffect(() => {
     if (!id) return;
     if (!import.meta.env.VITE_SUPABASE_URL) return;
-    supabase.functions.invoke('milo-analyze', { body: { ping: true } })
-      .catch(() => { /* 무시 */ });
+
+    const pingAll = () => {
+      supabase.functions.invoke('milo-analyze', { body: { ping: true } })
+        .catch(() => { /* 무시 */ });
+      // milo-stream 은 GET ping 도 OK — body 무시하고 즉시 반환되도록 설계됨
+      supabase.functions.invoke('milo-stream', { body: { ping: true } })
+        .catch(() => { /* 무시 */ });
+    };
+
+    // 즉시 1회
+    pingAll();
+    // 5분마다 정기 ping (Edge Function warm 유지)
+    const intervalId = setInterval(pingAll, 5 * 60 * 1000);
+    return () => clearInterval(intervalId);
   }, [id]);
 
   // 음성 참여 안내 모달 — 첫 참여 시 1회 (다시 안 보기 옵션)
@@ -2151,6 +2217,19 @@ export default function MeetingRoom() {
         if (t < cutoff) sentResponseHashesRef.current.delete(k);
       }
     }
+    // ── AI가 명시한 actions 메타데이터 검증 + 영속화 ──
+    // 본문 자동 추출 폐지 → AI가 milo-analyze 도구의 actions 필드에 명시한 경우만 표시.
+    // 보안: label 30자, value 200자, kind enum 검증. 1개짜리는 의미 없으므로 스킵.
+    const validActions = Array.isArray(result.actions)
+      ? result.actions
+          .filter((a) =>
+            a && typeof a.label === 'string' && a.label.length > 0 && a.label.length <= 30 &&
+            typeof a.value === 'string' && a.value.length > 0 && a.value.length <= 200 &&
+            ['choice', 'confirm', 'follow_up'].includes(a.kind)
+          )
+          .slice(0, 4)
+      : [];
+    const aiActionsMetadata = validActions.length >= 2 ? { actions: validActions } : null;
     try {
       await sendMessage(result.response_text, {
         agendaId: currentAgenda?.id, isAi: true, aiType: result.ai_type,
@@ -2159,6 +2238,7 @@ export default function MeetingRoom() {
         searchMode: result.search_mode || null,
         orchestrationVersion: result.orchestration_version || 'parallel_v1',
         miloSynthesisId: result.milo_synthesis_id || null,
+        metadata: aiActionsMetadata,  // ← 신규: AI 명시 액션 버튼 메타
       });
     } catch (err) {
       // sendMessage 실패(Auth/RLS/네트워크) 시 사용자에게 에러 토스트 표시
@@ -2180,7 +2260,8 @@ export default function MeetingRoom() {
     onThinking: handleThinking, onError: handleAiError,
     meetingId: id, alwaysRespond: isAiOnlyMeeting,
     // 자료 풀스크린 뷰어가 열려있으면 자동 개입 중단 — @호출 시에만 응답
-    autoIntervene: aiAutoIntervene && !materialViewerActive,
+    // 회의 시간 전엔 AI 개입 자체를 차단 (Milo 인사 effect는 이미 status==='active' 게이트라 추가 차단 불필요)
+    autoIntervene: aiAutoIntervene && !materialViewerActive && !isPreMeeting,
   });
 
   // AI 인사 — meeting 객체/messages 배열 ref가 아닌 안정적 값(id/status/length)만 deps로
@@ -2219,7 +2300,12 @@ export default function MeetingRoom() {
         } else {
           greeting = `안녕하세요, ${userName}님! 킨더보드 회의 진행자 밀로입니다. 오늘 회의 주제나 논의하고 싶은 안건이 있으시면 알려주세요.${offGuide}`;
         }
-        sendMessage(greeting, { agendaId: mtg?.agendas?.[0]?.id, isAi: true, aiType: 'nudge', aiEmployee: 'milo' });
+        // Edge Function 'milo-greeting' 으로 위임 — 서버측 SELECT pre-check + DB unique index 로
+        // 다중 클라 race 100% 차단. 위 greeting 변수는 더 이상 사용 안 함 (서버가 자체 빌드).
+        // 클라이언트는 단순 trigger 역할만.
+        supabase.functions.invoke('milo-greeting', { body: { meetingId: id } }).catch((e) => {
+          console.warn('[milo-greeting] invoke failed (silent):', e?.message || e);
+        });
       }, 2000);
       return () => clearTimeout(checkTimer);
     }
@@ -2460,6 +2546,80 @@ export default function MeetingRoom() {
         document.body
       )}
 
+      {/* ═══ 회의 시작 시간 전 진입 모달 ═══
+          - creator: 일정 시간 전 진입 → "바로 시작" / "대기"
+          - attendee: 일정 시간 전 진입 → 안내 + "확인"
+          한 번만 표시 (preMeetingModalShownRef 로 latch). */}
+      {preMeetingModal === 'creator' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/10 backdrop-blur-sm flex items-center justify-center">
+          <div className="relative bg-bg-secondary border border-border-subtle rounded-xl p-8 max-w-sm mx-4 text-center shadow-lg">
+            <button
+              onClick={() => setPreMeetingModal(null)}
+              className="absolute top-3 right-3 p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
+              aria-label="닫기"
+            >
+              <X size={18} />
+            </button>
+            <div className="w-14 h-14 rounded-full bg-gradient-brand shadow-glow flex items-center justify-center mx-auto mb-4">
+              <Clock size={24} className="text-white" strokeWidth={2} />
+            </div>
+            <h3 className="text-lg font-semibold text-txt-primary mb-2">회의 시작 시간 전입니다</h3>
+            <p className="text-sm text-txt-secondary mb-6 leading-relaxed">
+              예정된 시작까지 <strong className="text-brand-purple">{formatRemainingShort(secondsToScheduled)}</strong> 남았습니다.<br />
+              지금 바로 회의를 시작하시겠어요?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPreMeetingModal(null)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border-default text-sm font-medium text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
+              >
+                대기
+              </button>
+              <button
+                onClick={async () => {
+                  setPreMeetingModal(null);
+                  try { await startMeeting(id); }
+                  catch (e) { console.warn('[MeetingRoom] startMeeting failed:', e?.message || e); }
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-brand-purple text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                바로 시작
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {preMeetingModal === 'attendee' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/10 backdrop-blur-sm flex items-center justify-center">
+          <div className="relative bg-bg-secondary border border-border-subtle rounded-xl p-8 max-w-sm mx-4 text-center shadow-lg">
+            <button
+              onClick={() => setPreMeetingModal(null)}
+              className="absolute top-3 right-3 p-1.5 text-txt-muted hover:text-txt-primary hover:bg-bg-tertiary rounded-md transition-colors"
+              aria-label="닫기"
+            >
+              <X size={18} />
+            </button>
+            <div className="w-14 h-14 rounded-full bg-status-warning/15 flex items-center justify-center mx-auto mb-4">
+              <Clock size={24} className="text-status-warning" strokeWidth={2} />
+            </div>
+            <h3 className="text-lg font-semibold text-txt-primary mb-2">아직 회의 시작 전이에요</h3>
+            <p className="text-sm text-txt-secondary mb-6 leading-relaxed">
+              예정된 시간까지 <strong className="text-status-warning">{formatRemainingShort(secondsToScheduled)}</strong> 남았습니다.<br />
+              회의방에서 대기하시거나, 시간 맞춰 다시 들어오세요.
+            </p>
+            <button
+              onClick={() => setPreMeetingModal(null)}
+              className="w-full px-4 py-2.5 rounded-lg bg-brand-purple text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              확인
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* ═══ 헤더 ═══ — 한 줄. 모바일은 모든 액션을 32px 아이콘 버튼으로 통일해 컴팩트하게 */}
       <div className="flex items-center justify-between px-2.5 md:px-6 py-2 md:py-4 gap-2 md:gap-3 border-b border-border-divider">
         {/* 좌측: 메뉴/닫기 + 제목 + 상태 dot */}
@@ -2497,6 +2657,17 @@ export default function MeetingRoom() {
                 <span className="text-[11px] font-semibold text-status-success">진행 중</span>
               </span>
             </>
+          )}
+          {/* 회의 시작 시간이 10분 이내로 남은 경우 — 작은 카운트다운 배지
+              (10분 초과 시엔 헤더에 표시 안 하고 채팅창 큰 카운트다운만 노출) */}
+          {showHeaderCountdown && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-warning/15 text-status-warning text-[10px] md:text-[11px] font-semibold shrink-0 md:ml-4"
+              title={`예정 시작 시간까지 ${formatRemainingShort(secondsToScheduled)} 남음`}
+            >
+              <Clock size={11} strokeWidth={2.4} />
+              <span className="tabular-nums">{formatRemainingShort(secondsToScheduled)} 후 시작</span>
+            </span>
           )}
           {/* AI 자동 개입 토글 (데스크톱) — 진행중 우측에 충분한 간격 */}
           <div className="hidden md:flex items-center gap-2 ml-6 shrink-0">
@@ -2714,7 +2885,8 @@ export default function MeetingRoom() {
               <ChatArea
                 messages={messages}
                 onSend={handleSend}
-                disabled={meeting.status === 'completed'}
+                disabled={meeting.status === 'completed' || chatBlockedByPreMeeting}
+                preMeetingCountdown={isPreMeeting ? { secondsLeft: secondsToScheduled, threshold: PRE_MEETING_CHAT_THRESHOLD_S } : null}
                 aiThinking={aiThinking}
                 onFileUpload={handleFileUpload}
                 onImportUrl={handleImportUrl}
