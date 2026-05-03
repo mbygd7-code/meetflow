@@ -26,8 +26,18 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
 CREATE INDEX IF NOT EXISTS idx_notifications_user_recent
   ON notifications(user_id, created_at DESC);
 
--- ═══ Realtime 활성화 ═══
-ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+-- ═══ Realtime 활성화 (멱등) ═══
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+     WHERE pubname = 'supabase_realtime'
+       AND schemaname = 'public'
+       AND tablename = 'notifications'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+  END IF;
+END $$;
 
 -- ═══ RLS — 본인 알림만 ═══
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
