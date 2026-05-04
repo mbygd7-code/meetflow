@@ -16,6 +16,7 @@ const PAGE_TITLES = {
   '/members': '멤버·태스크',
   '/summaries': '회의록',
   '/notifications': '알림',
+  '/me/evaluation': '내 평가',
   '/settings': '설정',
   '/admin': '관리자 대시보드',
 };

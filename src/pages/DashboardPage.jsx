@@ -1,10 +1,11 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
   Zap, CircleDot, MessageSquare, TrendingUp,
 } from 'lucide-react';
+import { gradeToStyle } from '@/utils/gradeUtils';
 import { Avatar, Button, SectionPanel } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -22,11 +23,33 @@ import { DASHBOARD_LIMITS, URGENT_DUE_DAYS } from '@/lib/taskConstants';
 
 export default function DashboardPage() {
   const { pageTitle } = useOutletContext() || {};
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { meetings } = useMeetingStore();
   const { tasks, updateTask } = useTaskStore();
   const addToast = useToastStore((s) => s.addToast);
   const { handleCancel: handleMeetingCancel, handleJoin: handleMeetingJoin, declinedIds } = useMeetingCancel();
+
+  // ── 내 최신 AI 평가 (등급) ── RLS: users read own evaluations
+  const [myEval, setMyEval] = useState(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('employee_evaluations')
+          .select('grade, overall_score, month')
+          .eq('user_id', user.id)
+          .order('month', { ascending: false })
+          .limit(1);
+        if (!cancelled && data && data.length > 0) setMyEval(data[0]);
+      } catch (err) {
+        console.warn('[DashboardPage] eval load failed:', err?.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   // 태스크 상세 모달 상태 (id만 저장 → Realtime 업데이트 시 최신 객체 조회)
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -201,17 +224,53 @@ export default function DashboardPage() {
     <div className="flex gap-3 p-2 md:p-3 lg:p-4 mx-auto mr-1 mb-1 md:mr-2 md:mb-2 lg:mr-3 lg:mb-3 min-h-full lg:h-full">
       {/* ═══ 메인 콘텐츠 ═══ */}
       <div className="flex-1 min-w-0 bg-[var(--bg-content)] rounded-[12px] p-2 md:p-3 lg:p-4 lg:overflow-y-auto scrollbar-hide space-y-3">
-        {/* 인사말 + 하루 요약 */}
-        <div>
-          {pageTitle && (
-            <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
-          )}
-          <h1 className="text-[26px] font-semibold text-txt-primary">
-            안녕하세요, {user?.name || '사용자'}님 👋
-          </h1>
-          <p className="text-sm text-txt-secondary mt-0.5">
-            {today} · <span className="text-txt-primary font-medium">{summarySentence}</span>
-          </p>
+        {/* 인사말 + 하루 요약 + 내 평가 등급 */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {pageTitle && (
+              <h2 className="text-2xl font-semibold text-txt-muted uppercase tracking-wider mb-1">{pageTitle}</h2>
+            )}
+            <h1 className="text-[26px] font-semibold text-txt-primary">
+              안녕하세요, {user?.name || '사용자'}님 👋
+            </h1>
+            <p className="text-sm text-txt-secondary mt-0.5">
+              {today} · <span className="text-txt-primary font-medium">{summarySentence}</span>
+            </p>
+          </div>
+
+          {/* 내 평가 등급 배지 — 클릭 시 /me/evaluation 으로 */}
+          <button
+            type="button"
+            onClick={() => navigate('/me/evaluation')}
+            className="shrink-0 group flex items-center gap-3 pl-2 pr-3 py-2 rounded-xl border border-border-subtle hover:border-brand-purple/40 hover:bg-bg-tertiary/40 transition-colors"
+            title="내 평가 보기"
+            aria-label="내 평가 보기"
+          >
+            {(() => {
+              const gs = myEval ? gradeToStyle(myEval.grade) : null;
+              return (
+                <span
+                  className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                    gs ? gs.bg : 'bg-bg-tertiary'
+                  }`}
+                >
+                  <span className={`text-xl font-extrabold leading-none ${gs ? gs.color : 'text-txt-muted'}`}>
+                    {myEval?.grade || '—'}
+                  </span>
+                </span>
+              );
+            })()}
+            <span className="hidden sm:flex flex-col items-start">
+              <span className="text-[10px] text-txt-muted uppercase tracking-wider flex items-center gap-1">
+                <Sparkles size={10} className="text-brand-purple" />
+                내 평가
+              </span>
+              <span className="text-xs font-semibold text-txt-primary">
+                {myEval ? `${Math.round(myEval.overall_score || 0)}점` : '평가 대기 중'}
+              </span>
+            </span>
+            <ArrowRight size={14} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
+          </button>
         </div>
 
         {/* ═══ 긴급 업무 ═══ */}
