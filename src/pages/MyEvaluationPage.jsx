@@ -308,9 +308,9 @@ export default function MyEvaluationPage() {
               </h2>
               <ul className="space-y-2">
                 {strengths.map((s, i) => (
-                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2">
-                    <span className="text-status-success mt-1 shrink-0">●</span>
-                    <span>{s}</span>
+                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-status-success shrink-0 mt-[9px]" aria-hidden="true" />
+                    <span className="flex-1">{s}</span>
                   </li>
                 ))}
               </ul>
@@ -323,9 +323,9 @@ export default function MyEvaluationPage() {
               </h2>
               <ul className="space-y-2">
                 {improvements.map((s, i) => (
-                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2">
-                    <span className="text-brand-orange mt-1 shrink-0">●</span>
-                    <span>{s}</span>
+                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0 mt-[9px]" aria-hidden="true" />
+                    <span className="flex-1">{s}</span>
                   </li>
                 ))}
               </ul>

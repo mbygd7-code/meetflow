@@ -146,9 +146,9 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
               </h5>
               <ul className="space-y-1.5">
                 {strengths.map((s, i) => (
-                  <li key={i} className="text-sm text-txt-secondary flex items-start gap-2">
-                    <span className="text-status-success mt-0.5">•</span>
-                    <span>{s}</span>
+                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-status-success shrink-0 mt-[8px]" aria-hidden="true" />
+                    <span className="flex-1">{s}</span>
                   </li>
                 ))}
               </ul>
@@ -161,9 +161,9 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
               </h5>
               <ul className="space-y-1.5">
                 {improvements.map((s, i) => (
-                  <li key={i} className="text-sm text-txt-secondary flex items-start gap-2">
-                    <span className="text-brand-orange mt-0.5">•</span>
-                    <span>{s}</span>
+                  <li key={i} className="text-sm text-txt-secondary leading-relaxed flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0 mt-[8px]" aria-hidden="true" />
+                    <span className="flex-1">{s}</span>
                   </li>
                 ))}
               </ul>
