@@ -34,7 +34,8 @@
       "Bash(node -e \"try { require\\('typescript'\\); } catch\\(e\\){ console.log\\('no ts'\\); }\")",
       "Bash(timeout 60 npx deno-bin@2.0.0 check supabase/functions/milo-analyze/index.ts)",
       "Bash(awk 'NR>=11 && NR<=100' \"D:/claud project/meetflow/supabase/functions/milo-analyze/index.ts\")",
-      "Bash(grep -n '\\\\$')"
+      "Bash(grep -n '\\\\$')",
+      "Bash(timeout 60 npx deno-bin@2.0.0 check supabase/functions/generate-summary/index.ts)"
     ]
   }
 }

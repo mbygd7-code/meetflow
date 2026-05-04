@@ -356,17 +356,22 @@ export function useMeeting() {
         }
 
         // Notion 동기화 — 회의록 자동 아카이브
+        // Edge Function 은 { action, payload } 형식 기대
         try {
-          await supabase.functions.invoke('notion-sync', {
+          const { error: notionErr } = await supabase.functions.invoke('notion-sync', {
             body: {
-              meeting_id: id,
-              title: meeting?.title,
-              summary,
+              action: 'archive_meeting',
+              payload: { meeting_id: id },
             },
           });
-          console.log('[endMeeting] Notion 동기화 완료');
+          if (notionErr) {
+            // NOTION_API_KEY 미설정 등으로 실패해도 회의 종료 흐름엔 영향 없음
+            console.warn('[endMeeting] Notion 동기화 실패:', notionErr.message || notionErr);
+          } else {
+            console.log('[endMeeting] Notion 동기화 완료');
+          }
         } catch (err) {
-          console.warn('[endMeeting] Notion 동기화 실패:', err);
+          console.warn('[endMeeting] Notion 동기화 예외:', err);
         }
       }
 
