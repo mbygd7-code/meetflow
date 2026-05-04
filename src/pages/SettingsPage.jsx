@@ -182,7 +182,15 @@ function SharedKnowledgeCard() {
                     {statusBadge}
                     <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); store.removeSharedKnowledgeFile(f.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const ok = window.confirm(
+                          `공통 지식 문서 "${f.name}" 을(를) 삭제하시겠습니까?\n\n` +
+                          '⚠️ 모든 AI 직원의 RAG 검색 인덱스에서 즉시 제거됩니다.\n' +
+                          '이 작업은 되돌릴 수 없으며, 같은 파일을 다시 업로드하면 새로 인덱싱됩니다.'
+                        );
+                        if (ok) store.removeSharedKnowledgeFile(f.id);
+                      }}
                       className="p-0.5 text-txt-muted hover:text-status-error"
                       title="삭제"
                     >
@@ -768,7 +776,18 @@ function ExpandedEmployeePanel({ employee }) {
                   <span className="text-xs text-txt-primary flex-1 truncate">{f.name}</span>
                   {statusBadge}
                   <span className="text-[10px] text-txt-muted">{formatFileSize(f.size)}</span>
-                  <button onClick={() => store.removeKnowledgeFile(employee.id, f.id)} className="p-0.5 text-txt-muted hover:text-status-error">
+                  <button
+                    onClick={() => {
+                      const ok = window.confirm(
+                        `${employee.nameKo}의 지식 문서 "${f.name}" 을(를) 삭제하시겠습니까?\n\n` +
+                        '⚠️ 다음 응답부터 이 문서를 참조할 수 없으며, RAG 검색 인덱스에서도 즉시 제거됩니다.\n' +
+                        '이 작업은 되돌릴 수 없으며, 같은 파일을 다시 업로드하면 새로 인덱싱됩니다.'
+                      );
+                      if (ok) store.removeKnowledgeFile(employee.id, f.id);
+                    }}
+                    className="p-0.5 text-txt-muted hover:text-status-error"
+                    title="삭제"
+                  >
                     <X size={14} />
                   </button>
                 </div>
