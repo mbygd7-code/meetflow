@@ -632,28 +632,6 @@ export default function EmployeeDetailPage() {
         <SectionPanel
           title="종합 평가 (개인 균형 평가)"
           subtitle="참여도·완수율·리더십·적극성·발언 태도 5지표 가중 평균 · 관리자 대시보드의 기여도와 다른 관점"
-          action={
-            <div className="flex flex-col items-end gap-1">
-              <button
-                onClick={handleGenerateReport}
-                disabled={reportLoading}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                <Sparkles size={15} />
-                {reportLoading ? 'AI 분석 중...' : '세부 리포트'}
-              </button>
-              <span className="text-[10px] text-txt-muted">
-                상단 기간 필터 ({
-                  dateRange === 'all' ? '전체' :
-                  dateRange === 'day' ? '오늘' :
-                  dateRange === 'week' ? '이번 주' :
-                  dateRange === 'month' ? '이번 달' :
-                  dateRange === 'year' ? '올해' :
-                  dateRange === 'custom' ? '사용자 지정' : '이번 달'
-                }) 기준으로 평가
-              </span>
-            </div>
-          }
         >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* 평가 바 차트 (5개) */}
