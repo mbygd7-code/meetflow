@@ -5,7 +5,8 @@ import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
   Zap, CircleDot, MessageSquare, TrendingUp,
 } from 'lucide-react';
-import { gradeToStyle, getOverallGrade } from '@/utils/gradeUtils';
+import { gradeToStyle } from '@/utils/gradeUtils';
+import { computeUserEvaluation, fetchMyMessageStats } from '@/utils/evaluation';
 import { Avatar, Button, SectionPanel } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeetingStore } from '@/stores/meetingStore';
@@ -30,96 +31,42 @@ export default function DashboardPage() {
   const addToast = useToastStore((s) => s.addToast);
   const { handleCancel: handleMeetingCancel, handleJoin: handleMeetingJoin, declinedIds } = useMeetingCancel();
 
-  // ── 내 평가 (AI 월간 리포트 우선, 없으면 실시간 계산 폴백) ──
-  // RLS: 'users read own evaluations' 정책으로 본인 행만 보임
-  // 실시간 폴백 점수는 EmployeeDetailPage 와 동일한 공식 사용 → 관리자 대시보드와 일관
-  const [myEval, setMyEval] = useState(null);          // employee_evaluations 최신 행 (있으면)
-  const [myMessageStats, setMyMessageStats] = useState({ count: 0, meetingIds: [] });
+  // ── 내 평가 (공통 유틸 사용 → /me/evaluation 페이지와 항상 동일한 점수) ──
+  const [myEval, setMyEval] = useState(null);
+  // null = 아직 로딩 중 / 객체 = 로딩 완료
+  const [myMessageStats, setMyMessageStats] = useState(null);
 
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
     (async () => {
       try {
-        // AI 월간 평가 (있으면 우선 사용)
+        // AI 월간 평가
         const { data: evalData } = await supabase
           .from('employee_evaluations')
-          .select('grade, overall_score, month, scores')
+          .select('*')
           .eq('user_id', user.id)
           .order('month', { ascending: false })
           .limit(1);
         if (!cancelled && evalData && evalData.length > 0) setMyEval(evalData[0]);
 
-        // 실시간 폴백용: 내 메시지 수 + 참여 회의 수
-        const { data: msgData } = await supabase
-          .from('messages')
-          .select('meeting_id')
-          .eq('user_id', user.id)
-          .eq('is_ai', false);
-        if (!cancelled && msgData) {
-          const meetingIds = [...new Set(msgData.map((m) => m.meeting_id).filter(Boolean))];
-          setMyMessageStats({ count: msgData.length, meetingIds });
-        }
+        // 메시지 통계 (공통 유틸)
+        const stats = await fetchMyMessageStats(supabase, user.id);
+        if (!cancelled) setMyMessageStats(stats);
       } catch (err) {
         console.warn('[DashboardPage] eval load failed:', err?.message);
+        if (!cancelled) setMyMessageStats({ count: 0, meetingIds: [], totalChars: 0 });
       }
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // ── 내 점수/등급 계산 ──
-  const myGradeInfo = useMemo(() => {
-    // AI 평가 우선
-    if (myEval?.grade) {
-      return {
-        grade: myEval.grade,
-        score: Math.round(myEval.overall_score || 0),
-        source: 'ai',
-        month: myEval.month,
-      };
-    }
-    // 실시간 폴백 (EmployeeDetailPage 공식과 동일)
-    const myTasks = tasks.filter((t) => t.assignee_id === user?.id);
-    const totalTasks = myTasks.length;
-    const doneTasks = myTasks.filter((t) => t.status === 'done').length;
-    const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-    const totalMessages = myMessageStats.count;
-    const totalMeetings = myMessageStats.meetingIds.length;
-    const avgMsgPerMeeting = totalMeetings > 0 ? totalMessages / totalMeetings : 0;
-
-    // 데이터가 전혀 없으면 표시할 점수 없음
-    if (totalTasks === 0 && totalMessages === 0 && totalMeetings === 0) {
-      return null;
-    }
-
-    // 5지표 (메시지 본문 길이는 dashboard 에서 미사용 — speech_attitude 는 회의 수 기반 근사)
-    const participationScore =
-      totalMeetings === 0 ? 0
-      : avgMsgPerMeeting >= 8 ? 100
-      : avgMsgPerMeeting >= 5 ? 80
-      : avgMsgPerMeeting >= 3 ? 60
-      : avgMsgPerMeeting >= 1 ? 40 : 20;
-    const completionScore = completionRate;
-    const leadershipScore = Math.min(Math.round((totalMeetings * 15 + totalMessages * 2) / 2), 100);
-    const proactiveScore = Math.min(Math.round(avgMsgPerMeeting * 12), 100);
-    const speechAttitudeScore = Math.min(totalMeetings * 5 + (totalMessages > 0 ? 30 : 0), 100);
-
-    const overallScore =
-      participationScore * 0.2 +
-      completionScore * 0.25 +
-      leadershipScore * 0.2 +
-      proactiveScore * 0.15 +
-      speechAttitudeScore * 0.2;
-
-    const g = getOverallGrade(overallScore);
-    return {
-      grade: g.label,
-      score: Math.round(overallScore),
-      source: 'live',
-      month: null,
-    };
-  }, [myEval, tasks, user?.id, myMessageStats]);
+  // 공통 유틸로 점수 계산 — MyEvaluationPage 와 동일 결과 보장
+  const myEvaluation = useMemo(
+    () => computeUserEvaluation({ aiEval: myEval, tasks, msgStats: myMessageStats, userId: user?.id }),
+    [myEval, tasks, myMessageStats, user?.id]
+  );
+  const evalLoading = myMessageStats === null;
 
   // 태스크 상세 모달 상태 (id만 저장 → Realtime 업데이트 시 최신 객체 조회)
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -308,18 +255,24 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* 내 평가 등급 배지 — AI 월간 리포트 우선, 없으면 실시간 계산 폴백 */}
+          {/* 내 평가 등급 배지 — 클릭 시 /me/evaluation 으로
+              · 데이터 로딩 중 = 회색 스켈레톤 ("…")
+              · AI 월간 리포트 있으면 그 등급
+              · 없으면 실시간 활동 점수 (페이지와 동일 공식) */}
           <button
             type="button"
             onClick={() => navigate('/me/evaluation')}
             className="shrink-0 group flex items-center gap-3 pl-2 pr-3 py-2 rounded-xl border border-border-subtle hover:border-brand-purple/40 hover:bg-bg-tertiary/40 transition-colors"
-            title={myGradeInfo
-              ? (myGradeInfo.source === 'ai' ? 'AI 월간 평가 보기' : '실시간 점수 (활동 데이터 기반)')
-              : '내 평가 보기'}
+            title={
+              evalLoading ? '내 평가 불러오는 중…' :
+              myEvaluation?.source === 'ai' ? 'AI 월간 평가 보기' :
+              myEvaluation ? '실시간 활동 점수 보기' :
+              '내 평가 보기'
+            }
             aria-label="내 평가 보기"
           >
             {(() => {
-              const gs = myGradeInfo ? gradeToStyle(myGradeInfo.grade) : null;
+              const gs = myEvaluation ? gradeToStyle(myEvaluation.grade) : null;
               return (
                 <span
                   className={`w-12 h-12 rounded-lg flex items-center justify-center ${
@@ -327,7 +280,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span className={`text-xl font-extrabold leading-none ${gs ? gs.color : 'text-txt-muted'}`}>
-                    {myGradeInfo?.grade || '—'}
+                    {evalLoading ? '…' : (myEvaluation?.grade || '—')}
                   </span>
                 </span>
               );
@@ -336,12 +289,14 @@ export default function DashboardPage() {
               <span className="text-[10px] text-txt-muted uppercase tracking-wider flex items-center gap-1">
                 <Sparkles size={10} className="text-brand-purple" />
                 내 평가
-                {myGradeInfo?.source === 'live' && (
+                {!evalLoading && myEvaluation?.source === 'live' && (
                   <span className="text-[9px] text-txt-muted normal-case tracking-normal">· 실시간</span>
                 )}
               </span>
               <span className="text-xs font-semibold text-txt-primary">
-                {myGradeInfo ? `${myGradeInfo.score}점` : '활동 시작 전'}
+                {evalLoading ? '불러오는 중' :
+                 myEvaluation ? `${Math.round(myEvaluation.overall_score)}점` :
+                 '활동 시작 전'}
               </span>
             </span>
             <ArrowRight size={14} className="text-txt-muted group-hover:text-brand-purple transition-colors" />

@@ -10,7 +10,8 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useTaskStore } from '@/stores/taskStore';
-import { gradeToStyle, getOverallGrade } from '@/utils/gradeUtils';
+import { gradeToStyle } from '@/utils/gradeUtils';
+import { computeUserEvaluation, fetchMyMessageStats } from '@/utils/evaluation';
 import { Badge } from '@/components/ui';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -68,8 +69,8 @@ export default function MyEvaluationPage() {
   const [history, setHistory] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [loading, setLoading] = useState(true);
-  // 실시간 폴백용 본인 메시지 통계
-  const [msgStats, setMsgStats] = useState({ count: 0, meetingIds: [], totalChars: 0 });
+  // null = 로딩 중 / 객체 = 로딩 완료
+  const [msgStats, setMsgStats] = useState(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -88,19 +89,12 @@ export default function MyEvaluationPage() {
         setHistory(data || []);
         if (data && data.length > 0) setSelectedMonth(data[0].month);
 
-        // 폴백용 메시지 통계 (메시지 본문 길이까지 포함 → speech_attitude 정확도 ↑)
-        const { data: msgData } = await supabase
-          .from('messages')
-          .select('meeting_id, content')
-          .eq('user_id', user.id)
-          .eq('is_ai', false);
-        if (!cancelled && msgData) {
-          const meetingIds = [...new Set(msgData.map((m) => m.meeting_id).filter(Boolean))];
-          const totalChars = msgData.reduce((s, m) => s + (m.content?.length || 0), 0);
-          setMsgStats({ count: msgData.length, meetingIds, totalChars });
-        }
+        // 메시지 통계 (공통 유틸 — 마이보드 위젯과 동일 결과)
+        const stats = await fetchMyMessageStats(supabase, user.id);
+        if (!cancelled) setMsgStats(stats);
       } catch (err) {
         console.error('[MyEvaluationPage] fetch error:', err);
+        if (!cancelled) setMsgStats({ count: 0, meetingIds: [], totalChars: 0 });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -108,72 +102,39 @@ export default function MyEvaluationPage() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // ── AI 평가 또는 실시간 폴백 평가 객체 ──
+  // ── 평가 객체 (공통 유틸) — 마이보드 위젯과 항상 같은 점수 ──
   const evaluation = useMemo(() => {
-    // 1) AI 월간 리포트 우선
     const aiEval = history.find((h) => h.month === selectedMonth) || history[0] || null;
-    if (aiEval) return { ...aiEval, source: 'ai' };
+    return computeUserEvaluation({ aiEval, tasks, msgStats, userId: user?.id });
+  }, [history, selectedMonth, tasks, msgStats, user?.id]);
 
-    // 2) 실시간 폴백 (EmployeeDetailPage 5지표 공식)
-    if (!user?.id) return null;
-    const myTasks = tasks.filter((t) => t.assignee_id === user.id);
-    const totalTasks = myTasks.length;
-    const doneTasks = myTasks.filter((t) => t.status === 'done').length;
-    const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-    const totalMessages = msgStats.count;
-    const totalMeetings = msgStats.meetingIds.length;
-    const avgMsgPerMeeting = totalMeetings > 0 ? totalMessages / totalMeetings : 0;
-    const avgChars = totalMessages > 0 ? msgStats.totalChars / totalMessages : 0;
-
-    if (totalTasks === 0 && totalMessages === 0 && totalMeetings === 0) return null;
-
-    const participation =
-      totalMeetings === 0 ? 0
-      : avgMsgPerMeeting >= 8 ? 100
-      : avgMsgPerMeeting >= 5 ? 80
-      : avgMsgPerMeeting >= 3 ? 60
-      : avgMsgPerMeeting >= 1 ? 40 : 20;
-    const taskCompletion = completionRate;
-    const leadership = Math.min(Math.round((totalMeetings * 15 + totalMessages * 2) / 2), 100);
-    const proactivity = Math.min(Math.round(avgMsgPerMeeting * 12), 100);
-    const speechAttitude = Math.min(
-      Math.round((avgChars > 20 ? 55 : (avgChars > 0 ? 30 : 0)) + totalMeetings * 5),
-      100,
+  // 데이터 로딩 중 (msgStats 도 안 옴)
+  if (loading || msgStats === null) {
+    return (
+      <div className="px-4 md:px-6 lg:px-8 pt-4 pb-12 max-w-[1100px] mx-auto">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1.5 text-xs text-txt-secondary hover:text-txt-primary mb-4"
+        >
+          <ArrowLeft size={14} /> 뒤로
+        </button>
+        <div className="bg-bg-secondary border border-border-subtle rounded-2xl p-6 animate-pulse space-y-4">
+          <div className="flex gap-5">
+            <div className="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-bg-tertiary" />
+            <div className="flex-1 space-y-3 pt-2">
+              <div className="h-3 w-24 bg-bg-tertiary rounded" />
+              <div className="h-7 w-56 bg-bg-tertiary rounded" />
+              <div className="h-4 w-40 bg-bg-tertiary rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
     );
-
-    const overall =
-      participation * 0.2 +
-      taskCompletion * 0.25 +
-      leadership * 0.2 +
-      proactivity * 0.15 +
-      speechAttitude * 0.2;
-
-    return {
-      source: 'live',
-      grade: getOverallGrade(overall).label,
-      overall_score: overall,
-      scores: {
-        participation,
-        task_completion: taskCompletion,
-        leadership,
-        proactivity,
-        speech_attitude: speechAttitude,
-      },
-      speech_detail: {},
-      ai_report: null,
-      evidence: [],
-      strengths: [],
-      improvements: [],
-      month: null,
-      meeting_count: totalMeetings,
-      message_count: totalMessages,
-      task_count: totalTasks,
-    };
-  }, [history, selectedMonth, tasks, user?.id, msgStats]);
+  }
 
   // 진짜로 활동도 없는 경우만 빈 상태
-  if (!loading && !evaluation) {
+  if (!evaluation) {
     return (
       <div className="px-4 md:px-6 lg:px-8 pt-4 pb-12 max-w-[1100px] mx-auto">
         <button
@@ -193,17 +154,9 @@ export default function MyEvaluationPage() {
     );
   }
 
-  if (!evaluation) {
-    return (
-      <div className="px-4 md:px-6 lg:px-8 pt-4 pb-12 max-w-[1100px] mx-auto">
-        <p className="text-sm text-txt-secondary">불러오는 중…</p>
-      </div>
-    );
-  }
-
   const {
     scores = {}, speech_detail = {}, grade, overall_score, ai_report,
-    evidence = [], strengths = [], improvements = [], month,
+    evidence = [], strengths = [], improvements = [], month, period_label,
     meeting_count, message_count, task_count, source,
   } = evaluation;
   const isLive = source === 'live';
