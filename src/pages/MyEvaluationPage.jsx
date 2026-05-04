@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Target, Award, TrendingUp, MessageCircle,
   ThumbsUp, ThumbsDown, Minus, Star, AlertTriangle, Sparkles,
-  Calendar, ChevronRight,
+  Calendar, ChevronRight, Info,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -16,18 +16,26 @@ import { Badge } from '@/components/ui';
 import EmptyState from '@/components/ui/EmptyState';
 import AiReportRenderer from '@/components/evaluation/AiReportRenderer';
 
-// ── 점수 진행 막대 ──
-function ScoreBar({ label, value, icon: Icon }) {
+// ── 점수 진행 막대 — info 호버 시 설명 팝오버 ──
+function ScoreBar({ label, value, icon: Icon, description, formula }) {
   const pct = Math.min(Math.max(value || 0, 0), 100);
   const color =
     pct >= 70 ? 'from-brand-purple to-brand-orange' :
     pct >= 40 ? 'from-brand-orange to-brand-yellow' :
                 'from-status-error to-brand-orange';
   return (
-    <div className="space-y-1.5">
+    <div className="group/bar relative space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs text-txt-secondary">
-          {Icon && <Icon size={14} />}{label}
+          {Icon && <Icon size={14} />}
+          {label}
+          {description && (
+            <Info
+              size={11}
+              className="text-txt-muted opacity-60 group-hover/bar:opacity-100 transition-opacity"
+              aria-hidden="true"
+            />
+          )}
         </span>
         <span className="text-xs font-bold text-txt-primary">{Math.round(pct)}</span>
       </div>
@@ -37,6 +45,30 @@ function ScoreBar({ label, value, icon: Icon }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+
+      {/* 호버 팝오버 — 설명 + 산출식 */}
+      {description && (
+        <div
+          className="pointer-events-none absolute left-0 right-0 -top-1 z-20 -translate-y-full
+                     opacity-0 invisible group-hover/bar:opacity-100 group-hover/bar:visible
+                     transition-all duration-150"
+          role="tooltip"
+        >
+          <div className="bg-bg-primary border border-border-default rounded-lg shadow-lg p-3 max-w-sm">
+            <p className="text-[11px] font-semibold text-txt-primary mb-1 flex items-center gap-1.5">
+              {Icon && <Icon size={12} className="text-brand-purple" />}
+              {label}
+            </p>
+            <p className="text-[11px] text-txt-secondary leading-relaxed">{description}</p>
+            {formula && (
+              <p className="text-[10px] text-txt-muted leading-relaxed mt-2 pt-2 border-t border-border-subtle">
+                <span className="text-brand-purple font-semibold mr-1">산출</span>
+                {formula}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -231,11 +263,41 @@ export default function MyEvaluationPage() {
             종합 점수
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
-            <ScoreBar label="참여도" value={scores.participation} icon={User} />
-            <ScoreBar label="태스크 완수율" value={scores.task_completion} icon={Target} />
-            <ScoreBar label="리더십" value={scores.leadership} icon={Award} />
-            <ScoreBar label="적극성" value={scores.proactivity} icon={TrendingUp} />
-            <ScoreBar label="발언 태도" value={scores.speech_attitude} icon={MessageCircle} />
+            <ScoreBar
+              label="참여도"
+              value={scores.participation}
+              icon={User}
+              description="회의에 얼마나 활발히 참여했는지를 측정합니다. 회의 참석 횟수와 회의당 발언량이 핵심 지표예요."
+              formula="회의당 평균 발언 수 기반: 8회+→100, 5+→80, 3+→60, 1+→40, 미만→20"
+            />
+            <ScoreBar
+              label="태스크 완수율"
+              value={scores.task_completion}
+              icon={Target}
+              description="배정받은 태스크를 얼마나 잘 처리했는지 평가합니다. 단순 완료 비율이 아니라 난이도 가중치 + 마감 준수 보너스가 더해져요. 어려운 태스크를 해낼수록 가산됩니다."
+              formula="가중완료율(easy×1, medium×2, hard×3) + 속도 보너스(마감 이전 완료율 × 20)"
+            />
+            <ScoreBar
+              label="리더십"
+              value={scores.leadership}
+              icon={Award}
+              description="팀 활동에 대한 누적 기여도. 회의 주도와 발언량을 통해 의사결정에 얼마나 영향을 미쳤는지를 봅니다."
+              formula="(회의 수 × 15 + 발언 수 × 2) / 2 (최대 100)"
+            />
+            <ScoreBar
+              label="적극성"
+              value={scores.proactivity}
+              icon={TrendingUp}
+              description="회의에서 얼마나 능동적으로 의견을 냈는지. 회의당 평균 발언 횟수가 높을수록 점수가 올라갑니다."
+              formula="회의당 평균 발언 × 12 (최대 100)"
+            />
+            <ScoreBar
+              label="발언 태도"
+              value={scores.speech_attitude}
+              icon={MessageCircle}
+              description="발언의 깊이와 질을 평가합니다. 짧은 단답이 아닌 충분한 길이의 의견을 내는지, 회의 참여가 꾸준한지를 종합해요."
+              formula="평균 글자수 기반(>20자→55, 그 외→30) + 회의 수 × 5"
+            />
           </div>
 
           {/* 발언 태도 세부 */}
@@ -243,10 +305,26 @@ export default function MyEvaluationPage() {
             <div className="mt-5 pt-4 border-t border-border-subtle">
               <p className="text-[11px] font-semibold text-txt-secondary uppercase tracking-wider mb-3">발언 태도 세부</p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <ScoreBar label="건설성" value={speech_detail.constructiveness} />
-                <ScoreBar label="전문성" value={speech_detail.professionalism} />
-                <ScoreBar label="기여 품질" value={speech_detail.contribution_quality} />
-                <ScoreBar label="협업" value={speech_detail.collaboration} />
+                <ScoreBar
+                  label="건설성"
+                  value={speech_detail.constructiveness}
+                  description="문제 지적에 그치지 않고 데이터·근거·해결책을 함께 제시한 정도. 비공식적/감정적 표현이 많으면 감점."
+                />
+                <ScoreBar
+                  label="전문성"
+                  value={speech_detail.professionalism}
+                  description="도메인 용어 사용과 분석의 깊이. 정확한 표현·논리 전개가 있을수록 높은 점수."
+                />
+                <ScoreBar
+                  label="기여 품질"
+                  value={speech_detail.contribution_quality}
+                  description="의사결정·합의·태스크 도출에 실제로 영향을 미친 발언의 비중."
+                />
+                <ScoreBar
+                  label="협업"
+                  value={speech_detail.collaboration}
+                  description="다른 의견 수용·조율, 질문·확인을 통한 상호 이해도 향상에 기여한 정도."
+                />
               </div>
             </div>
           )}
