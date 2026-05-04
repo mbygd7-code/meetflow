@@ -17,7 +17,14 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { userId, month } = await req.json();
+    const body = await req.json();
+    const { userId, month } = body;
+    // 선택적 기간 오버라이드 — 페이지의 기간 필터와 일치시키기 위해
+    // startDate/endDate (ISO) 가 오면 그 범위로 평가, 아니면 month 한 달
+    const startDateOverride: string | undefined = body.startDate;
+    const endDateOverride: string | undefined = body.endDate;
+    const periodLabel: string | undefined = body.periodLabel; // 표시용 ("전체", "이번 달" 등)
+
     if (!userId || !month) {
       return new Response(JSON.stringify({ error: 'userId and month required' }), {
         status: 400,
@@ -39,10 +46,32 @@ serve(async (req) => {
     const anthropic = new Anthropic({ apiKey });
 
     // ── 날짜 범위 계산 ──
-    const startDate = `${month}-01T00:00:00Z`;
-    const [y, m] = month.split('-').map(Number);
-    const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-    const endDate = `${nextMonth}-01T00:00:00Z`;
+    // override 가 있으면 그걸 우선 사용. 없으면 month 한 달
+    let startDate: string;
+    let endDate: string;
+    if (startDateOverride && endDateOverride) {
+      startDate = startDateOverride;
+      endDate = endDateOverride;
+    } else if (startDateOverride && !endDateOverride) {
+      // start 만 있으면 현재까지
+      startDate = startDateOverride;
+      endDate = new Date().toISOString();
+    } else if (!startDateOverride && !endDateOverride && !month) {
+      // 전체 기간 (override 도 없고 month 도 없음 — 방어적)
+      startDate = '1970-01-01T00:00:00Z';
+      endDate = new Date().toISOString();
+    } else {
+      startDate = `${month}-01T00:00:00Z`;
+      const [y, m] = month.split('-').map(Number);
+      const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      endDate = `${nextMonth}-01T00:00:00Z`;
+    }
+    // 'all' / undefined → 1970~now (실질적으로 전체)
+    const isAllTime = startDateOverride === '1970-01-01T00:00:00Z' || (!startDateOverride && !month);
+    if (isAllTime) {
+      startDate = '1970-01-01T00:00:00Z';
+      endDate = new Date().toISOString();
+    }
 
     // 1) 프로필
     const { data: user } = await supabase
@@ -176,7 +205,8 @@ serve(async (req) => {
 
     const userPrompt = `## 평가 대상
 이름: ${user.name}
-평가 기간: ${month}
+평가 기간: ${periodLabel || month}
+실제 데이터 범위: ${startDate.slice(0, 10)} ~ ${endDate.slice(0, 10)}
 
 ## 회의 참여 데이터
 - 참여 회의 수: ${meetingCount}건
@@ -277,7 +307,13 @@ evidence는 3~8개 주목할 만한 발언 선별.`;
       onConflict: 'user_id,month',
     });
 
-    return new Response(JSON.stringify(evalRecord), {
+    // 응답에는 표시용 period_label 도 함께 (DB 컬럼은 아니지만 UI 가 사용)
+    return new Response(JSON.stringify({
+      ...evalRecord,
+      period_label: periodLabel || month,
+      period_start: startDate,
+      period_end: endDate,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

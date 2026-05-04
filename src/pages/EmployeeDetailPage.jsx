@@ -363,12 +363,37 @@ export default function EmployeeDetailPage() {
   }, [id, addToast]);
 
   // ── AI 리포트 생성 ──
+  // 페이지의 기간 필터(전체/오늘/이번주/이번달/올해/사용자지정)와 동일한 범위로 평가
+  // 'all' (전체) 인 경우에도 month 는 현재월로 보내되 startDate/endDate override 로 전체 기간 평가
   async function handleGenerateReport() {
     setReportLoading(true);
     try {
-      const month = format(new Date(), 'yyyy-MM');
+      const now = new Date();
+      const month = format(now, 'yyyy-MM');
+      // 페이지 필터를 ISO 범위로 변환
+      let startDateISO;
+      let endDateISO;
+      if (dateRangeStart) startDateISO = new Date(dateRangeStart).toISOString();
+      if (dateRangeEnd) endDateISO = new Date(dateRangeEnd).toISOString();
+      else if (dateRangeStart) endDateISO = now.toISOString();
+      // 'all' 일 때는 startDate 도 없음 → Edge Function 이 1970~now 로 처리
+      const periodLabel =
+        dateRange === 'all' ? '전체 기간' :
+        dateRange === 'day' ? '오늘' :
+        dateRange === 'week' ? '이번 주' :
+        dateRange === 'month' ? '이번 달' :
+        dateRange === 'year' ? '올해' :
+        dateRange === 'custom' ? `${customStart} ~ ${customEnd}` :
+        month;
+
       const { data, error } = await supabase.functions.invoke('evaluate-employee', {
-        body: { userId: id, month },
+        body: {
+          userId: id,
+          month,
+          startDate: startDateISO,
+          endDate: endDateISO,
+          periodLabel,
+        },
       });
       if (error) throw error;
       // Edge Function 이 200 인데 본문에 error 가 담겨오는 케이스도 처리
@@ -378,7 +403,7 @@ export default function EmployeeDetailPage() {
       }
       setEvaluation(data);
       setReportOpen(true);
-      addToast?.(`${data.month} 평가 생성 완료 · ${data.grade}`, 'success', 2500);
+      addToast?.(`${periodLabel} 평가 생성 완료 · ${data.grade}`, 'success', 2500);
       // 이력 갱신 (DB 반영 시점이 약간 늦을 수 있어 짧게 대기)
       await new Promise((r) => setTimeout(r, 300));
       await refreshEvalHistory();
@@ -608,14 +633,26 @@ export default function EmployeeDetailPage() {
           title="종합 평가 (개인 균형 평가)"
           subtitle="참여도·완수율·리더십·적극성·발언 태도 5지표 가중 평균 · 관리자 대시보드의 기여도와 다른 관점"
           action={
-            <button
-              onClick={handleGenerateReport}
-              disabled={reportLoading}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              <Sparkles size={15} />
-              {reportLoading ? 'AI 분석 중...' : '세부 리포트'}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={handleGenerateReport}
+                disabled={reportLoading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-purple rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                <Sparkles size={15} />
+                {reportLoading ? 'AI 분석 중...' : '세부 리포트'}
+              </button>
+              <span className="text-[10px] text-txt-muted">
+                상단 기간 필터 ({
+                  dateRange === 'all' ? '전체' :
+                  dateRange === 'day' ? '오늘' :
+                  dateRange === 'week' ? '이번 주' :
+                  dateRange === 'month' ? '이번 달' :
+                  dateRange === 'year' ? '올해' :
+                  dateRange === 'custom' ? '사용자 지정' : '이번 달'
+                }) 기준으로 평가
+              </span>
+            </div>
           }
         >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

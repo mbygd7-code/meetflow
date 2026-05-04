@@ -48,8 +48,9 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
   if (!evaluation) return null;
 
   const { scores = {}, speech_detail = {}, grade, overall_score, ai_report,
-    evidence = [], strengths = [], improvements = [], month,
+    evidence = [], strengths = [], improvements = [], month, period_label,
     meeting_count, message_count, task_count } = evaluation;
+  const displayPeriod = period_label || month;
 
   const gs = gradeToStyle(grade);
 
@@ -61,7 +62,7 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-base font-semibold text-txt-primary">{employeeName}</h4>
-            <p className="text-xs text-txt-muted mt-0.5">{month} 평가 · 회의 {meeting_count}건 · 발언 {message_count}건 · 태스크 {task_count}건</p>
+            <p className="text-xs text-txt-muted mt-0.5">{displayPeriod} 평가 · 회의 {meeting_count}건 · 발언 {message_count}건 · 태스크 {task_count}건</p>
           </div>
           <div className={`w-14 h-14 rounded-xl ${gs.bg} flex items-center justify-center`}>
             <span className={`text-2xl font-bold ${gs.color}`}>{grade}</span>
