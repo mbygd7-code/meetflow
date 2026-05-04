@@ -14,6 +14,7 @@ import { gradeToStyle } from '@/utils/gradeUtils';
 import { computeUserEvaluation, fetchMyMessageStats } from '@/utils/evaluation';
 import { Badge } from '@/components/ui';
 import EmptyState from '@/components/ui/EmptyState';
+import AiReportRenderer from '@/components/evaluation/AiReportRenderer';
 
 // ── 점수 진행 막대 ──
 function ScoreBar({ label, value, icon: Icon }) {
@@ -333,16 +334,19 @@ export default function MyEvaluationPage() {
         </div>
       )}
 
-      {/* AI 분석 리포트 */}
+      {/* AI 분석 리포트 — 페이퍼 스타일 */}
       {ai_report && (
-        <section className="bg-bg-secondary border border-border-subtle rounded-2xl p-5">
-          <h2 className="text-sm font-bold text-txt-primary mb-3 flex items-center gap-2">
-            <Sparkles size={16} className="text-brand-purple" />
-            AI 분석 리포트
-          </h2>
-          <div className="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">
-            {ai_report}
-          </div>
+        <section className="bg-bg-secondary border border-border-subtle rounded-2xl p-6 md:p-8">
+          <header className="flex items-center justify-between mb-5 pb-4 border-b border-border-subtle">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-brand-purple" />
+              <h2 className="text-sm font-bold text-txt-primary tracking-wider uppercase">AI 분석 리포트</h2>
+            </div>
+            <p className="text-[10px] text-txt-muted tracking-wider">
+              {period_label || month || '평가'}
+            </p>
+          </header>
+          <AiReportRenderer text={ai_report} />
         </section>
       )}
 
