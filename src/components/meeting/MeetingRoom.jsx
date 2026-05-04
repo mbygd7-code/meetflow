@@ -1724,17 +1724,6 @@ function DocumentPanel({
                     <ChevronLeft size={18} />
                   </button>
                 )}
-                {/* 모바일 드로어 닫기 */}
-                {mobileOpen && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onMobileClose?.(); }}
-                    className="md:hidden p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors"
-                    aria-label="자료 패널 닫기"
-                    title="닫기"
-                  >
-                    <X size={18} />
-                  </button>
-                )}
               </div>
             </>
           )}
@@ -1742,6 +1731,19 @@ function DocumentPanel({
             <span className="text-[9px] font-bold text-brand-purple bg-brand-purple/10 rounded-full w-5 h-5 flex items-center justify-center">
               {files.length}
             </span>
+          )}
+          {/* 모바일 드로어 닫기 — isCompact 여부와 무관하게 항상 노출 (자료 → 채팅 복귀 경로 보장) */}
+          {mobileOpen && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onMobileClose?.(); }}
+              className={`md:hidden p-1.5 rounded-md text-txt-secondary hover:text-txt-primary hover:bg-bg-tertiary transition-colors ${
+                isCompact ? 'absolute top-2 right-2' : 'ml-auto'
+              }`}
+              aria-label="자료 패널 닫기"
+              title="닫기"
+            >
+              <X size={18} />
+            </button>
           )}
         </div>
 
