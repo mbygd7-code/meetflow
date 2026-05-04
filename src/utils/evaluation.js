@@ -49,8 +49,40 @@ export function computeUserEvaluation({ aiEval, tasks = [], msgStats = null, use
 
   const myTasks = userId ? tasks.filter((t) => t.assignee_id === userId) : tasks;
   const totalTasks = myTasks.length;
-  const doneTasks = myTasks.filter((t) => t.status === 'done').length;
+  const doneTasksList = myTasks.filter((t) => t.status === 'done');
+  const doneTasks = doneTasksList.length;
+
+  // ── 난이도 가중 완료율 ──
+  // easy=1, medium=2, hard=3. 어려운 태스크 완료 = 더 큰 점수.
+  // 미설정/null 은 medium 처리 (마이그레이션 전 호환).
+  const DIFF_WEIGHT = { easy: 1, medium: 2, hard: 3 };
+  const wOf = (t) => DIFF_WEIGHT[t.difficulty || 'medium'] || 2;
+  const totalWeight = myTasks.reduce((s, t) => s + wOf(t), 0);
+  const doneWeight = doneTasksList.reduce((s, t) => s + wOf(t), 0);
+  const weightedCompletion = totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0;
+  // 단순 비율 (참고용 — 평가에는 가중치 사용)
   const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+  // ── 속도 보너스 ──
+  // 마감일 이전 완료 = 보너스. (updated_at <= due_date) 인 done 태스크 비율 × 가중치.
+  // due_date 없는 태스크는 중립(보너스 0).
+  const onTimeWeighted = doneTasksList.reduce((s, t) => {
+    if (!t.due_date) return s;
+    const due = new Date(t.due_date).getTime();
+    const done = new Date(t.updated_at || t.created_at || Date.now()).getTime();
+    if (isNaN(due) || isNaN(done)) return s;
+    if (done <= due) return s + wOf(t);
+    return s;
+  }, 0);
+  const speedBonus = doneWeight > 0 ? Math.round((onTimeWeighted / doneWeight) * 20) : 0; // 0~20
+
+  // 최종 task_completion = 가중완료율 + 속도 보너스 (cap 100)
+  const taskCompletionScore = Math.min(100, weightedCompletion + speedBonus);
+
+  // ── 평균 난이도 (참고 표시용) ──
+  const avgDifficultyScore = totalTasks > 0
+    ? Math.round((myTasks.reduce((s, t) => s + wOf(t), 0) / totalTasks) * 100 / 3)
+    : 0;
 
   const totalMessages = msgStats.count || 0;
   const totalMeetings = (msgStats.meetingIds || []).length;
@@ -66,7 +98,8 @@ export function computeUserEvaluation({ aiEval, tasks = [], msgStats = null, use
     : avgMsgPerMeeting >= 5 ? 80
     : avgMsgPerMeeting >= 3 ? 60
     : avgMsgPerMeeting >= 1 ? 40 : 20;
-  const taskCompletion = completionRate;
+  // 난이도 가중 + 속도 보너스 적용된 점수 사용
+  const taskCompletion = taskCompletionScore;
   const leadership = Math.min(Math.round((totalMeetings * 15 + totalMessages * 2) / 2), 100);
   const proactivity = Math.min(Math.round(avgMsgPerMeeting * 12), 100);
   const speechAttitude = Math.min(
@@ -100,6 +133,15 @@ export function computeUserEvaluation({ aiEval, tasks = [], msgStats = null, use
     meeting_count: totalMeetings,
     message_count: totalMessages,
     task_count: totalTasks,
+    // 난이도/속도 디테일 (UI 에서 옵션으로 표시 가능)
+    task_breakdown: {
+      total: totalTasks,
+      done: doneTasks,
+      simple_completion_rate: completionRate,
+      weighted_completion_rate: weightedCompletion,
+      speed_bonus: speedBonus,
+      avg_difficulty_score: avgDifficultyScore, // 0-100 (33=easy, 67=medium, 100=hard 평균)
+    },
     month: null,
     period_label: '실시간 (전체 기간)',
   };
