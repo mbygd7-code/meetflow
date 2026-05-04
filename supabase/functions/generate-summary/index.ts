@@ -305,7 +305,10 @@ async function retrievePastMeetingContext(
       .filter((r) => !r.original_text.includes(meetingId))
       .slice(0, 3);
 
-    if (ranked.length === 0) return '';
+    if (ranked.length === 0) {
+      console.log(`[summary-context] no past chunks for ${meetingId.slice(0, 8)} (Gantt RAG 비어있을 수 있음)`);
+      return '';
+    }
 
     const formatted = ranked
       .map((r, i) => `### 발췌 ${i + 1}\n${(r.original_text || '').slice(0, 800)}`)
@@ -676,8 +679,10 @@ ${transcript || '(대화 내용 없음)'}
 
         // 3) 대상 전문가 선정 (TOP 2) + Milo는 항상 포함
         const activeSpecs = detectActiveSpecialists(messages, 2);
-        const targets = ['milo', ...activeSpecs];
-        // 중복 제거
+        // Gantt 는 PM 역할이므로 모든 회의록을 누적해야 Phase 1 (과거 회의록 컨텍스트) 이 작동.
+        // milo + gantt + 활성 specialists, 미확인 ID 는 제외.
+        const VALID_AI_IDS = new Set(['milo', 'gantt', 'norman', 'kotler', 'froebel', 'korff', 'deming']);
+        const targets = ['milo', 'gantt', ...activeSpecs].filter((id) => VALID_AI_IDS.has(id));
         const uniqueTargets = [...new Set(targets)];
 
         console.log(`[generate-summary] Phase 2 RAG ingest: meeting=${meetingId.slice(0, 8)} title="${title.slice(0, 40)}" targets=${JSON.stringify(uniqueTargets)}`);
