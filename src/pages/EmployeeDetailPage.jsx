@@ -732,8 +732,18 @@ export default function EmployeeDetailPage() {
             <div className="space-y-2">
               {meetings.map((mtg) => {
                 const msgCount = stats.msgByMeeting[mtg.id] || 0;
+                // 완료 → 회의록, 진행 중 → 회의방, 예정 → 회의방
+                const targetUrl =
+                  mtg.status === 'completed'
+                    ? `/summaries/${mtg.id}`
+                    : `/meetings/${mtg.id}`;
                 return (
-                  <Card key={mtg.id} className="!p-3.5">
+                  <Card
+                    key={mtg.id}
+                    className="!p-3.5 cursor-pointer hover:border-brand-purple/40 transition-colors"
+                    onClick={() => navigate(targetUrl)}
+                    title={mtg.status === 'completed' ? '회의록 보기' : '회의방으로 이동'}
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded bg-brand-purple/10 border border-brand-purple/15 flex items-center justify-center shrink-0">
                         <FileText size={16} className="text-brand-purple" />
