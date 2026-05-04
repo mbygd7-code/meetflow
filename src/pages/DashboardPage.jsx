@@ -255,50 +255,40 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* 내 평가 등급 배지 — 클릭 시 /me/evaluation 으로
-              · 데이터 로딩 중 = 회색 스켈레톤 ("…")
-              · AI 월간 리포트 있으면 그 등급
-              · 없으면 실시간 활동 점수 (페이지와 동일 공식) */}
+          {/* 내 평가 버튼 — 기본은 '내 평가' 라벨만 노출.
+              · 호버 시 등급 배지 + 점수가 페이드 인
+              · 클릭 시 /me/evaluation 으로 이동 */}
           <button
             type="button"
             onClick={() => navigate('/me/evaluation')}
-            className="shrink-0 group flex items-center gap-3 pl-2 pr-3 py-2 rounded-xl border border-border-subtle hover:border-brand-purple/40 hover:bg-bg-tertiary/40 transition-colors"
-            title={
-              evalLoading ? '내 평가 불러오는 중…' :
-              myEvaluation?.source === 'ai' ? 'AI 월간 평가 보기' :
-              myEvaluation ? '실시간 활동 점수 보기' :
-              '내 평가 보기'
-            }
+            className="shrink-0 group relative flex items-center gap-2 px-3 py-2 rounded-xl border border-border-subtle hover:border-brand-purple/40 hover:bg-bg-tertiary/40 transition-colors"
+            title="내 평가 보기"
             aria-label="내 평가 보기"
           >
-            {(() => {
-              const gs = myEvaluation ? gradeToStyle(myEvaluation.grade) : null;
+            <Sparkles size={14} className="text-brand-purple" />
+            <span className="text-sm font-semibold text-txt-primary">내 평가</span>
+
+            {/* 호버 시 노출되는 등급 + 점수 (가로로 슬라이드 인) */}
+            {!evalLoading && myEvaluation && (() => {
+              const gs = gradeToStyle(myEvaluation.grade);
               return (
                 <span
-                  className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                    gs ? gs.bg : 'bg-bg-tertiary'
-                  }`}
+                  className="hidden sm:inline-flex items-center gap-2 max-w-0 overflow-hidden opacity-0
+                             group-hover:max-w-[180px] group-hover:opacity-100 group-focus-visible:max-w-[180px] group-focus-visible:opacity-100
+                             transition-all duration-300"
+                  aria-hidden="true"
                 >
-                  <span className={`text-xl font-extrabold leading-none ${gs ? gs.color : 'text-txt-muted'}`}>
-                    {evalLoading ? '…' : (myEvaluation?.grade || '—')}
+                  <span className="w-px h-5 bg-border-subtle" />
+                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${gs.bg}`}>
+                    <span className={`text-xs font-extrabold ${gs.color}`}>{myEvaluation.grade}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-txt-primary whitespace-nowrap">
+                    {Math.round(myEvaluation.overall_score)}점
                   </span>
                 </span>
               );
             })()}
-            <span className="hidden sm:flex flex-col items-start">
-              <span className="text-[10px] text-txt-muted uppercase tracking-wider flex items-center gap-1">
-                <Sparkles size={10} className="text-brand-purple" />
-                내 평가
-                {!evalLoading && myEvaluation?.source === 'live' && (
-                  <span className="text-[9px] text-txt-muted normal-case tracking-normal">· 실시간</span>
-                )}
-              </span>
-              <span className="text-xs font-semibold text-txt-primary">
-                {evalLoading ? '불러오는 중' :
-                 myEvaluation ? `${Math.round(myEvaluation.overall_score)}점` :
-                 '활동 시작 전'}
-              </span>
-            </span>
+
             <ArrowRight size={14} className="text-txt-muted group-hover:text-brand-purple transition-colors" />
           </button>
         </div>
