@@ -21,6 +21,7 @@ import EmployeeDetailPage from '@/pages/EmployeeDetailPage';
 import TokenUsagePage from '@/pages/TokenUsagePage';
 import MembersPage from '@/pages/MembersPage';
 import NotificationsPage from '@/pages/NotificationsPage';
+import MyEvaluationPage from '@/pages/MyEvaluationPage';
 
 function RouteGuard({ children, requireAdmin = false }) {
   const { user, loading } = useAuthStore();
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="/summaries" element={<SummariesPage />} />
         <Route path="/summaries/:id" element={<SummariesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/me/evaluation" element={<MyEvaluationPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<RouteGuard requireAdmin><AdminDashboardPage /></RouteGuard>} />
         <Route path="/admin/employee/:id" element={<RouteGuard requireAdmin><EmployeeDetailPage /></RouteGuard>} />

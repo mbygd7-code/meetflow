@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(npx vite *)",
+      "Bash(grep -n \"ImageZoomOverlay\\\\|setDrawingActive\\\\|DrawingOverlay\\\\|FolderOpen\\\\|다운로드\\\\|다운로드\\\\\\\\b\\\\|imageRef.current?.clientWidth\" \"D:\\\\claud project\\\\meetflow\\\\src\\\\components\\\\meeting\\\\MeetingRoom.jsx\")",
+      "Bash(git cat-file *)",
+      "Read(//tmp/**)",
+      "Bash(git fetch *)",
+      "Bash(git status *)",
+      "Bash(git pull *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(grep -n \"ch.on\\('broadcast', { event: 'stroke' }\" \"D:\\\\claud project\\\\meetflow\\\\src\\\\components\\\\meeting\\\\DrawingOverlay.jsx\")",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(curl -s http://localhost:4173)",
+      "Bash(curl -sI http://localhost:4188/assets/index-C6TulCxW.js)",
+      "Bash(curl -s http://localhost:4188/assets/index-C6TulCxW.js)",
+      "Bash(gh api *)",
+      "Bash(curl -sI https://meetflow.vercel.app)",
+      "Bash(curl -s https://meetflow.vercel.app)",
+      "Bash(awk '/^function MeetingRoom|^function DocumentPanel|^function DocumentZoomOverlay|^function ImageZoomOverlay|^export default function/{flag=1; name=$0} flag && /useState|useEffect|useRef|useCallback|useMemo|useContext|useSidebar|useViewerSync|useMeeting|useAuthStore|useRealtimeMessages|useMeetingFiles|useMilo|useMeetingStore|useToastStore|useFeedbackStore|^  if \\\\\\(.*\\\\\\) return|^  return /{print NR\": \"$0}' src/components/meeting/MeetingRoom.jsx)",
+      "Bash(awk 'NR>1409 && NR<1700' src/components/meeting/MeetingRoom.jsx)",
+      "Bash(awk 'NR>=1656 && NR<2000 && /use[A-Z][a-zA-Z]*\\\\\\(/ && !/<\\\\/?/' src/components/meeting/MeetingRoom.jsx)",
+      "Bash(awk '/if \\\\\\(!meeting\\\\\\)/{found=NR} found && NR > found && NR < found+500 && /\\\\bus[eA-Z][a-zA-Z]*\\\\\\(/' src/components/meeting/MeetingRoom.jsx)",
+      "Bash(awk 'NR>1690 && NR<2200 && /use[A-Z][a-zA-Z]*\\\\b/ && !/\\\\<\\\\!--/' src/components/meeting/MeetingRoom.jsx)",
+      "Bash(npm install *)",
+      "Bash(git reflog *)",
+      "Bash(npx supabase *)",
+      "Bash(npx -y deno-bin@2.0.0 check supabase/functions/milo-analyze/index.ts)",
+      "Bash(node -e \"try { require\\('typescript'\\); } catch\\(e\\){ console.log\\('no ts'\\); }\")",
+      "Bash(timeout 60 npx deno-bin@2.0.0 check supabase/functions/milo-analyze/index.ts)",
+      "Bash(awk 'NR>=11 && NR<=100' \"D:/claud project/meetflow/supabase/functions/milo-analyze/index.ts\")",
+      "Bash(grep -n '\\\\$')"
+    ]
+  }
+}
