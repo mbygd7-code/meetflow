@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, Calendar, CheckCircle2, MessageSquare,
   Clock, Target, TrendingUp, Award, FileText, AlertCircle,
-  MessageCircle, Sparkles, History,
+  MessageCircle, Sparkles, History, RefreshCw,
 } from 'lucide-react';
 import { Card, Avatar, Badge, SectionPanel, MetricCard } from '@/components/ui';
 import EvaluationReportModal from '@/components/admin/EvaluationReportModal';
@@ -343,6 +343,25 @@ export default function EmployeeDetailPage() {
     fetchAll();
   }, [id]);
 
+  // ── 평가 이력 새로고침 (이력 섹션 새로고침 버튼 + AI 리포트 생성 후 호출) ──
+  const refreshEvalHistory = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employee_evaluations')
+        .select('*')
+        .eq('user_id', id)
+        .order('month', { ascending: false });
+      if (error) throw error;
+      setEvalHistory(data || []);
+      if (data && data.length > 0) setEvaluation((prev) => prev || data[0]);
+      return data || [];
+    } catch (err) {
+      console.error('[refreshEvalHistory]', err);
+      addToast?.('평가 이력 조회 실패: ' + (err.message || err), 'error', 3000);
+      return [];
+    }
+  }, [id, addToast]);
+
   // ── AI 리포트 생성 ──
   async function handleGenerateReport() {
     setReportLoading(true);
@@ -352,17 +371,24 @@ export default function EmployeeDetailPage() {
         body: { userId: id, month },
       });
       if (error) throw error;
+      // Edge Function 이 200 인데 본문에 error 가 담겨오는 케이스도 처리
+      if (data?.error) throw new Error(data.error);
+      if (!data?.grade) {
+        throw new Error('평가 응답이 비어있습니다 (model/RLS 문제 가능). Supabase Functions 로그 확인');
+      }
       setEvaluation(data);
       setReportOpen(true);
-      // 이력 갱신
-      const { data: updated } = await supabase
-        .from('employee_evaluations')
-        .select('*')
-        .eq('user_id', id)
-        .order('month', { ascending: false });
-      setEvalHistory(updated || []);
+      addToast?.(`${data.month} 평가 생성 완료 · ${data.grade}`, 'success', 2500);
+      // 이력 갱신 (DB 반영 시점이 약간 늦을 수 있어 짧게 대기)
+      await new Promise((r) => setTimeout(r, 300));
+      await refreshEvalHistory();
     } catch (err) {
       console.error('[AI Report]', err);
+      addToast?.(
+        '평가 생성 실패: ' + (err.message || err) + '\nSupabase Edge Functions 로그 확인 필요',
+        'error',
+        5000,
+      );
     } finally {
       setReportLoading(false);
     }
@@ -631,6 +657,17 @@ export default function EmployeeDetailPage() {
         <SectionPanel
           title="월별 AI 평가 이력"
           subtitle={`총 ${evalHistory.length}건`}
+          action={
+            <button
+              type="button"
+              onClick={refreshEvalHistory}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-txt-secondary hover:text-txt-primary border border-border-subtle hover:border-brand-purple/40 rounded-md transition-colors"
+              title="이력 새로고침"
+            >
+              <RefreshCw size={12} />
+              새로고침
+            </button>
+          }
         >
           {evalHistory.length === 0 ? (
             <div className="text-center py-8">
