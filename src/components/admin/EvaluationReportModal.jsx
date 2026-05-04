@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Modal, Badge } from '@/components/ui';
 import { gradeToStyle } from '@/utils/gradeUtils';
+import AiReportRenderer from '@/components/evaluation/AiReportRenderer';
 
 // ── 미니 프로그레스 바 ──
 function MiniBar({ label, value, icon: Icon }) {
@@ -95,13 +96,13 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
           </div>
         )}
 
-        {/* ── AI 서술형 리포트 ── */}
+        {/* ── AI 서술형 리포트 — 페이퍼 스타일 ── */}
         {ai_report && (
-          <div className="bg-bg-tertiary rounded-lg p-4">
-            <h5 className="text-xs font-semibold text-txt-primary uppercase tracking-wider mb-3">AI 분석 리포트</h5>
-            <div className="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">
-              {ai_report}
-            </div>
+          <div className="bg-bg-tertiary rounded-lg p-5">
+            <h5 className="text-xs font-semibold text-txt-primary uppercase tracking-wider mb-4 pb-3 border-b border-border-subtle">
+              AI 분석 리포트
+            </h5>
+            <AiReportRenderer text={ai_report} />
           </div>
         )}
 
