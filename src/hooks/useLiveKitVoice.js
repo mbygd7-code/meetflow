@@ -136,9 +136,24 @@ export function useLiveKitVoice(meetingId) {
   }, [meetingId]);
 
   // === 룸 입장 ===
-  const join = useCallback(async () => {
+  // options.enableMic: false → 마이크 publish 스킵 (수동 청취 / 화면 공유 수신용)
+  //   기본 true (음성 회의 참여 시) — 마이크 publish 후 즉시 mute. 사용자 권한 다이얼로그 발생.
+  //   false 시 마이크 권한 요청 안 함 → 수신 전용 (다른 사람 음성·화면 공유만 듣고 봄).
+  const join = useCallback(async ({ enableMic = true } = {}) => {
     if (roomRef.current) {
-      console.warn('[useLiveKitVoice] already connected');
+      // 이미 연결돼 있고 마이크 enable 요청이면 마이크만 추가 publish
+      if (enableMic) {
+        try {
+          const pub = roomRef.current.localParticipant?.getTrackPublication?.(Track.Source.Microphone);
+          if (!pub) {
+            await roomRef.current.localParticipant.setMicrophoneEnabled(true);
+            const newPub = roomRef.current.localParticipant.getTrackPublication(Track.Source.Microphone);
+            if (newPub) { await newPub.mute(); setMuted(true); }
+          }
+        } catch (e) {
+          console.warn('[useLiveKitVoice] late mic enable failed:', e?.message);
+        }
+      }
       return;
     }
     if (!meetingId) throw new Error('meetingId_required');
@@ -358,19 +373,21 @@ export function useLiveKitVoice(meetingId) {
       // iOS Safari autoplay: room.startAudio() 사용자 제스처 컨텍스트에서 호출
       try { await room.startAudio(); } catch { /* 일부 브라우저에서 throw 가능 — 무시 */ }
 
-      // 마이크 publish — 초기는 mute 상태로
-      //   (사용자가 큰 마이크 버튼으로 unmute 하기 전엔 들리지 않음 → 안전)
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-        // 즉시 음소거
-        const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-        if (pub) {
-          await pub.mute();
-          setMuted(true);
+      // 마이크 publish — enableMic=false 면 스킵 (수신 전용 모드)
+      //   기본 (음성 참여 클릭 등): publish 후 즉시 mute → 사용자가 mic 버튼으로 unmute 가능
+      //   passive 모드 (페이지 진입 자동 join): mic 권한 요청 없이 룸 연결만 → 다른 사람 음성·화면 수신
+      if (enableMic) {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+          const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+          if (pub) {
+            await pub.mute();
+            setMuted(true);
+          }
+        } catch (micErr) {
+          console.warn('[useLiveKitVoice] mic publish failed:', micErr?.message);
+          // 권한 거부 등 → 룸은 연결돼 있고 듣기만 가능 (다른 사람 음성 듣기)
         }
-      } catch (micErr) {
-        console.warn('[useLiveKitVoice] mic publish failed:', micErr?.message);
-        // 권한 거부 등 → 룸은 연결돼 있고 듣기만 가능 (다른 사람 음성 듣기)
       }
 
       rebuildParticipants();
@@ -434,10 +451,11 @@ export function useLiveKitVoice(meetingId) {
       setScreenShareError('이 브라우저에서는 화면 공유를 지원하지 않습니다');
       return;
     }
-    // 룸 미연결 → 자동 join (mute 상태) 후 화면 공유 시작
+    // 룸 미연결 → 자동 join (passive: 마이크 권한 안 묻고 수신만)
+    // 화면 공유는 비디오 트랙 publish이므로 마이크는 별도. 사용자가 마이크 켜고 싶으면 음성 참여 버튼 클릭.
     if (!roomRef.current) {
       try {
-        await join();
+        await join({ enableMic: false });
       } catch (e) {
         setScreenShareError('회의 룸 자동 입장 실패: ' + (e?.message || String(e)));
         return;

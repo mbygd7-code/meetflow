@@ -1986,6 +1986,27 @@ export default function MeetingRoom() {
   // ── LiveKit 음성 회의 ──
   // 사용자 명시적 join 전엔 룸 미연결. join 시 토큰 발급 → connect → 마이크 publish.
   const lk = useLiveKitVoice(id);
+
+  // 회의 진입 시 자동 passive join (마이크 권한 없이 룸 수신만)
+  // → 다른 참가자가 화면 공유 시작하면 즉시 자동 표시됨.
+  // 사용자가 음성 참여 버튼 클릭하면 마이크 추가 publish (별도 권한 요청).
+  // 완료 회의는 스킵.
+  useEffect(() => {
+    if (!meeting?.id) return;
+    if (meeting.status === 'completed') return;
+    if (lk.connected || lk.connecting) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await lk.join({ enableMic: false });
+        if (cancelled) return;
+      } catch (e) {
+        // 권한/네트워크 실패 시 무음 처리 — 사용자가 명시적 음성 참여 시도하면 다시 시도됨
+        console.warn('[MeetingRoom] passive join 실패:', e?.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [meeting?.id, meeting?.status, lk.connected, lk.connecting, lk.join]);
   // 화면 공유 패널 숨김 상태 — X 버튼으로 임시 닫기 가능 (트랙은 유지). 새 공유 시작 시 자동 reopen.
   const [screenShareHidden, setScreenShareHidden] = useState(false);
   // ChatArea portal targets — 단일 ChatArea 인스턴스가 포지션만 바뀌도록 (state 보존):
