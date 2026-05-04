@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { gradeToStyle } from '@/utils/gradeUtils';
+import { useTaskStore } from '@/stores/taskStore';
+import { gradeToStyle, getOverallGrade } from '@/utils/gradeUtils';
 import { Badge } from '@/components/ui';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -62,10 +63,13 @@ function formatMonth(month) {
 export default function MyEvaluationPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { tasks } = useTaskStore();
 
   const [history, setHistory] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 실시간 폴백용 본인 메시지 통계
+  const [msgStats, setMsgStats] = useState({ count: 0, meetingIds: [], totalChars: 0 });
 
   useEffect(() => {
     if (!user?.id) return;
@@ -73,6 +77,7 @@ export default function MyEvaluationPage() {
     (async () => {
       try {
         setLoading(true);
+        // AI 월간 리포트
         const { data, error } = await supabase
           .from('employee_evaluations')
           .select('*')
@@ -82,6 +87,18 @@ export default function MyEvaluationPage() {
         if (cancelled) return;
         setHistory(data || []);
         if (data && data.length > 0) setSelectedMonth(data[0].month);
+
+        // 폴백용 메시지 통계 (메시지 본문 길이까지 포함 → speech_attitude 정확도 ↑)
+        const { data: msgData } = await supabase
+          .from('messages')
+          .select('meeting_id, content')
+          .eq('user_id', user.id)
+          .eq('is_ai', false);
+        if (!cancelled && msgData) {
+          const meetingIds = [...new Set(msgData.map((m) => m.meeting_id).filter(Boolean))];
+          const totalChars = msgData.reduce((s, m) => s + (m.content?.length || 0), 0);
+          setMsgStats({ count: msgData.length, meetingIds, totalChars });
+        }
       } catch (err) {
         console.error('[MyEvaluationPage] fetch error:', err);
       } finally {
@@ -91,13 +108,72 @@ export default function MyEvaluationPage() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  const evaluation = useMemo(
-    () => history.find((h) => h.month === selectedMonth) || history[0] || null,
-    [history, selectedMonth]
-  );
+  // ── AI 평가 또는 실시간 폴백 평가 객체 ──
+  const evaluation = useMemo(() => {
+    // 1) AI 월간 리포트 우선
+    const aiEval = history.find((h) => h.month === selectedMonth) || history[0] || null;
+    if (aiEval) return { ...aiEval, source: 'ai' };
 
-  // 빈 상태
-  if (!loading && history.length === 0) {
+    // 2) 실시간 폴백 (EmployeeDetailPage 5지표 공식)
+    if (!user?.id) return null;
+    const myTasks = tasks.filter((t) => t.assignee_id === user.id);
+    const totalTasks = myTasks.length;
+    const doneTasks = myTasks.filter((t) => t.status === 'done').length;
+    const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    const totalMessages = msgStats.count;
+    const totalMeetings = msgStats.meetingIds.length;
+    const avgMsgPerMeeting = totalMeetings > 0 ? totalMessages / totalMeetings : 0;
+    const avgChars = totalMessages > 0 ? msgStats.totalChars / totalMessages : 0;
+
+    if (totalTasks === 0 && totalMessages === 0 && totalMeetings === 0) return null;
+
+    const participation =
+      totalMeetings === 0 ? 0
+      : avgMsgPerMeeting >= 8 ? 100
+      : avgMsgPerMeeting >= 5 ? 80
+      : avgMsgPerMeeting >= 3 ? 60
+      : avgMsgPerMeeting >= 1 ? 40 : 20;
+    const taskCompletion = completionRate;
+    const leadership = Math.min(Math.round((totalMeetings * 15 + totalMessages * 2) / 2), 100);
+    const proactivity = Math.min(Math.round(avgMsgPerMeeting * 12), 100);
+    const speechAttitude = Math.min(
+      Math.round((avgChars > 20 ? 55 : (avgChars > 0 ? 30 : 0)) + totalMeetings * 5),
+      100,
+    );
+
+    const overall =
+      participation * 0.2 +
+      taskCompletion * 0.25 +
+      leadership * 0.2 +
+      proactivity * 0.15 +
+      speechAttitude * 0.2;
+
+    return {
+      source: 'live',
+      grade: getOverallGrade(overall).label,
+      overall_score: overall,
+      scores: {
+        participation,
+        task_completion: taskCompletion,
+        leadership,
+        proactivity,
+        speech_attitude: speechAttitude,
+      },
+      speech_detail: {},
+      ai_report: null,
+      evidence: [],
+      strengths: [],
+      improvements: [],
+      month: null,
+      meeting_count: totalMeetings,
+      message_count: totalMessages,
+      task_count: totalTasks,
+    };
+  }, [history, selectedMonth, tasks, user?.id, msgStats]);
+
+  // 진짜로 활동도 없는 경우만 빈 상태
+  if (!loading && !evaluation) {
     return (
       <div className="px-4 md:px-6 lg:px-8 pt-4 pb-12 max-w-[1100px] mx-auto">
         <button
@@ -109,8 +185,8 @@ export default function MyEvaluationPage() {
         </button>
         <EmptyState
           icon={Sparkles}
-          title="아직 AI 평가가 없어요"
-          description="회의에 참여하고 태스크를 처리하면 매월 자동으로 AI 평가가 생성돼요."
+          title="아직 활동 데이터가 없어요"
+          description="회의에 참여하거나 태스크를 처리하면 점수가 즉시 계산되고, 매월 AI 평가도 생성돼요."
           actions={[{ label: '마이보드로', to: '/', variant: 'primary' }]}
         />
       </div>
@@ -128,8 +204,9 @@ export default function MyEvaluationPage() {
   const {
     scores = {}, speech_detail = {}, grade, overall_score, ai_report,
     evidence = [], strengths = [], improvements = [], month,
-    meeting_count, message_count, task_count,
+    meeting_count, message_count, task_count, source,
   } = evaluation;
+  const isLive = source === 'live';
 
   const gs = gradeToStyle(grade);
 
@@ -154,15 +231,25 @@ export default function MyEvaluationPage() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <Sparkles size={14} className="text-brand-purple" />
-              <p className="text-xs text-txt-muted uppercase tracking-wider">{formatMonth(month)} 평가</p>
+              <p className="text-xs text-txt-muted uppercase tracking-wider">
+                {isLive ? '실시간 활동 점수' : `${formatMonth(month)} 평가`}
+              </p>
+              {isLive && (
+                <Badge variant="outline">활동 데이터 기반</Badge>
+              )}
             </div>
             <h1 className="text-2xl md:text-3xl font-bold text-txt-primary">
               {user?.name || '나'} 님의 평가
             </h1>
             <p className="text-sm text-txt-secondary mt-1">
               종합 점수 <span className="text-txt-primary font-bold text-base">{Math.round(overall_score || 0)}</span> 점
+              {isLive && (
+                <span className="ml-2 text-xs text-txt-muted">
+                  · AI 월간 리포트가 생성되면 자동으로 갱신돼요
+                </span>
+              )}
             </p>
 
             {/* 활동 메트릭 */}
@@ -217,7 +304,12 @@ export default function MyEvaluationPage() {
             <Calendar size={16} className="text-brand-purple" />
             월별 이력
           </h2>
-          {history.length === 1 ? (
+          {history.length === 0 ? (
+            <p className="text-xs text-txt-muted leading-relaxed">
+              AI 월간 리포트가 아직 없어요.<br />
+              매월 말 자동으로 생성되며, 생성되면 강점/개선점/발언 증거 등 상세 분석이 여기에 누적돼요.
+            </p>
+          ) : history.length === 1 ? (
             <p className="text-xs text-txt-muted">이번 달 평가 1건</p>
           ) : (
             <ul className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
