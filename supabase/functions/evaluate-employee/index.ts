@@ -109,10 +109,10 @@ serve(async (req) => {
       meetings = data || [];
     }
 
-    // 4) 태스크
+    // 4) 태스크 (난이도 포함)
     const { data: tasks } = await supabase
       .from('tasks')
-      .select('id, title, status, priority, due_date')
+      .select('id, title, status, priority, due_date, difficulty, updated_at, created_at')
       .eq('assignee_id', userId)
       .gte('created_at', startDate)
       .lt('created_at', endDate);
@@ -223,6 +223,42 @@ ${transcript}
 - 완료: ${doneTasks}건
 - 진행 중: ${inProgressTasks}건
 - 마감 초과: ${overdueTasks}건
+
+### 태스크 난이도 분포 (easy=1, medium=2, hard=3)
+${(() => {
+  const w: Record<string, number> = { easy: 1, medium: 2, hard: 3 };
+  const counts = { easy: 0, medium: 0, hard: 0 };
+  let totalW = 0, doneW = 0, onTimeW = 0;
+  for (const t of taskList) {
+    const d = (t as any).difficulty || 'medium';
+    counts[d as keyof typeof counts] = (counts[d as keyof typeof counts] || 0) + 1;
+    const ww = w[d] || 2;
+    totalW += ww;
+    if (t.status === 'done') {
+      doneW += ww;
+      if (t.due_date) {
+        const due = new Date(t.due_date).getTime();
+        const upd = new Date((t as any).updated_at || (t as any).created_at).getTime();
+        if (!isNaN(due) && !isNaN(upd) && upd <= due) onTimeW += ww;
+      }
+    }
+  }
+  const wcr = totalW > 0 ? Math.round((doneW / totalW) * 100) : 0;
+  const onTimeRate = doneW > 0 ? Math.round((onTimeW / doneW) * 100) : 0;
+  return [
+    `- easy(쉬움): ${counts.easy}건`,
+    `- medium(보통): ${counts.medium}건`,
+    `- hard(어려움): ${counts.hard}건`,
+    `- 난이도 가중 완료율: ${wcr}% (단순 완료율과 다를 수 있음)`,
+    `- 마감 준수율(완료 태스크 중 정시 완료): ${onTimeRate}%`,
+  ].join('\n');
+})()}
+
+[중요] task_completion 점수 산출 가이드:
+- 단순 완료율이 아닌 **난이도 가중 완료율**을 기본으로 사용
+- 어려운 태스크(hard) 를 완료한 사람에게 더 높은 점수 부여
+- 마감 준수율이 높을수록 추가 가산 (속도)
+- 쉬운 태스크만 골라서 처리한 패턴이 보이면 감점 (단순 완료율은 높지만 가중 완료율이 낮음)
 
 ## 회의 요약 컨텍스트
 <user_data>

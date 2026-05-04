@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   X, Calendar, User, FileText, AlertCircle, Clock, MessageSquare,
   CheckSquare, Square, Plus, Trash2, Edit2, Save, ChevronDown, History,
-  Flag, Sparkles, Tag, ExternalLink,
+  Flag, Sparkles, Tag, ExternalLink, Gauge,
 } from 'lucide-react';
 import { format, parseISO, isValid, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -23,6 +23,12 @@ const PRIORITY_MAP = {
   high: { label: 'High', color: 'text-brand-orange', bg: 'bg-brand-orange/15', border: 'border-brand-orange/30', dot: 'bg-brand-orange' },
   medium: { label: 'Medium', color: 'text-brand-purple', bg: 'bg-brand-purple/15', border: 'border-brand-purple/30', dot: 'bg-brand-purple' },
   low: { label: 'Low', color: 'text-txt-muted', bg: 'bg-bg-tertiary', border: 'border-border-subtle', dot: 'bg-txt-muted' },
+};
+
+const DIFFICULTY_MAP = {
+  easy:   { label: '쉬움',   color: 'text-status-success', dot: 'bg-status-success', weight: '×1' },
+  medium: { label: '보통',   color: 'text-brand-purple',   dot: 'bg-brand-purple',   weight: '×2' },
+  hard:   { label: '어려움', color: 'text-status-error',   dot: 'bg-status-error',   weight: '×3' },
 };
 
 const STATUS_MAP = {
@@ -170,6 +176,13 @@ export default function TaskDetailPanel({
                 value={task.priority}
                 canEdit={canEdit}
                 onChange={(p) => onUpdate(task.id, { priority: p })}
+              />
+
+              <MetaLabel icon={Gauge}>난이도</MetaLabel>
+              <DifficultyPicker
+                value={task.difficulty}
+                canEdit={canEdit}
+                onChange={(d) => onUpdate(task.id, { difficulty: d })}
               />
 
               <MetaLabel icon={Calendar}>마감일</MetaLabel>
@@ -599,6 +612,60 @@ function PriorityPicker({ value, canEdit, onChange }) {
               <span className={info.color}>{info.label}</span>
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 난이도 피커 ──
+function DifficultyPicker({ value, canEdit, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = DIFFICULTY_MAP[value || 'medium'];
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const display = (
+    <span className={`inline-flex items-center gap-1.5 text-sm ${current.color} font-medium`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${current.dot}`} />
+      {current.label}
+      <span className="text-[10px] text-txt-muted font-normal">{current.weight}</span>
+    </span>
+  );
+
+  if (!canEdit) return <div className="py-1">{display}</div>;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 w-full py-1 px-2 -ml-2 rounded hover:bg-bg-tertiary text-left transition-colors"
+      >
+        {display}
+        <ChevronDown size={13} className="text-txt-muted ml-auto" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-10 w-44 bg-bg-secondary border border-border-default rounded-md shadow-lg">
+          {Object.entries(DIFFICULTY_MAP).map(([key, info]) => (
+            <button
+              key={key}
+              onClick={() => { onChange(key); setOpen(false); }}
+              className={`w-full px-3 py-2 text-left text-xs hover:bg-bg-tertiary flex items-center gap-2 ${key === (value || 'medium') ? 'bg-bg-tertiary' : ''}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${info.dot}`} />
+              <span className={info.color}>{info.label}</span>
+              <span className="text-[10px] text-txt-muted ml-auto">{info.weight} 가중치</span>
+            </button>
+          ))}
+          <div className="px-3 py-2 text-[10px] text-txt-muted border-t border-border-subtle leading-snug">
+            평가 시 가중치로 사용. 어려운 태스크 완료 → 더 높은 점수
+          </div>
         </div>
       )}
     </div>
