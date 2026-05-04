@@ -120,14 +120,17 @@ export default function EvaluationReportModal({ open, onClose, evaluation, emplo
                       <SentimentIcon sentiment={ev.sentiment} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-txt-primary leading-snug">"{ev.content}"</p>
-                        <div className="flex items-center gap-2 mt-1.5">
+                        <div className="mt-2">
                           <Badge variant="outline">
                             {CATEGORY_LABEL[ev.category] || ev.category}
                           </Badge>
-                          {ev.ai_comment && (
-                            <p className="text-[10px] text-txt-muted italic">{ev.ai_comment}</p>
-                          )}
                         </div>
+                        {ev.ai_comment && (
+                          <p className="mt-2 text-[13px] text-txt-secondary leading-relaxed">
+                            <span className="text-brand-purple font-semibold mr-1">AI 코멘트</span>
+                            {ev.ai_comment}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
