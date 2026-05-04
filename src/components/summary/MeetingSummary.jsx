@@ -668,24 +668,12 @@ export default function MeetingSummary() {
           {downloadingPdf ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
           {downloadingPdf ? '생성 중...' : '다운로드'}
         </button>
-        {messages && messages.length >= 2 && (
-          <button
-            onClick={handleGenerateSummary}
-            disabled={generating}
-            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-bg-tertiary border border-border-subtle text-txt-secondary hover:text-txt-primary hover:border-border-hover transition-colors disabled:opacity-50"
-            title="대화 기록을 다시 분석해 요약을 새로 생성합니다"
-          >
-            {generating ? <Loader size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            {generating ? '재생성 중...' : '요약 재생성'}
-          </button>
-        )}
-
-        {/* 관리자 전용: 회의 삭제 — 재생성 버튼 옆 */}
+        {/* 관리자 전용: 회의 삭제 */}
         {isAdmin && (
           <button
             onClick={handleDeleteMeeting}
             disabled={deleting}
-            className={`${messages && messages.length >= 2 ? '' : 'ml-auto'} flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-status-error/10 border border-status-error/25 text-status-error hover:bg-status-error/15 transition-colors disabled:opacity-50`}
+            className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-status-error/10 border border-status-error/25 text-status-error hover:bg-status-error/15 transition-colors disabled:opacity-50"
             title="회의를 완전히 삭제합니다 (관리자 전용)"
           >
             {deleting ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
