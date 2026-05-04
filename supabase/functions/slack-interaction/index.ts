@@ -25,10 +25,12 @@ const corsHeaders = {
 };
 
 // Slack 요청 서명 검증 (v0 scheme)
+// [보안] SLACK_SIGNING_SECRET 미설정 시 검증을 통과시키지 않음 — 위조된 Slack 인터랙션 방지.
+//   로컬 개발 환경에서 Slack 테스트가 필요한 경우 secret 을 명시적으로 환경변수에 등록할 것.
 async function verifySlackSignature(req: Request, rawBody: string): Promise<boolean> {
   if (!SLACK_SIGNING_SECRET) {
-    console.warn('[slack-interaction] SLACK_SIGNING_SECRET 미설정 — 검증 건너뜀');
-    return true; // 개발용 임시 허용
+    console.error('[slack-interaction] SLACK_SIGNING_SECRET 미설정 — 모든 요청 거부 (보안)');
+    return false;
   }
   const timestamp = req.headers.get('x-slack-request-timestamp') || '';
   const signature = req.headers.get('x-slack-signature') || '';
@@ -355,17 +357,27 @@ serve(async (req) => {
       const mfUserId = mfUser?.id || null;
 
       if (meetingId) {
-        await upsertMeetingResponse(admin, meetingId, {
-          user_id: mfUserId,
-          user_name: displayName,
-          slack_user_id: clickerSlackId,
-          status: 'declined',
-          reason,
-        });
-        // 원본 Slack 메시지 업데이트 — private_metadata 에 stash 한 blocks 우선 사용
-        if (channelId && messageTs) {
-          const stashedBlocks = Array.isArray(meta.blocks) ? meta.blocks : undefined;
-          await updateMeetingSlackMessage(channelId, messageTs, displayName, 'declined', reason, stashedBlocks, meetingId, admin);
+        // [보안] 임의 meetingId로 acknowledged_by에 garbage 주입 방지 — 실제 회의 존재 검증
+        const { data: meetingRow } = await admin
+          .from('meetings')
+          .select('id')
+          .eq('id', meetingId)
+          .maybeSingle();
+        if (!meetingRow) {
+          console.warn('[slack-interaction] decline_modal: 존재하지 않는 meetingId 무시', meetingId);
+        } else {
+          await upsertMeetingResponse(admin, meetingId, {
+            user_id: mfUserId,
+            user_name: displayName,
+            slack_user_id: clickerSlackId,
+            status: 'declined',
+            reason,
+          });
+          // 원본 Slack 메시지 업데이트 — private_metadata 에 stash 한 blocks 우선 사용
+          if (channelId && messageTs) {
+            const stashedBlocks = Array.isArray(meta.blocks) ? meta.blocks : undefined;
+            await updateMeetingSlackMessage(channelId, messageTs, displayName, 'declined', reason, stashedBlocks, meetingId, admin);
+          }
         }
       }
       // view_submission은 빈 200으로 응답 (모달 자동 close)
