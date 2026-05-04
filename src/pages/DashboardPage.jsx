@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Calendar, Clock, FileText, Sparkles, ArrowRight,
   Zap, CircleDot, MessageSquare, TrendingUp,
+  AlertTriangle, Flame, CheckCircle2, Activity,
 } from 'lucide-react';
 import { gradeToStyle } from '@/utils/gradeUtils';
 import { computeUserEvaluation, fetchMyMessageStats } from '@/utils/evaluation';
@@ -180,6 +181,102 @@ export default function DashboardPage() {
         .slice(0, DASHBOARD_LIMITS.RECENT_SUMMARIES),
     [meetings]
   );
+
+  // ─── Milo 인사이트 — 가장 액션 가치 높은 1건 + 헤드라인 ───
+  const miloInsight = useMemo(() => {
+    const now = Date.now();
+    // 1) 활성 회의 (지금 진행 중)
+    const liveMeeting = todayMeetings.find((m) => m.status === 'active');
+    // 2) 다음 예정 회의 (지금부터 가까운 순)
+    const upcoming = todayMeetings
+      .filter((m) => m.status === 'scheduled')
+      .map((m) => ({ m, t: new Date(m.scheduled_at || m.created_at).getTime() }))
+      .filter((x) => !isNaN(x.t) && x.t >= now)
+      .sort((a, b) => a.t - b.t);
+    const nextMeeting = upcoming[0]?.m || null;
+    const minutesToNext = nextMeeting ? Math.max(0, Math.round((upcoming[0].t - now) / 60000)) : null;
+
+    // 3) 가장 급한 태스크
+    const overdueTasks = myActiveTasks
+      .filter((t) => t.due_date && differenceInDays(parseISO(t.due_date), new Date()) < 0)
+      .sort((a, b) => parseISO(a.due_date).getTime() - parseISO(b.due_date).getTime());
+    const dueSoonTasks = myActiveTasks
+      .filter((t) => {
+        if (!t.due_date) return false;
+        const d = differenceInDays(parseISO(t.due_date), new Date());
+        return d >= 0 && d <= URGENT_DUE_DAYS;
+      })
+      .sort((a, b) => parseISO(a.due_date).getTime() - parseISO(b.due_date).getTime());
+    const urgentNoDate = myActiveTasks.filter(
+      (t) => t.priority === 'urgent' && (!t.due_date || differenceInDays(parseISO(t.due_date), new Date()) > URGENT_DUE_DAYS)
+    );
+    const focusTask = overdueTasks[0] || dueSoonTasks[0] || urgentNoDate[0] || null;
+
+    // 4) 헤드라인 (한 줄, 가장 시급한 것)
+    let headline;
+    let headlineIcon = Sparkles;
+    let headlineColor = 'text-brand-purple';
+    if (liveMeeting) {
+      headline = `회의 진행 중: "${liveMeeting.title}" — 지금 참여`;
+      headlineIcon = Activity;
+      headlineColor = 'text-status-success';
+    } else if (nextMeeting && minutesToNext !== null && minutesToNext <= 60) {
+      headline = `${minutesToNext}분 후 회의: "${nextMeeting.title}"`;
+      headlineIcon = Clock;
+      headlineColor = 'text-brand-orange';
+    } else if (overdueTasks.length > 0) {
+      headline = `지연 태스크 ${overdueTasks.length}건이 있어요. 즉시 확인이 필요합니다`;
+      headlineIcon = AlertTriangle;
+      headlineColor = 'text-status-error';
+    } else if (dueSoonTasks.length > 0) {
+      const d = differenceInDays(parseISO(dueSoonTasks[0].due_date), new Date());
+      headline = d === 0
+        ? `오늘 마감 ${dueSoonTasks.length}건 — 가장 급한 건 "${dueSoonTasks[0].title}"`
+        : `${d}일 내 마감 ${dueSoonTasks.length}건 — 첫 마감 "${dueSoonTasks[0].title}"`;
+      headlineIcon = Clock;
+      headlineColor = 'text-brand-orange';
+    } else if (urgentNoDate.length > 0) {
+      headline = `긴급 태스크 ${urgentNoDate.length}건이 대기 중`;
+      headlineIcon = Flame;
+      headlineColor = 'text-status-error';
+    } else if (todayMeetings.length > 0) {
+      headline = `오늘 회의 ${todayMeetings.length}개 — 첫 회의 ${
+        nextMeeting ? format(new Date(nextMeeting.scheduled_at || nextMeeting.created_at), 'HH:mm') : ''
+      }${nextMeeting ? ` "${nextMeeting.title}"` : ''}`;
+      headlineIcon = Calendar;
+      headlineColor = 'text-brand-purple';
+    } else if (taskCounts.done > 0) {
+      headline = `급한 일 없음 · 지금까지 ${taskCounts.done}건 완료. 좋은 페이스예요`;
+      headlineIcon = CheckCircle2;
+      headlineColor = 'text-status-success';
+    } else {
+      headline = '할당된 업무가 없어요. 새 회의에 참여하거나 태스크를 만들어보세요';
+      headlineIcon = Sparkles;
+      headlineColor = 'text-txt-secondary';
+    }
+
+    return {
+      headline,
+      headlineIcon,
+      headlineColor,
+      focusTask,
+      focusKind:
+        overdueTasks.length > 0 ? 'overdue' :
+        dueSoonTasks.length > 0 ? 'dueSoon' :
+        urgentNoDate.length > 0 ? 'urgent' : null,
+      liveMeeting,
+      nextMeeting,
+      minutesToNext,
+      counts: {
+        overdue: overdueTasks.length,
+        dueSoon: dueSoonTasks.length,
+        urgent: urgentNoDate.length,
+        inProgress: taskCounts.inProgress,
+        done: taskCounts.done,
+        meetings: todayMeetings.length,
+      },
+    };
+  }, [todayMeetings, myActiveTasks, taskCounts]);
 
   // ─── 하루 요약 문장 ───
   const summarySentence = useMemo(() => {
@@ -370,31 +467,139 @@ export default function DashboardPage() {
         {/* ═══ Milo 인사이트 + 최근 회의록 ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <SectionPanel className="subsection-gold">
+            {/* 헤더 */}
             <div className="flex items-center gap-3 mb-3">
               <Avatar variant="ai" size="md" label="M" />
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-txt-primary">Milo 인사이트</p>
-                <p className="text-[10px] text-txt-muted">실시간 현황 요약</p>
+                <p className="text-[10px] text-txt-muted">우선순위 + 액션 추천</p>
               </div>
             </div>
-            <p className="text-xs text-txt-secondary leading-relaxed mb-3">
-              {myActiveTasks.length > 0 ? (
-                <>
-                  진행 중인 태스크 <span className="text-txt-primary font-semibold">{taskCounts.inProgress}건</span>,
-                  대기 중 <span className="text-txt-primary font-semibold">{taskCounts.todo}건</span>이에요.
-                  {taskCounts.done > 0 && (
-                    <> 지금까지 <span className="text-status-success font-semibold">{taskCounts.done}건</span>을 완료했습니다.</>
+
+            {/* 핵심 헤드라인 — 가장 시급한 것 한 줄 */}
+            {(() => {
+              const Icon = miloInsight.headlineIcon;
+              return (
+                <div className="flex items-start gap-2 mb-3 p-2.5 rounded-md bg-bg-tertiary/50">
+                  <Icon size={16} className={`${miloInsight.headlineColor} shrink-0 mt-0.5`} />
+                  <p className="text-xs text-txt-primary leading-relaxed">
+                    {miloInsight.headline}
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* 핵심 액션 카드 — 가장 급한 태스크 1개 OR 다음 회의 */}
+            {miloInsight.liveMeeting ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/meetings/${miloInsight.liveMeeting.id}`)}
+                className="w-full text-left p-3 rounded-md border border-status-success/30 bg-status-success/5 hover:bg-status-success/10 transition-colors mb-3"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse" />
+                  <p className="text-[10px] font-semibold text-status-success uppercase tracking-wider">진행 중</p>
+                </div>
+                <p className="text-sm font-semibold text-txt-primary truncate">{miloInsight.liveMeeting.title}</p>
+                <p className="flex items-center gap-1 text-[11px] text-status-success mt-1.5">
+                  지금 참여하기 <ArrowRight size={11} />
+                </p>
+              </button>
+            ) : miloInsight.focusTask ? (
+              <button
+                type="button"
+                onClick={() => setSelectedTaskId(miloInsight.focusTask.id)}
+                className={`w-full text-left p-3 rounded-md border mb-3 transition-colors ${
+                  miloInsight.focusKind === 'overdue'
+                    ? 'border-status-error/30 bg-status-error/5 hover:bg-status-error/10'
+                    : miloInsight.focusKind === 'dueSoon'
+                      ? 'border-brand-orange/30 bg-brand-orange/5 hover:bg-brand-orange/10'
+                      : 'border-status-error/25 bg-bg-tertiary hover:bg-bg-tertiary/70'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  {miloInsight.focusKind === 'overdue' ? (
+                    <>
+                      <AlertTriangle size={11} className="text-status-error" />
+                      <p className="text-[10px] font-semibold text-status-error uppercase tracking-wider">
+                        지연 · {Math.abs(differenceInDays(parseISO(miloInsight.focusTask.due_date), new Date()))}일 경과
+                      </p>
+                    </>
+                  ) : miloInsight.focusKind === 'dueSoon' ? (
+                    <>
+                      <Clock size={11} className="text-brand-orange" />
+                      <p className="text-[10px] font-semibold text-brand-orange uppercase tracking-wider">
+                        {differenceInDays(parseISO(miloInsight.focusTask.due_date), new Date()) === 0
+                          ? '오늘 마감' : `D-${differenceInDays(parseISO(miloInsight.focusTask.due_date), new Date())}`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Flame size={11} className="text-status-error" />
+                      <p className="text-[10px] font-semibold text-status-error uppercase tracking-wider">긴급</p>
+                    </>
                   )}
-                </>
-              ) : (
-                <>할당된 업무가 없어요. 새 회의에 참여하거나 태스크를 직접 만들어보세요.</>
+                </div>
+                <p className="text-sm font-semibold text-txt-primary truncate">{miloInsight.focusTask.title}</p>
+                <p className="flex items-center gap-1 text-[11px] text-txt-secondary mt-1.5">
+                  처리하기 <ArrowRight size={11} />
+                </p>
+              </button>
+            ) : miloInsight.nextMeeting ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/meetings/${miloInsight.nextMeeting.id}`)}
+                className="w-full text-left p-3 rounded-md border border-brand-purple/25 bg-brand-purple/5 hover:bg-brand-purple/10 transition-colors mb-3"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar size={11} className="text-brand-purple" />
+                  <p className="text-[10px] font-semibold text-brand-purple uppercase tracking-wider">
+                    {miloInsight.minutesToNext != null && miloInsight.minutesToNext < 60
+                      ? `${miloInsight.minutesToNext}분 후`
+                      : format(new Date(miloInsight.nextMeeting.scheduled_at || miloInsight.nextMeeting.created_at), 'HH:mm')}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-txt-primary truncate">{miloInsight.nextMeeting.title}</p>
+                <p className="flex items-center gap-1 text-[11px] text-brand-purple mt-1.5">
+                  회의방으로 <ArrowRight size={11} />
+                </p>
+              </button>
+            ) : null}
+
+            {/* 보조 메트릭 — 한 줄 칩 */}
+            <div className="flex items-center flex-wrap gap-1.5 mb-3 text-[11px]">
+              {miloInsight.counts.overdue > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-semibold">
+                  <AlertTriangle size={10} /> 지연 {miloInsight.counts.overdue}
+                </span>
               )}
-            </p>
+              {miloInsight.counts.dueSoon > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange font-semibold">
+                  <Clock size={10} /> 임박 {miloInsight.counts.dueSoon}
+                </span>
+              )}
+              {miloInsight.counts.urgent > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-semibold">
+                  <Flame size={10} /> 긴급 {miloInsight.counts.urgent}
+                </span>
+              )}
+              {miloInsight.counts.inProgress > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-purple/10 text-brand-purple font-semibold">
+                  <Activity size={10} /> 진행 {miloInsight.counts.inProgress}
+                </span>
+              )}
+              {miloInsight.counts.done > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-success/10 text-status-success font-semibold">
+                  <CheckCircle2 size={10} /> 완료 {miloInsight.counts.done}
+                </span>
+              )}
+            </div>
+
             <Link
-              to="/summaries"
+              to="/members"
               className="flex items-center gap-1 text-xs text-brand-purple hover:text-txt-primary transition-colors"
             >
-              전체 분석 보기 <ArrowRight size={14} />
+              내 태스크 전체 보기 <ArrowRight size={14} />
             </Link>
           </SectionPanel>
 
