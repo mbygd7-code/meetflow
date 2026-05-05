@@ -1924,6 +1924,10 @@ export default function MeetingRoom() {
   const [ending, setEnding] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [leavingConfirmed, setLeavingConfirmed] = useState(false);
+  // 다른 사람(요청자)이 회의를 종료했을 때 알림 — 'completed' 또는 삭제 감지
+  const [endedNotice, setEndedNotice] = useState(null); // { reason: 'completed' | 'deleted' } | null
+  const wasMeetingActiveRef = useRef(false);
+  const hadMeetingRef = useRef(false);
   // 자동개입 상태: localStorage에 영속 저장 (페이지 새로고침 유지)
   const [aiAutoIntervene, setAiAutoIntervene] = useState(() => {
     try {
@@ -2179,6 +2183,37 @@ export default function MeetingRoom() {
     navigate(to);
   }, [meeting?.status, ending, leavingConfirmed, navigate]);
 
+  // ── 회의 종료 감지 (참가자 시점) ──
+  // 본인이 종료한 게 아니라 요청자/다른 경로로 종료되면 알림 모달 노출 → 자동으로 회의 목록으로 이동.
+  // 본인이 직접 종료(handleConfirmEnd/EndWithoutSummary)한 경우엔 leavingConfirmed=true 라 스킵.
+  useEffect(() => {
+    if (leavingConfirmed) return;
+    // 처음 active 상태였는지 추적
+    if (meeting?.status === 'active') {
+      wasMeetingActiveRef.current = true;
+      hadMeetingRef.current = true;
+      return;
+    }
+    // 활성이었다가 completed 로 바뀜 → 요청자가 종료한 것
+    if (wasMeetingActiveRef.current && meeting?.status === 'completed' && !endedNotice) {
+      setEndedNotice({ reason: 'completed' });
+    }
+    // 활성이었다가 meeting 자체가 사라짐 → 빈 회의 자동 삭제 케이스
+    if (wasMeetingActiveRef.current && !meeting && hadMeetingRef.current && !endedNotice) {
+      setEndedNotice({ reason: 'deleted' });
+    }
+  }, [meeting, meeting?.status, leavingConfirmed, endedNotice]);
+
+  // 알림 모달 띄운 후 자동 이동 (3초)
+  useEffect(() => {
+    if (!endedNotice) return;
+    const t = setTimeout(() => {
+      setLeavingConfirmed(true);
+      navigate('/meetings');
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [endedNotice, navigate]);
+
   const currentAgenda = useMemo(() => {
     const targetId = activeAgendaId
       ? activeAgendaId
@@ -2398,6 +2433,33 @@ export default function MeetingRoom() {
       });
     }
   }, [messages, user, meeting, sendMessage, currentAgenda]);
+
+  // 회의 종료 알림 모달 — 참가자가 페이지에 있을 때 요청자가 종료한 케이스
+  // meeting 객체 유무와 무관하게 우선 노출 (deleted 케이스에선 meeting null)
+  if (endedNotice) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-bg-primary p-6">
+        <div className="bg-bg-secondary border border-border-default rounded-[16px] shadow-lg max-w-md w-full p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-brand-purple/15 flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🏁</span>
+          </div>
+          <h2 className="text-lg font-semibold text-txt-primary mb-2">회의가 종료되었습니다</h2>
+          <p className="text-sm text-txt-secondary mb-1">
+            {endedNotice.reason === 'deleted'
+              ? '요청자가 회의를 취소·삭제했습니다.'
+              : '회의 요청자가 회의를 종료했습니다.'}
+          </p>
+          <p className="text-xs text-txt-muted mb-5">3초 후 회의 목록으로 이동합니다…</p>
+          <button
+            onClick={() => { setLeavingConfirmed(true); navigate('/meetings'); }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            지금 회의 목록으로
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!meeting) {
     return (
