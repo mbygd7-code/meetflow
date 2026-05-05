@@ -78,7 +78,7 @@ export function useLiveKitVoice(meetingId) {
   const [localStream, setLocalStream] = useState(null);
   // 음성 입력 모드 — 'toggle' 기본 (Space 한 번 = 음소거 토글, latch O)
   //                  'ptt' (Space hold = 발언, 떼면 음소거. 같은 방 다중 참여 시 하울링 방지)
-  const [voiceMode, setVoiceMode] = useState('toggle');
+  const [voiceMode, setVoiceMode] = useState('ptt');
   const [pttPressed, setPttPressed] = useState(false); // PTT 키 누르고 있는 중 (시각 피드백용)
   // 화면 공유 — identity → { videoTrack, audioTrack, name, isLocal }
   // Map은 mutate해도 React가 인지 못하므로 매 갱신 시 새 Map 생성
@@ -180,9 +180,37 @@ export function useLiveKitVoice(meetingId) {
 
       // 이벤트 구독 — 한 번만, 이후 disconnect 시 removeAllListeners 로 정리
       room.on(RoomEvent.ParticipantConnected, () => rebuildParticipants());
-      room.on(RoomEvent.ParticipantDisconnected, () => rebuildParticipants());
+      // 참가자가 룸 떠나면 그 사람의 화면공유 트랙도 명시적으로 정리
+      // (TrackUnsubscribed 가 안 올 수도 있는 race 방어)
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        rebuildParticipants();
+        setScreenShares((prev) => {
+          if (!prev.has(participant.identity)) return prev;
+          const next = new Map(prev);
+          next.delete(participant.identity);
+          return next;
+        });
+      });
       room.on(RoomEvent.TrackPublished, () => rebuildParticipants());
-      room.on(RoomEvent.TrackUnpublished, () => rebuildParticipants());
+      // 원격 화면공유 트랙이 unpublish 되면 screenShares 에서 즉시 제거
+      // (TrackUnsubscribed 보다 먼저 발생할 수도 있고, 어떤 케이스엔 둘 중 하나만 옴)
+      room.on(RoomEvent.TrackUnpublished, (publication, participant) => {
+        rebuildParticipants();
+        const src = publication?.source || publication?.track?.source;
+        if (src === Track.Source.ScreenShare || src === Track.Source.ScreenShareAudio) {
+          setScreenShares((prev) => {
+            const cur = prev.get(participant.identity);
+            if (!cur) return prev;
+            const next = new Map(prev);
+            const updated = { ...cur };
+            if (src === Track.Source.ScreenShare) updated.videoTrack = undefined;
+            else updated.audioTrack = undefined;
+            if (!updated.videoTrack && !updated.audioTrack) next.delete(participant.identity);
+            else next.set(participant.identity, updated);
+            return next;
+          });
+        }
+      });
       room.on(RoomEvent.TrackMuted, () => rebuildParticipants());
       room.on(RoomEvent.TrackUnmuted, () => rebuildParticipants());
       room.on(RoomEvent.LocalTrackPublished, (publication) => {

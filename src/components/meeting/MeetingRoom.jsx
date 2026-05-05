@@ -2095,8 +2095,9 @@ export default function MeetingRoom() {
   // 모달 액션 핸들러
   const handleShareInviteAccept = useCallback(() => {
     setShareInvite(null);
-    // lk.join() — 마이크 음소거 기본. screenShareSupported 무관 (수신만)
-    lk.join().catch((e) => console.warn('[shareInvite] join failed:', e?.message));
+    // lk.join({ enableMic: false }) — 마이크 권한 요청 없이 수신만 (화면 공유 보기 전용)
+    // 사용자가 음성 발언하려면 별도 "음성 참여" 버튼 클릭 필요.
+    lk.join({ enableMic: false }).catch((e) => console.warn('[shareInvite] join failed:', e?.message));
   }, [lk]);
   const handleShareInviteDecline = useCallback(() => {
     setShareInvite(null);
@@ -2451,11 +2452,37 @@ export default function MeetingRoom() {
   };
 
   // 회의록 없이 종료 — summary_skipped=true → 회의록 목록에서 제외
+  // 단, 사람 메시지가 한 개도 없는 빈 회의는 완전 삭제 (완료 탭에도 안 남게)
   const handleEndWithoutSummary = async () => {
     setConfirmingEnd(false);
     setActiveMeetingId(null);
     setLeavingConfirmed(true);
     clearSessionState(id);
+
+    const humanMessages = (messages || []).filter((m) => !m?.is_ai);
+    const isEmptyMeeting = humanMessages.length === 0;
+    const canUseDB = !!import.meta.env.VITE_SUPABASE_URL;
+
+    if (isEmptyMeeting) {
+      // 빈 회의 → 완전 삭제 (자식 테이블부터 정리)
+      try {
+        if (canUseDB) {
+          await supabase.from('messages').delete().eq('meeting_id', id);
+          await supabase.from('agendas').delete().eq('meeting_id', id);
+          await supabase.from('meeting_summaries').delete().eq('meeting_id', id);
+          await supabase.from('meetings').delete().eq('id', id);
+        }
+      } catch (err) {
+        console.warn('[handleEndWithoutSummary] 빈 회의 삭제 일부 실패:', err?.message);
+      }
+      // 로컬 store 에서도 제거
+      useMeetingStore.setState((s) => ({
+        meetings: s.meetings.filter((m) => m.id !== id),
+      }));
+      navigate('/');
+      addToast('빈 회의는 자동 삭제되었습니다. (회의록·완료 목록에 표시되지 않아요)', 'info', 4000);
+      return;
+    }
 
     const patch = {
       status: 'completed',
@@ -2464,7 +2491,7 @@ export default function MeetingRoom() {
     };
     const { updateMeeting: storePatch } = useMeetingStore.getState();
     storePatch(id, patch);
-    if (!!import.meta.env.VITE_SUPABASE_URL) {
+    if (canUseDB) {
       try { await supabase.from('meetings').update(patch).eq('id', id); } catch {}
     }
 

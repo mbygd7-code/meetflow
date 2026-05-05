@@ -402,24 +402,11 @@ export default function ScreenShareView({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1.5">
-          {/* 드로잉 툴바 호스트 — DrawingOverlay 가 toolbarContainer로 포털 배치 */}
+          {/* 드로잉 / 별도창 / 중지 — 모든 시점에서 드로잉 버튼은 제거.
+              (사용자 요구: 발표자도 수신자도 화면 공유 중엔 드로잉 사용 안 함) */}
+          {/* 드로잉 툴바 호스트만 유지 — DrawingOverlay 가 toolbarContainer로 포털 배치하기 위해 ref 보존 */}
           {inline && (
-            <>
-              <div ref={setToolbarHost} className="flex items-center gap-1.5" />
-              <button
-                type="button"
-                onClick={() => setDrawingActive((v) => !v)}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                  drawingActive
-                    ? 'bg-brand-purple text-white hover:opacity-90'
-                    : 'bg-bg-tertiary text-txt-secondary hover:text-brand-purple hover:bg-brand-purple/10'
-                }`}
-                title={drawingActive ? '드로잉 종료' : '화면 위 드로잉 켜기'}
-              >
-                <Pencil size={13} strokeWidth={2.4} />
-                {drawingActive ? '드로잉 종료' : '드로잉'}
-              </button>
-            </>
+            <div ref={setToolbarHost} className="flex items-center gap-1.5" />
           )}
           {/* 발표 집중 모드 토글 — LNB 최소화 + 음성 참가자 숨김 + Ctrl+wheel 줌 활성.
               채팅창은 그대로 유지 (사용자 요구). active 시 보라색 배경. */}
@@ -442,8 +429,8 @@ export default function ScreenShareView({
             </button>
           )}
           {/* 별도 창 — Document PiP 로 video 만 분리. 본 창은 그대로 (공유+채팅 유지).
-              별도 창엔 드로잉 X (서비스 창에서만 가능). */}
-          {inline && (
+              발표자 본인은 자기 화면을 별도창으로 띄울 의미 없으므로 숨김. */}
+          {inline && !main.isLocal && (
             <button
               type="button"
               onClick={pipWindow ? closePipWindow : openInPipWindow}
@@ -464,17 +451,7 @@ export default function ScreenShareView({
               <Expand size={14} />
             </button>
           )}
-          {main.isLocal && onStopLocal && (
-            <button
-              type="button"
-              onClick={onStopLocal}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-status-error/15 text-status-error hover:bg-status-error hover:text-white transition-colors"
-              title="공유 중지"
-            >
-              <MonitorX size={13} strokeWidth={2.4} />
-              중지
-            </button>
-          )}
+          {/* 공유 중지 버튼은 상단 헤더의 ScreenShareButton(공유중지)과 중복 — 제거 */}
           {onClose && (
             <button
               type="button"

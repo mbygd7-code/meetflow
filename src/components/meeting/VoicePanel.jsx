@@ -16,42 +16,24 @@ export default function VoicePanel({
   onChangeVoiceMode,
   pttPressed = false,
 }) {
-  // 모바일(< md, 768px) 에서는 기본 접힘 — 화면 공간 절약. 데스크톱은 기본 펼침.
-  // 사용자가 수동으로 토글한 후엔 자동 동기화 안 함 (의도 보존)
-  const userToggledRef = useRef(false);
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 767px)').matches;
-  });
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(max-width: 767px)');
-    const onChange = (e) => {
-      // 사용자가 수동 토글 후엔 미디어 쿼리 변동 무시
-      if (userToggledRef.current) return;
-      setCollapsed(e.matches);
-    };
-    // 구형 브라우저 (Safari < 14) addListener fallback
-    if (mq.addEventListener) mq.addEventListener('change', onChange);
-    else mq.addListener(onChange);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
-      else mq.removeListener(onChange);
-    };
-  }, []);
-  const handleToggleCollapsed = () => {
-    userToggledRef.current = true;
-    setCollapsed((c) => !c);
-  };
+  // 기본 접힘 — 데스크톱/모바일 모두. 사용자가 헤더 클릭으로 펼치면 유지.
+  const [collapsed, setCollapsed] = useState(true);
+  const handleToggleCollapsed = () => setCollapsed((c) => !c);
 
   const total = participants.length;
   const speakingCount = activeSpeakers?.size || 0;
 
   return (
     <div className="border-b border-border-subtle bg-bg-secondary/60 backdrop-blur-sm">
-      {/* 헤더 — 항상 보임 */}
+      {/* 헤더 — 항상 보임. 좌측 영역 클릭 시 참가자 목록 토글 */}
       <div className="flex items-center justify-between px-3 md:px-4 py-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={handleToggleCollapsed}
+          className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity cursor-pointer"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? '참가자 목록 펼치기' : '참가자 목록 접기'}
+        >
           <div className="relative shrink-0">
             <div className="w-7 h-7 rounded-full bg-brand-purple/15 flex items-center justify-center">
               <Headphones size={14} className="text-brand-purple" />
@@ -60,7 +42,7 @@ export default function VoicePanel({
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-status-success animate-pulse" />
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 text-left">
             <p className="text-[11px] font-semibold text-txt-primary leading-tight">
               음성 회의 진행 중 ({total}명)
             </p>
@@ -70,7 +52,7 @@ export default function VoicePanel({
                 : '발언자 없음'}
             </p>
           </div>
-        </div>
+        </button>
 
         <div className="flex items-center gap-1.5 shrink-0">
           {/* 음성 입력 모드 — 토글/PTT 라디오 (둘 중 하나 선택, Space 동작 결정) */}
