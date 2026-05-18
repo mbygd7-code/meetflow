@@ -1,9 +1,9 @@
 // Supabase Edge Function — KinderStick → MeetFlow 태스크 수신
 //
 // 엔드포인트: POST {supabase}/functions/v1/kinder-task-ingest
-// 인증: HMAC-SHA256 서명 (헤더 X-Kinder-Signature: <hex>)
+// 인증: HMAC-SHA256 서명 (헤더 X-Hmac-Signature: <hex>)
 //       서명 대상: raw body (UTF-8)
-//       서명 키:   KINDER_INCOMING_SECRET
+//       서명 키:   KINDER_HMAC_SECRET (양방향 공통 시크릿)
 //
 // 요청 본문 (KinderStick):
 //   {
@@ -23,7 +23,7 @@
 //   4. 응답: { ok, request_id, meetflow_task_ids: [...] }
 //
 // Deploy: supabase functions deploy kinder-task-ingest --no-verify-jwt
-// Secrets: supabase secrets set KINDER_INCOMING_SECRET=...
+// Secrets: supabase secrets set KINDER_HMAC_SECRET=...
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -31,18 +31,23 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, x-kinder-signature, x-kinder-request-id',
+    'authorization, x-client-info, apikey, content-type, x-hmac-signature, x-kinder-request-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const KINDER_INCOMING_SECRET = Deno.env.get('KINDER_INCOMING_SECRET') || '';
+// 양방향 공통 시크릿 (KinderStick 협의)
+// 호환성: KINDER_HMAC_SECRET 우선, 구버전 KINDER_HMAC_SECRET 도 허용
+const KINDER_HMAC_SECRET =
+  Deno.env.get('KINDER_HMAC_SECRET') ||
+  Deno.env.get('KINDER_HMAC_SECRET') ||
+  '';
 
 // ── HMAC-SHA256 검증 ─────────────────────────────────────────────
 async function verifyHmac(rawBody: string, signatureHex: string): Promise<boolean> {
-  if (!KINDER_INCOMING_SECRET) {
-    console.warn('[kinder-ingest] KINDER_INCOMING_SECRET not set — rejecting all requests');
+  if (!KINDER_HMAC_SECRET) {
+    console.warn('[kinder-ingest] KINDER_HMAC_SECRET not set — rejecting all requests');
     return false;
   }
   if (!signatureHex) return false;
@@ -50,7 +55,7 @@ async function verifyHmac(rawBody: string, signatureHex: string): Promise<boolea
   try {
     const key = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(KINDER_INCOMING_SECRET),
+      new TextEncoder().encode(KINDER_HMAC_SECRET),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign'],
@@ -103,7 +108,11 @@ serve(async (req) => {
   }
 
   const rawBody = await req.text();
-  const signature = req.headers.get('x-kinder-signature') || '';
+  // KinderStick 협의: x-hmac-signature (구버전 x-kinder-signature 도 허용)
+  const signature =
+    req.headers.get('x-hmac-signature') ||
+    req.headers.get('x-kinder-signature') ||
+    '';
   const requestId = req.headers.get('x-kinder-request-id') || '';
 
   // 1. 서명 검증
