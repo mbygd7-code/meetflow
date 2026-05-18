@@ -6,6 +6,7 @@ const VARIANTS = {
   danger: 'bg-status-error/15 text-status-error',
   outline: 'bg-transparent border border-border-default text-txt-secondary',
   info: 'bg-brand-purple/20 text-brand-purple',
+  orange: 'bg-brand-orange/15 text-brand-orange',
 };
 
 export default function Badge({

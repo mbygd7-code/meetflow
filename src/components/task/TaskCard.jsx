@@ -1,4 +1,4 @@
-import { Circle, CheckCircle2, Clock, Sparkles, Folder, Layers, FileText } from 'lucide-react';
+import { Circle, CheckCircle2, Clock, Sparkles, Folder, Layers, FileText, Puzzle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Avatar, Badge } from '@/components/ui';
 import { formatDueDate, getInitials, getDueDateStatus } from '@/utils/formatters';
@@ -73,11 +73,18 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
             >
               {task.title}
             </p>
-            {task.ai_suggested && (
-              <Badge variant="purple" className="!text-[9px] shrink-0">
-                <Sparkles size={11} strokeWidth={2.4} /> AI
-              </Badge>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              {task.external_source === 'kinder' && (
+                <Badge variant="orange" className="!text-[9px]">
+                  <Puzzle size={11} strokeWidth={2.4} /> Kinder
+                </Badge>
+              )}
+              {task.ai_suggested && (
+                <Badge variant="purple" className="!text-[9px]">
+                  <Sparkles size={11} strokeWidth={2.4} /> AI
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* ── compact 모드가 아니면 상세 정보 ── */}
@@ -159,6 +166,28 @@ export default function TaskCard({ task, onToggle, onClick, selected = false, co
                   {task.tags.length > 3 && (
                     <span className="text-[9px] text-txt-muted">+{task.tags.length - 3}</span>
                   )}
+                </div>
+              )}
+
+              {/* Kinder KPI / 도메인 칩 */}
+              {(task.kpi_sub_items?.length > 0 || task.boost_domains?.length > 0) && (
+                <div className="flex items-center gap-1 flex-wrap mb-2">
+                  {task.boost_domains?.slice(0, 2).map((d) => (
+                    <span
+                      key={`d-${d}`}
+                      className="text-[9px] text-brand-orange bg-brand-orange/10 border border-brand-orange/20 px-1.5 py-0.5 rounded font-semibold"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                  {task.kpi_sub_items?.slice(0, 3).map((k) => (
+                    <span
+                      key={`k-${k}`}
+                      className="text-[9px] text-brand-purple bg-brand-purple/10 border border-brand-purple/20 px-1.5 py-0.5 rounded"
+                    >
+                      {k}
+                    </span>
+                  ))}
                 </div>
               )}
             </>

@@ -101,3 +101,8 @@ verify_jwt = false
 # 다중 클라 race 차단: SELECT pre-check + DB unique index (migration 050)
 [functions.milo-greeting]
 verify_jwt = false
+
+# KinderStick → MeetFlow 외부 태스크 수신 (HMAC-SHA256 검증)
+# 서명 키: KINDER_INCOMING_SECRET (supabase secrets set)
+[functions.kinder-task-ingest]
+verify_jwt = false
